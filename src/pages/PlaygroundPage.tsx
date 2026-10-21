@@ -26,6 +26,23 @@ lab.arm(frames, links=(1.0, 0.8), title="Arm fährt zur Zielstellung")
 `,
   },
   {
+    name: 'Roboter 3D',
+    code: `import numpy as np
+import lab
+from lab import so101
+
+# Der SO-101 fährt per inverser Kinematik über den Würfel.
+ziel = np.array([0.24, 0.08, 0.06])
+q_ziel, erreicht = so101.ik(ziel)
+print("erreichbar:", erreicht)
+print("Gelenkwinkel (Grad):", np.round(np.degrees(q_ziel), 1))
+
+frames = [so101.HOME + t * (q_ziel - so101.HOME) for t in np.linspace(0, 1, 60)]
+lab.arm3d(frames, gripper=1.0, target=ziel, title="SO-101 fährt zum Ziel",
+          objects=[{"pos": (0.24, 0.08, 0.015), "size": 0.03}])
+`,
+  },
+  {
     name: 'Pendel',
     code: `import numpy as np
 from lab.envs import Pendulum

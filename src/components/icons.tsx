@@ -29,6 +29,14 @@ export const PlayIcon = () => (
     <path d="M12 15h5" />
   </svg>
 );
+export const RobotIcon = () => (
+  <svg {...base}>
+    <path d="M4 20h9" />
+    <path d="M7 20v-3l3-7 6-2" />
+    <circle cx="10" cy="10" r="1.6" />
+    <path d="M16 8l3 1.5M16 8l2.5-3" />
+  </svg>
+);
 export const ProfileIcon = () => (
   <svg {...base}>
     <circle cx="12" cy="8" r="4" />

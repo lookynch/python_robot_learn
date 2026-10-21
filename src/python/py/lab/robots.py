@@ -1,6 +1,7 @@
 import math
 
-from ._core import to_list
+from . import _core
+from ._core import num, to_list
 from .viz import Scene
 
 TRAIL_POINTS = 60
@@ -97,3 +98,40 @@ def cartpole(x, theta, pole_length=1.0, title=None, fps=50, track=2.4, captions=
         if captions is not None and i < len(captions):
             scene.caption(captions[i])
     scene.show()
+
+
+def arm3d(q, gripper=0.0, title=None, target=None, objects=None, physics=False, fps=30, captions=None):
+    """SO-101 in 3D. q = 5 Gelenkwinkel (oder 6 mit Greifer) bzw. eine Folge davon (Animation).
+
+    gripper: Greiferwinkel in rad (0 = zu, etwa 1.2 = offen), wenn q nur 5 Werte hat.
+    target: Zielpunkt (x, y, z) in Metern, erscheint als roter Punkt.
+    objects: Würfel als Liste von {"pos": (x, y, z), "size": 0.03, "color": "c2"}.
+    physics=True: Die Winkel sind Sollwerte für die Servos, MuJoCo simuliert den Arm samt Würfeln.
+    """
+    configs = to_list(q) if _is_sequence_of_configs(q) else [q]
+    frames = []
+    for config in configs:
+        values = [num(v, "Gelenkwinkel") for v in to_list(config)]
+        if len(values) == 5:
+            values.append(num(gripper, "Greiferwinkel"))
+        if len(values) != 6:
+            raise ValueError(f"arm3d: eine Stellung braucht 5 Gelenkwinkel (oder 6 mit Greifer), nicht {len(values)}.")
+        frames.append(values)
+    if len(frames) > _core.MAX_FRAMES:
+        frames = _core.subsample(frames, _core.MAX_FRAMES)
+    cubes = []
+    for obj in objects or []:
+        pos = [num(v, "Objektposition") for v in to_list(obj["pos"])]
+        if len(pos) != 3:
+            raise ValueError("arm3d: Objektpositionen brauchen drei Werte (x, y, z).")
+        cubes.append({"pos": pos, "size": num(obj.get("size", 0.03), "Objektgröße"), "color": str(obj.get("color", "c2"))})
+    _core.emit({
+        "kind": "robot3d",
+        "title": title,
+        "fps": fps,
+        "frames": frames,
+        "physics": bool(physics),
+        "target": [num(v, "Ziel") for v in to_list(target)] if target is not None else None,
+        "objects": cubes,
+        "captions": [str(c) for c in captions] if captions is not None else None,
+    })

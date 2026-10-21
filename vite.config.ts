@@ -41,6 +41,18 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/cdn-cgi\//, /^\/api\//],
         runtimeCaching: [
           {
+            // Robotermodell und MuJoCo-WASM: erst bei Nutzung laden, danach offline verfügbar.
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              (url.pathname.startsWith('/robot/') || url.pathname.endsWith('.wasm')),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'robot-assets',
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 60 },
+            },
+          },
+          {
             urlPattern: ({ url }) =>
               url.origin === 'https://cdn.jsdelivr.net' &&
               url.pathname.startsWith(`/pyodide/v${PYODIDE_VERSION}/`),
@@ -56,6 +68,6 @@ export default defineConfig({
     }),
   ],
   worker: { format: 'es' },
-  optimizeDeps: { exclude: ['pyodide'] },
+  optimizeDeps: { exclude: ['pyodide', '@mujoco/mujoco'] },
   build: { target: 'es2022', sourcemap: true },
 });
