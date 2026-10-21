@@ -20,6 +20,7 @@ import {
 import { EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
 import {
   Decoration,
+  drawSelection,
   EditorView,
   highlightActiveLine,
   highlightActiveLineGutter,
@@ -74,6 +75,15 @@ const highlight = HighlightStyle.define([
   { tag: tags.className, color: '#ffa657' },
 ]);
 
+// Der Editor ist immer dunkel; ohne dark: true setzt CodeMirror einen schwarzen Cursor.
+const darkTheme = EditorView.theme(
+  {
+    '.cm-content': { caretColor: '#4fb3ff' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#4fb3ff', borderLeftWidth: '2px' },
+  },
+  { dark: true },
+);
+
 const setErrorLine = StateEffect.define<number | null>();
 const errorLineField = StateField.define({
   create: () => Decoration.none,
@@ -101,6 +111,8 @@ function baseExtensions(
     highlightActiveLineGutter(),
     highlightActiveLine(),
     history(),
+    drawSelection(),
+    darkTheme,
     indentOnInput(),
     indentUnit.of('    '),
     EditorState.tabSize.of(4),

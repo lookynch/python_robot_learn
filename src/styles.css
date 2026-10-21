@@ -708,9 +708,44 @@ input.plain.mono {
   white-space: pre-wrap;
 }
 
+.option:focus-visible,
+.confidence button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.option-mark {
+  flex: 0 0 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+
+.options[role='group'] .option-mark {
+  border-radius: 6px;
+}
+
+.option-mark svg {
+  width: 15px;
+  height: 15px;
+}
+
+.option-mark.checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
 .option.selected {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  box-shadow: 0 0 0 1px var(--accent);
+  font-weight: 600;
 }
 
 .option.correct {
@@ -718,9 +753,21 @@ input.plain.mono {
   background: var(--good-soft);
 }
 
+.option.correct .option-mark.checked {
+  border-color: var(--good);
+  background: var(--good);
+  color: #fff;
+}
+
 .option.wrong {
   border-color: var(--bad);
   background: var(--bad-soft);
+}
+
+.option.wrong .option-mark.checked {
+  border-color: var(--bad);
+  background: var(--bad);
+  color: #fff;
 }
 
 .option.dim {
@@ -754,8 +801,8 @@ input.plain.mono {
 
 .confidence button.selected {
   border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
   font-weight: 700;
 }
 

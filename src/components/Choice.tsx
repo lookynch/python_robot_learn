@@ -38,6 +38,13 @@ export function OptionList({ options, selected, revealed, multi, onToggle }: Opt
             disabled={revealed}
             onClick={() => onToggle(i)}
           >
+            <span class={`option-mark${isSelected ? ' checked' : ''}`} aria-hidden="true">
+              {isSelected && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5">
+                  <path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              )}
+            </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               {option.mono ? option.html : <InlineHtml html={option.html} />}
               {revealed && option.why && (isSelected || option.correct) && (
