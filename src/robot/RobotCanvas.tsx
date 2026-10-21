@@ -18,7 +18,7 @@ export interface RobotCanvasProps {
   sim: Sim;
   label: string;
   target?: [number, number, number] | null;
-  /** Wird vor jedem Bild aufgerufen; dt = vergangene Zeit in Sekunden (höchstens 0,1). */
+  /** Wird vor jedem Bild aufgerufen; dt = vergangene Zeit in Sekunden (höchstens 0,25). */
   onFrame?: (dt: number) => void;
   /** Gibt die three.js-Ansicht heraus, z. B. für Kamerabilder. */
   onReady?: (renderer: RobotRenderer | null) => void;
@@ -49,7 +49,8 @@ export function RobotCanvas({ sim, label, target = null, onFrame, onReady }: Rob
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000);
+      // Bei langsamer Grafik holt die Physik bis zu 0,25 s pro Bild auf, statt in Zeitlupe zu laufen.
+      const dt = Math.min(0.25, (now - last) / 1000);
       last = now;
       frameRef.current?.(dt);
       renderer.render();

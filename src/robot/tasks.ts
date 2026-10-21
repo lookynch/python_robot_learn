@@ -29,8 +29,10 @@ export function rng(seed: number): () => number {
 }
 
 function cubeStart(random: () => number): Vec3 {
-  // Bereich, in dem der Arm sicher senkrecht von oben greifen kann.
-  return [0.18 + random() * 0.09, -0.06 + random() * 0.18, CUBE / 2];
+  // Ringsektor vor dem Arm, in dem er sicher senkrecht von oben greifen kann.
+  const r = 0.18 + random() * 0.08;
+  const angle = -0.3 + random() * 0.7;
+  return [r * Math.cos(angle), r * Math.sin(angle), CUBE / 2];
 }
 
 export type TaskId = 'heben' | 'ablegen' | 'frei';

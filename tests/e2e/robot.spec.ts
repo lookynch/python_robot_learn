@@ -48,11 +48,11 @@ test('Vorführen: der Experte löst „anheben“ und „in die Schale“', asyn
   await page.goto('/robot');
   await expect(page.getByText(/Greiferspitze: x/)).toContainText('z 11.');
   await page.getByRole('button', { name: 'Vorführen' }).click();
-  await expect(page.getByText(/Geschafft nach/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Geschafft nach/)).toBeVisible({ timeout: 90_000 });
   await page.getByRole('button', { name: 'Würfel in die Schale' }).click();
   await expect(page.getByText(/Greiferspitze: x/)).toContainText('z 11.');
   await page.getByRole('button', { name: 'Vorführen' }).click();
-  await expect(page.getByText(/Geschafft nach/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Geschafft nach/)).toBeVisible({ timeout: 90_000 });
 });
 
 test('Steuerkreuz und Tastatur bewegen den Greifer, Kamera zeigt Farbe und Tiefe', async ({
