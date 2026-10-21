@@ -55,3 +55,38 @@ lab.arm3d([[0, 0, 0, 0, 0], [0.5, -0.5, 0.5, 0.2, 0.1]], gripper=0.8, title="Tes
   const bad = python.run({ code: 'import lab\nlab.arm3d([0, 0])' });
   expect(bad.error?.message).toContain('5 Gelenkwinkel');
 });
+
+test('IK mit down=True: Finger zeigen senkrecht nach unten', () => {
+  const result = run(`import numpy as np
+from lab import so101
+ok = True
+for target in ([0.22, 0.05, 0.03], [0.26, -0.06, 0.015]):
+    q, reached = so101.ik(target, down=True)
+    ok = ok and reached and so101.tool_axis(q)[2] < -0.99
+print(ok)
+`);
+  expect(result.stdout.trim()).toBe('True');
+});
+
+test('Tiefenbild: Boden und Würfel stimmen, Rückprojektion findet die Würfeloberseite', () => {
+  const result = run(`import numpy as np
+from lab import so101
+cube = {"pos": (0.22, 0.0, 0.015), "size": 0.03}
+q, _ = so101.ik([0.22, 0.0, 0.09], down=True)
+D = so101.depth_image(q, [cube], 64, 48)
+empty = so101.depth_image(q, [], 64, 48)
+h, w = D.shape
+# Pixel, die den Würfel treffen, in Weltpunkte zurückrechnen: die höchsten liegen auf der Oberseite.
+points = [so101.camera_point_to_world(so101.backproject(u, v, D[v, u], w, h), q)
+          for v, u in zip(*np.nonzero(empty - D > 0.005))]
+top = max(p[2] for p in points)
+inside = all(abs(p[0] - 0.22) < 0.016 and abs(p[1]) < 0.016 for p in points)
+print(round(top, 3), inside)
+F = so101.depth_image(None, [], 32, 24, camera="front")
+print(bool(F.min() > 0.4 and F[12, 16] < 1.0))
+`);
+  const [top, near, front] = result.stdout.trim().split(/\s+/);
+  expect(Number(top)).toBeCloseTo(0.03, 2);
+  expect(near).toBe('True');
+  expect(front).toBe('True');
+});

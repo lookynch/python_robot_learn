@@ -121,33 +121,105 @@ def jacobian(q, eps=1e-6):
     return J
 
 
-def ik(target, q0=None, iterations=200, damping=0.02, tol=1e-4, step=1.0):
+def tool_axis(q):
+    """Richtung, in die die Greiferfinger zeigen (Einheitsvektor)."""
+    return fk(q)[:3, 0].copy()
+
+
+def _residual(q, target, down, weight):
+    r = target - tool_position(q)
+    if down:
+        a = tool_axis(q)
+        r = np.concatenate([r, weight * np.cross(a, [0.0, 0.0, -1.0])])
+    return r
+
+
+def ik(target, q0=None, down=False, iterations=200, damping=0.02, tol=1e-4, weight=0.15):
     """Inverse Kinematik (Damped Least Squares) für die Position der Greiferspitze.
 
-    Gibt (q, erreicht) zurück. Die Handgelenk-Drehung bleibt wie in q0.
+    down=True: zusätzlich sollen die Greiferfinger senkrecht nach unten zeigen (Greifen von oben).
+    Gibt (q, erreicht) zurück. Die Handgelenk-Drehung q[4] bleibt wie in q0.
     """
     target = np.asarray(target, dtype=float)
     q = np.array(HOME if q0 is None else np.ravel(q0)[:5], dtype=float)
+    eps = 1e-6
     for _ in range(iterations):
-        error = target - tool_position(q)
-        if np.linalg.norm(error) < tol:
+        r = _residual(q, target, down, weight)
+        if np.linalg.norm(target - tool_position(q)) < tol and (not down or np.linalg.norm(r[3:]) < tol * 10):
             return q, True
-        J = jacobian(q)
-        J[:, 4] = 0.0
-        dq = J.T @ np.linalg.solve(J @ J.T + damping ** 2 * np.eye(3), error)
-        q = clip(q + step * dq)
-    return q, bool(np.linalg.norm(target - tool_position(q)) < tol * 10)
+        J = np.zeros((len(r), 5))
+        for i in range(4):
+            dq = q.copy()
+            dq[i] += eps
+            J[:, i] = (r - _residual(dq, target, down, weight)) / eps
+        q = clip(q + J.T @ np.linalg.solve(J @ J.T + damping ** 2 * np.eye(len(r)), r))
+    return q, bool(np.linalg.norm(target - tool_position(q)) < 2e-3)
 
 
-def intrinsics(width, height):
-    """Lochkamera der Handgelenkkamera: (fx, fy, cx, cy) in Pixeln."""
-    fy = 0.5 * height / math.tan(math.radians(DATA["camera"]["fovy"]) / 2)
+# Feste Kamera vor dem Arm (wie „Vorne“ im Roboterlabor): Position, Achsen (x, y), Öffnungswinkel.
+FRONT_CAMERA = {"pos": (0.62, 0.0, 0.42), "x": (0.0, 1.0, 0.0), "y": (-0.55, 0.0, 0.83), "fovy": 50.0}
+MAX_DEPTH = 2.0
+
+
+def _fovy(camera):
+    return FRONT_CAMERA["fovy"] if camera == "front" else DATA["camera"]["fovy"]
+
+
+def front_camera_pose():
+    """4x4-Pose der festen Frontkamera (blickt entlang −z, y zeigt im Bild nach oben)."""
+    x = np.array(FRONT_CAMERA["x"], dtype=float)
+    y = np.array(FRONT_CAMERA["y"], dtype=float)
+    x /= np.linalg.norm(x)
+    y /= np.linalg.norm(y)
+    T = np.eye(4)
+    T[:3, 0], T[:3, 1], T[:3, 2] = x, y, np.cross(x, y)
+    T[:3, 3] = FRONT_CAMERA["pos"]
+    return T
+
+
+def intrinsics(width, height, camera="wrist"):
+    """Lochkamera: (fx, fy, cx, cy) in Pixeln. camera = "wrist" (Handgelenk) oder "front"."""
+    fy = 0.5 * height / math.tan(math.radians(_fovy(camera)) / 2)
     return fy, fy, (width - 1) / 2, (height - 1) / 2
 
 
-def backproject(u, v, depth, width, height):
+def backproject(u, v, depth, width, height, camera="wrist"):
     """Pixel (u nach rechts, v nach unten) mit Tiefe (m, entlang der Blickrichtung) -> Punkt im Kamerasystem."""
-    fx, fy, cx, cy = intrinsics(width, height)
+    fx, fy, cx, cy = intrinsics(width, height, camera)
     x = (u - cx) / fx * depth
     y = -(v - cy) / fy * depth
     return np.array([x, y, -depth])
+
+
+def depth_image(q, objects=(), width=64, height=48, camera="wrist"):
+    """Tiefenbild (Meter entlang der Blickrichtung) per Raycasting gegen Boden und Würfel.
+
+    objects: Würfel wie bei lab.arm3d, z. B. [{"pos": (0.22, 0.05, 0.015), "size": 0.03}].
+    Teile des Roboters selbst kommen im Bild nicht vor. Kein Treffer = MAX_DEPTH.
+    """
+    T = front_camera_pose() if camera == "front" else camera_pose(q)
+    fx, fy, cx, cy = intrinsics(width, height, camera)
+    u, v = np.meshgrid(np.arange(width), np.arange(height))
+    rays = np.stack([(u - cx) / fx, -(v - cy) / fy, -np.ones_like(u, dtype=float)], axis=-1)
+    d = rays @ T[:3, :3].T
+    o = T[:3, 3]
+    depth = np.full((height, width), MAX_DEPTH)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t_floor = np.where(d[..., 2] < 0, -o[2] / d[..., 2], np.inf)
+        depth = np.minimum(depth, t_floor)
+        for obj in objects:
+            c = np.asarray(obj["pos"], dtype=float)
+            h = float(obj.get("size", 0.03)) / 2
+            t1 = (c - h - o) / d
+            t2 = (c + h - o) / d
+            t_near = np.nanmax(np.minimum(t1, t2), axis=-1)
+            t_far = np.nanmin(np.maximum(t1, t2), axis=-1)
+            hit = (t_near <= t_far) & (t_far > 0)
+            depth = np.where(hit, np.minimum(depth, np.maximum(t_near, 0)), depth)
+    return np.minimum(depth, MAX_DEPTH)
+
+
+def camera_point_to_world(point, q=None, camera="wrist"):
+    """Punkt im Kamerasystem -> Weltkoordinaten."""
+    T = front_camera_pose() if camera == "front" else camera_pose(q)
+    return (T @ np.append(np.asarray(point, dtype=float), 1.0))[:3]

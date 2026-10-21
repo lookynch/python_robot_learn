@@ -6,7 +6,7 @@ import { copyText } from '../learning/ai-context';
 import { saveDraft, useProgress } from '../learning/store';
 import { useRunner } from '../python/useRunner';
 
-const EXAMPLES: { name: string; code: string }[] = [
+export const EXAMPLES: { name: string; code: string }[] = [
   {
     name: 'Hallo',
     code: 'name = input("Wie heißt du? ")\nprint(f"Hallo {name}!")\n',
@@ -40,6 +40,33 @@ print("Gelenkwinkel (Grad):", np.round(np.degrees(q_ziel), 1))
 frames = [so101.HOME + t * (q_ziel - so101.HOME) for t in np.linspace(0, 1, 60)]
 lab.arm3d(frames, gripper=1.0, target=ziel, title="SO-101 fährt zum Ziel",
           objects=[{"pos": (0.24, 0.08, 0.015), "size": 0.03}])
+`,
+  },
+  {
+    name: 'Greifen',
+    code: `import numpy as np
+import lab
+from lab import so101
+
+wuerfel = (0.23, 0.06, 0.015)
+x, y, _ = wuerfel
+AUF, ZU = 1.2, -0.1
+
+def fahre(q_von, ziel, greifer, schritte):
+    """Sollwinkel-Folge: Greifer zeigt nach unten, Gelenke laufen linear zum IK-Ergebnis."""
+    q_ziel, ok = so101.ik(ziel, q0=q_von, down=True)
+    q_ziel[4] = -q_ziel[0]          # Backen parallel zu den Würfelseiten
+    return [np.append(q_von + t * (q_ziel - q_von), greifer) for t in np.linspace(0, 1, schritte)], q_ziel
+
+q = so101.HOME.copy()
+plan = []
+for ziel, greifer, schritte in [((x, y, 0.07), AUF, 40), ((x, y, 0.011), AUF, 30),
+                                ((x, y, 0.011), ZU, 25), ((x, y, 0.10), ZU, 40)]:
+    teil, q = fahre(q, ziel, greifer, schritte)
+    plan += teil
+
+lab.arm3d(plan, physics=True, objects=[{"pos": wuerfel, "size": 0.03}],
+          title="Python greift den Würfel (mit Physik)")
 `,
   },
   {
