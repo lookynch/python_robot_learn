@@ -66,7 +66,7 @@ export class RobotRenderer {
   readonly controls: OrbitControls;
   private bodies: { geom: number; mesh: THREE.Mesh }[] = [];
   private floor: THREE.Group | null = null;
-  private target: THREE.Mesh;
+  readonly target: THREE.Mesh;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -81,6 +81,8 @@ export class RobotRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Schatten nur für das Hauptbild neu berechnen; Kamerabilder nutzen sie mit.
+    this.renderer.shadowMap.autoUpdate = false;
 
     this.camera.up.set(0, 0, 1);
     this.camera.position.set(0.5, -0.42, 0.34);
@@ -175,7 +177,8 @@ export class RobotRenderer {
     this.camera.updateProjectionMatrix();
   }
 
-  render() {
+  /** Posen aller Körper aus der Simulation übernehmen. */
+  sync() {
     const xpos = this.sim.data.geom_xpos as Float64Array;
     const xmat = this.sim.data.geom_xmat as Float64Array;
     for (const { geom, mesh } of this.bodies) {
@@ -189,7 +192,12 @@ export class RobotRenderer {
         0, 0, 0, 1,
       );
     }
+  }
+
+  render() {
+    this.sync();
     this.controls.update();
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
   }
 

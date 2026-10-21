@@ -93,6 +93,7 @@ export interface Robot3DSpec {
   physics: boolean;
   target: [number, number, number] | null;
   objects: Robot3DObject[];
+  tray: { pos: [number, number]; size: [number, number] } | null;
   captions: string[] | null;
 }
 

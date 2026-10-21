@@ -18,11 +18,13 @@ export interface RobotCanvasProps {
   sim: Sim;
   label: string;
   target?: [number, number, number] | null;
-  /** Wird vor jedem Bild aufgerufen; dt = vergangene Zeit in Sekunden (höchstens 0,05). */
+  /** Wird vor jedem Bild aufgerufen; dt = vergangene Zeit in Sekunden (höchstens 0,1). */
   onFrame?: (dt: number) => void;
+  /** Gibt die three.js-Ansicht heraus, z. B. für Kamerabilder. */
+  onReady?: (renderer: RobotRenderer | null) => void;
 }
 
-export function RobotCanvas({ sim, label, target = null, onFrame }: RobotCanvasProps) {
+export function RobotCanvas({ sim, label, target = null, onFrame, onReady }: RobotCanvasProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const view = useRef<RobotRenderer | null>(null);
@@ -32,6 +34,7 @@ export function RobotCanvas({ sim, label, target = null, onFrame }: RobotCanvasP
   useEffect(() => {
     const renderer = new RobotRenderer(canvas.current!, sim, themeOf(wrap.current!));
     view.current = renderer;
+    onReady?.(renderer);
     const observer = new ResizeObserver(() => {
       const width = wrap.current?.clientWidth ?? 320;
       const height = Math.round(Math.max(260, Math.min(480, width * 0.75)));
@@ -46,7 +49,7 @@ export function RobotCanvas({ sim, label, target = null, onFrame }: RobotCanvasP
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       frameRef.current?.(dt);
       renderer.render();
@@ -57,6 +60,7 @@ export function RobotCanvas({ sim, label, target = null, onFrame }: RobotCanvasP
       cancelAnimationFrame(raf);
       observer.disconnect();
       scheme.removeEventListener('change', retheme);
+      onReady?.(null);
       renderer.dispose();
       view.current = null;
     };

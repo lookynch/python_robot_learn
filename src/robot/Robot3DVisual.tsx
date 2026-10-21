@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Robot3DSpec } from '../python/protocol';
 import { readPalette, resolveColor } from '../viz/colors';
 import { RobotCanvas } from './RobotCanvas';
-import { Sim, type CubeSpec } from './sim';
+import { Sim, type CubeSpec, type RGBA } from './sim';
 
 function cubesOf(spec: Robot3DSpec, element: Element): CubeSpec[] {
   const palette = readPalette(element);
@@ -29,7 +29,10 @@ export function Robot3DVisual({ spec }: { spec: Robot3DSpec }) {
   useEffect(() => {
     let created: Sim | null = null;
     let cancelled = false;
-    Sim.create(cubesOf(spec, host.current!)).then(
+    const tray = spec.tray
+      ? { pos: spec.tray.pos, size: spec.tray.size, rgba: [0.55, 0.58, 0.62, 1] as RGBA }
+      : null;
+    Sim.create({ cubes: cubesOf(spec, host.current!), tray }).then(
       (s) => {
         if (cancelled) return s.dispose();
         created = s;

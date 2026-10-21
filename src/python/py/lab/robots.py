@@ -100,12 +100,13 @@ def cartpole(x, theta, pole_length=1.0, title=None, fps=50, track=2.4, captions=
     scene.show()
 
 
-def arm3d(q, gripper=0.0, title=None, target=None, objects=None, physics=False, fps=30, captions=None):
+def arm3d(q, gripper=0.0, title=None, target=None, objects=None, tray=None, physics=False, fps=30, captions=None):
     """SO-101 in 3D. q = 5 Gelenkwinkel (oder 6 mit Greifer) bzw. eine Folge davon (Animation).
 
     gripper: Greiferwinkel in rad (0 = zu, etwa 1.2 = offen), wenn q nur 5 Werte hat.
     target: Zielpunkt (x, y, z) in Metern, erscheint als roter Punkt.
     objects: Würfel als Liste von {"pos": (x, y, z), "size": 0.03, "color": "c2"}.
+    tray: offene Schale {"pos": (x, y), "size": (breite, tiefe)} auf dem Boden.
     physics=True: Die Winkel sind Sollwerte für die Servos, MuJoCo simuliert den Arm samt Würfeln.
     """
     configs = to_list(q) if _is_sequence_of_configs(q) else [q]
@@ -133,5 +134,9 @@ def arm3d(q, gripper=0.0, title=None, target=None, objects=None, physics=False, 
         "physics": bool(physics),
         "target": [num(v, "Ziel") for v in to_list(target)] if target is not None else None,
         "objects": cubes,
+        "tray": {
+            "pos": [num(v, "Schalenposition") for v in to_list(tray["pos"])][:2],
+            "size": [num(v, "Schalengröße") for v in to_list(tray.get("size", (0.12, 0.1)))][:2],
+        } if tray is not None else None,
         "captions": [str(c) for c in captions] if captions is not None else None,
     })
