@@ -1,0 +1,609 @@
+id: m16-compounding-error
+title: Compounding Error – wenn Fehler sich aufschaukeln
+minutes: 9
+goals:
+  - Einschritt- und Mehrschritt-Vorhersage unterscheiden
+  - Erklären, warum sich Modellfehler über den Horizont aufsummieren
+  - Den Mehrschrittfehler eines gelernten Modells messen und plotten
+concepts: [wm-compounding]
+steps:
+  - type: text
+    body: |
+      ## Vorhersagen als neue Eingaben
+
+      Beim Training sieht das Modell immer **echte** Zustände: $\hat s_{t+1} = \hat f(s_t, a_t)$.
+
+      Beim Planen rollt es dagegen in **offener Schleife** (open loop) – jede Vorhersage wird zur nächsten Eingabe:
+
+      $$\hat s_{t+1} = \hat f(\hat s_t, a_t)$$
+
+      Für den Fehler $e_t = \hat s_t - s_t$ gilt grob
+
+      $$e_{t+1} \approx \frac{\partial \hat f}{\partial s}\, e_t + \varepsilon_t$$
+
+      Der alte Fehler wird weitergereicht (und evtl. verstärkt), dazu kommt der neue Einschrittfehler $\varepsilon_t$. Außerdem landet $\hat s_t$ in Regionen, für die das Modell nie trainiert wurde. Das nennt man **Compounding Error**.
+  - type: example
+    heavy: true
+    intro: |
+      Wir trainieren das Modell aus der letzten Lektion und vergleichen über 30 Schritte (1,5 s) für 50 zufällige Aktionsfolgen: Mehrschritt-Vorhersage gegen Einschritt-Vorhersage (immer vom echten Zustand aus).
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def true_step(s, a):
+          q = env.dynamics(s[..., :2], a)
+          return np.concatenate([q, env.fk(q)], axis=-1)
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+
+      r = np.random.default_rng(1)
+      q0 = r.uniform(-np.pi, np.pi, (50, 2))
+      s_true = np.hstack([q0, env.fk(q0)])
+      s_multi = s_true.copy()
+      U = r.uniform(-2, 2, (30, 50, 2))
+      err_multi, err_one, path_true, path_multi = [], [], [], []
+      for t in range(30):
+          s_one = predict(model, s_true, U[t])
+          s_multi = predict(model, s_multi, U[t])
+          s_true = true_step(s_true, U[t])
+          err_one.append(np.mean(np.linalg.norm(s_one[:, 2:] - s_true[:, 2:], axis=1)))
+          err_multi.append(np.mean(np.linalg.norm(s_multi[:, 2:] - s_true[:, 2:], axis=1)))
+          path_true.append(s_true[0, 2:])
+          path_multi.append(s_multi[0, 2:])
+
+      print(f"Fehler der Spitze nach 1 Schritt: {err_multi[0]:.3f} m, nach 30: {err_multi[-1]:.3f} m")
+      fig = lab.Figure(title="Fehler der Spitze", xlabel="Schritt", ylabel="mittlerer Fehler in m")
+      fig.line(err_multi, label="Mehrschritt (offene Schleife)")
+      fig.line(err_one, label="Einschritt (vom echten Zustand)")
+      fig.show()
+      scene = lab.Scene(title="Bahn der Spitze: echt vs. Modell", bounds=[-2.2, 2.2, -2.2, 2.2])
+      scene.line(path_true, color="good", width=3)
+      scene.line(path_multi, color="bad", width=2, dashed=True)
+      scene.show()
+    subgoals:
+      - lines: [61, 63]
+        label: Modell trainieren (wie bisher)
+      - lines: [65, 70]
+        label: Startzustände und Aktionsfolgen wählen
+      - lines: [71, 74]
+        label: Einschritt, Mehrschritt und Realität parallel rollen
+      - lines: [75, 78]
+        label: Fehler je Schritt messen
+      - lines: [80, 88]
+        label: Fehlerverlauf und Bahnen zeigen
+    after: |
+      Der Einschrittfehler bleibt bei knapp 1 cm. Der Mehrschrittfehler wächst Schritt für Schritt – nach 30 Schritten auf rund 15 cm, obwohl dasselbe Modell benutzt wird. In der Animation: grün die echte Bahn, rot gestrichelt die vorhergesagte.
+  - type: predict
+    intro: |
+      Ein Spielzeugsystem, in dem der Zustand jedes Mal um 10 % wächst. Das Modell macht pro Schritt einen kleinen, festen Fehler von 0,1.
+    code: |
+      true_s, model_s = 0.0, 0.0
+      for t in range(10):
+          true_s = 1.1 * true_s + 1.0
+          model_s = 1.1 * model_s + 1.1
+      print(round(model_s - true_s, 2))
+    options: ["1.59", "1.0", "0.1", "0.65"]
+    answer: "1.59"
+    explanation: |
+      Der Fehler folgt $e_{t+1} = 1{,}1\, e_t + 0{,}1$. Nach 10 Schritten ist er $0{,}1 \cdot (1{,}1^{10} - 1)/0{,}1 \approx 1{,}59$ – mehr als zehnmal der Einschrittfehler, weil alte Fehler mitwachsen. (0,65 wäre es bei einem dämpfenden System mit Faktor 0,9.)
+  - type: explain
+    question: |
+      Warum ist der Mehrschrittfehler oft größer als (Einschrittfehler) × (Anzahl Schritte)?
+    options:
+      - text: Fehlerhafte Vorhersagen werden zu Eingaben; das Modell rechnet von falschen und oft ungewohnten Zuständen aus weiter, wo es zusätzlich ungenauer ist.
+        correct: true
+        why: Zwei Effekte – Weitergabe/Verstärkung alter Fehler und Verteilungsverschiebung (distribution shift) der Eingaben.
+      - text: Weil das Modell bei jedem Aufruf zufällig ein wenig anders rechnet.
+        correct: false
+        why: Unser MLP ist deterministisch – gleiche Eingabe, gleiche Ausgabe.
+      - text: Weil Rundungsfehler von NumPy sich aufsummieren.
+        correct: false
+        why: Gleitkomma-Rundung liegt bei etwa $10^{-16}$ – viel zu klein, um Zentimeter-Fehler zu erklären.
+  - type: exercise
+    mode: make
+    heavy: true
+    prompt: |
+      Schreibe `open_loop_errors(model, s0, U)`. Starte Modell **und** Realität bei `s0` (Form `(4,)`), wende nacheinander die Aktionen `U` (Form `(H, 2)`) an – das Modell mit `predict` auf seiner **eigenen** Vorhersage, die Realität mit `true_step`. Gib ein Array mit dem Abstand der Spitzen (Spalten 2 und 3) nach jedem Schritt zurück (Länge `H`).
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=300, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def true_step(s, a):
+          q = env.dynamics(s[..., :2], a)
+          return np.concatenate([q, env.fk(q)], axis=-1)
+
+      def open_loop_errors(model, s0, U):
+          errors = []
+          # dein Code
+          return np.array(errors)
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(20, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      s0 = S[0]
+      U = np.random.default_rng(1).uniform(-2, 2, (20, 2))
+      print(np.round(open_loop_errors(model, s0, U), 3))
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=300, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def true_step(s, a):
+          q = env.dynamics(s[..., :2], a)
+          return np.concatenate([q, env.fk(q)], axis=-1)
+
+      def open_loop_errors(model, s0, U):
+          errors = []
+          s_model, s_real = s0.copy(), s0.copy()
+          for a in U:
+              s_model = predict(model, s_model, a)
+              s_real = true_step(s_real, a)
+              errors.append(np.linalg.norm(s_model[2:] - s_real[2:]))
+          return np.array(errors)
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(20, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      s0 = S[0]
+      U = np.random.default_rng(1).uniform(-2, 2, (20, 2))
+      print(np.round(open_loop_errors(model, s0, U), 3))
+    tests:
+      - name: Länge und Startwert
+        code: |
+          e = np.asarray(open_loop_errors(model, S[5], np.zeros((7, 2))))
+          assert e.shape == (7,), f"Für 7 Aktionen erwartet 7 Fehlerwerte, bekommen Form {e.shape}"
+      - name: Mehrschritt-Fehler stimmen
+        code: |
+          def _ref(model, s0, U):
+              sm, sr, out = s0.copy(), s0.copy(), []
+              for a in U:
+                  sm, sr = predict(model, sm, a), true_step(sr, a)
+                  out.append(np.linalg.norm(sm[2:] - sr[2:]))
+              return np.array(out)
+          for k, i in enumerate([0, 40, 333]):
+              Ut = np.random.default_rng(50 + k).uniform(-2, 2, (15, 2))
+              got = np.asarray(open_loop_errors(model, S[i], Ut), dtype=float)
+              want = _ref(model, S[i], Ut)
+              assert got.shape == want.shape and close(got, want, 1e-6), f"Fehlerverlauf stimmt nicht: erwartet {np.round(want[:4], 4)}…, bekommen {np.round(got[:4], 4)}… – rollt das Modell auf seiner eigenen Vorhersage weiter, und misst du nur die Spitze (Spalten 2, 3)?"
+      - name: Fehler wächst über den Horizont
+        code: |
+          r = np.random.default_rng(9)
+          curves = [open_loop_errors(model, S[i], r.uniform(-2, 2, (25, 2))) for i in range(0, 500, 50)]
+          mean_curve = np.mean(curves, axis=0)
+          assert mean_curve[-1] > 3 * mean_curve[0], f"Im Mittel sollte der Fehler nach 25 Schritten deutlich größer sein als nach 1 Schritt: {mean_curve[0]:.4f} → {mean_curve[-1]:.4f}"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=300, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def true_step(s, a):
+            q = env.dynamics(s[..., :2], a)
+            return np.concatenate([q, env.fk(q)], axis=-1)
+        def open_loop_errors(model, s0, U):
+            errors = []
+            s_model, s_real = s0.copy(), s0.copy()
+            for a in U:
+                s_model = predict(model, s_model, a)
+                s_real = true_step(s0, a)
+                errors.append(np.linalg.norm(s_model[2:] - s_real[2:]))
+            return np.array(errors)
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(20, 25, rng)
+        model = fit_model(S, A, S2, rng)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=300, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def true_step(s, a):
+            q = env.dynamics(s[..., :2], a)
+            return np.concatenate([q, env.fk(q)], axis=-1)
+        def open_loop_errors(model, s0, U):
+            errors = []
+            s_real = s0.copy()
+            for a in U:
+                s_model = predict(model, s_real, a)
+                s_real = true_step(s_real, a)
+                errors.append(np.linalg.norm(s_model[2:] - s_real[2:]))
+            return np.array(errors)
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(20, 25, rng)
+        model = fit_model(S, A, S2, rng)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=300, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def true_step(s, a):
+            q = env.dynamics(s[..., :2], a)
+            return np.concatenate([q, env.fk(q)], axis=-1)
+        def open_loop_errors(model, s0, U):
+            errors = []
+            s_model, s_real = s0.copy(), s0.copy()
+            for a in U:
+                s_model = predict(model, s_model, a)
+                s_real = true_step(s_real, a)
+                errors.append(np.linalg.norm(s_model - s_real))
+            return np.array(errors)
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(20, 25, rng)
+        model = fit_model(S, A, S2, rng)
+    hints:
+      - "Teilziel: zwei Zustände parallel rollen – Modell und Realität – und nach jedem Schritt den Abstand der Spitzen speichern."
+      - Das Modell bekommt in jedem Schritt **seine eigene** letzte Vorhersage als Eingabe, nicht den echten Zustand.
+      - |
+        ```python
+        s_model, s_real = s0.copy(), s0.copy()
+        for a in U:
+            s_model = predict(model, s_model, a)
+            ...
+        ```
+      - |
+        ```python
+            s_real = true_step(s_real, a)
+            errors.append(np.linalg.norm(s_model[2:] - s_real[2:]))
+        ```
+  - type: quiz
+    question: |
+      MBPO (Janner et al. 2019) erzeugt mit einem gelernten Ensemble zusätzliche Trainingsdaten für einen modellfreien Agenten (SAC). Wie hält es den Compounding Error klein?
+    options:
+      - text: Es rollt das Modell nur wenige Schritte weit, und zwar ausgehend von echten, gesammelten Zuständen.
+        correct: true
+        why: Kurze, „abzweigende“ Rollouts (branched rollouts) – der Fehler hat keine Zeit, sich aufzuschaukeln, und startet immer von echten Daten.
+      - text: Es rollt das Modell möglichst lange, damit sich Fehler im Mittel aufheben.
+        correct: false
+        why: Fehler heben sich nicht auf – sie wachsen mit dem Horizont, wie im Plot.
+      - text: Es trainiert das Modell nur auf einem einzigen Schritt.
+        correct: false
+        why: Das tun wir auch – und trotzdem driften Mehrschritt-Rollouts.
+  - type: quiz
+    question: |
+      Unser Planer wird mit 10 Schritten Horizont planen. Warum stört der Compounding Error dabei weniger als hier im 30-Schritte-Plot?
+    options:
+      - text: Bei MPC wird nach jedem echten Schritt vom **gemessenen** Zustand neu geplant – der Fehler wird ständig zurückgesetzt, und der Horizont ist kurz.
+        correct: true
+        why: Rückkopplung durch Messung ist das wichtigste Gegenmittel gegen Modellfehler.
+      - text: Weil CEM die Modellfehler automatisch korrigiert.
+        correct: false
+        why: CEM optimiert nur im Modell – es weiß nichts von dessen Fehlern.
+      - text: Gar nicht – der Fehler ist beim Planen genauso groß wie bei 30 Schritten offener Schleife.
+        correct: false
+        why: Kurzer Horizont plus Neuplanen ab echtem Zustand verhindern, dass sich der Fehler über 30 Schritte aufbaut.
+cards:
+  - id: m16-c-open-loop
+    concept: wm-compounding
+    variants:
+      - type: quiz
+        question: Was ist der Unterschied zwischen Einschritt- und Mehrschritt-Vorhersage?
+        options:
+          - text: Mehrschritt füttert die eigene Vorhersage $\hat s_t$ wieder ins Modell, Einschritt startet immer vom echten $s_t$.
+            correct: true
+            why: Deshalb können sich nur bei Mehrschritt-Vorhersagen Fehler aufsummieren.
+          - text: Mehrschritt nutzt ein größeres Netz.
+            correct: false
+            why: Es ist dasselbe Modell, nur anders benutzt.
+          - text: Einschritt sagt $\Delta s$ voraus, Mehrschritt $s'$.
+            correct: false
+            why: Beide nutzen $\hat f(s, a) = s + g(s, a)$.
+      - type: predict
+        code: |
+          true_s, model_s = 0.0, 0.0
+          for t in range(5):
+              true_s = true_s + 1.0
+              model_s = model_s + 1.2
+          print(round(model_s - true_s, 1))
+        options: ["1.0", "0.2", "6.0", "1.2"]
+        answer: "1.0"
+        explanation: Bei einem neutralen System addiert sich der Einschrittfehler 0,2 einfach auf – nach 5 Schritten 1,0.
+  - id: m16-c-compounding-mittel
+    concept: wm-compounding
+    variants:
+      - type: quiz
+        question: Welche Maßnahme verkleinert den Compounding Error beim Planen am direktesten?
+        options:
+          - text: Kurzer Planungshorizont und nach jedem Schritt vom gemessenen Zustand neu planen.
+            correct: true
+            why: So kann sich der Fehler nur über wenige Schritte aufbauen.
+          - text: Längerer Planungshorizont.
+            correct: false
+            why: Mehr Schritte in offener Schleife – mehr Fehler.
+          - text: Die Lernrate erhöhen.
+            correct: false
+            why: Das ändert nicht, dass Vorhersagen als Eingaben weitergereicht werden.
+      - type: quiz
+        question: Der Mehrschrittfehler wächst schneller als linear. Was ist die wahrscheinlichste Ursache?
+        options:
+          - text: Das System (bzw. Modell) verstärkt Abweichungen; zusätzlich gerät $\hat s$ in Bereiche ohne Trainingsdaten.
+            correct: true
+            why: Verstärkungsfaktor $\partial \hat f / \partial s > 1$ und Verteilungsverschiebung lassen den Fehler überproportional wachsen.
+          - text: Ein Bug – Fehler wachsen immer genau linear.
+            correct: false
+            why: Linear nur, wenn sich Fehler bloß addieren; Rückkopplung kann sie verstärken oder dämpfen.
+          - text: Rundungsfehler in NumPy.
+            correct: false
+            why: Viel zu klein, um sichtbare Abweichungen zu erklären.

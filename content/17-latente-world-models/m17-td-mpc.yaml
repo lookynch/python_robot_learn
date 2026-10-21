@@ -1,0 +1,325 @@
+id: m17-td-mpc
+title: "TD-MPC: kurz planen, den Rest schätzt der Critic"
+minutes: 9
+goals:
+  - Den Aufbau von TD-MPC (latentes Modell ohne Decoder, Belohnung, Wert, Policy) beschreiben
+  - Erklären, warum ein kurzer Horizont plus Endwert besser ist als ein langer Horizont
+  - Einen MPPI-Planer um einen Endwert ergänzen
+concepts: [lwm-td-mpc]
+steps:
+  - type: text
+    body: |
+      ## Planen + Wertfunktion
+
+      TD-MPC (Hansen, Wang & Su, 2022) verbindet die beiden Welten dieses Kurses:
+
+      - ein **latentes Modell** (TOLD): Encoder $z = h(o)$, Dynamik $z' = d(z, a)$, Belohnung $R(z, a)$, Wert $Q(z, a)$, Policy $\pi(z)$,
+      - **ohne Decoder**: Der latente Raum wird nur über Belohnungsvorhersage, TD-Lernen des Werts und **latente Konsistenz** ($d(z_t, a_t)$ soll zum codierten $z_{t+1}$ passen) trainiert,
+      - **MPPI** im latenten Raum über einen **kurzen** Horizont (z. B. 5 Schritte) mit Endwert:
+
+      $$J = \sum_{t=0}^{H-1} \gamma^t R(z_t, a_t) + \gamma^H Q(z_H, \pi(z_H))$$
+
+      TD-MPC2 (Hansen, Su & Wang, 2024) machte das Verfahren robuster und skalierbar – mit einem Satz Hyperparameter für über 100 Aufgaben und einem einzelnen Agenten mit 317 Mio. Parametern für 80 Aufgaben.
+  - type: explain
+    question: |
+      Warum plant TD-MPC nur wenige Schritte voraus und hängt den Wert $Q$ an?
+    options:
+      - text: Kurze Rollouts halten Rechenaufwand und Compounding Error klein; $Q$ fasst die fernere Zukunft zusammen, die der Horizont nicht mehr sieht.
+        correct: true
+        why: Planen liefert genaue Kurzzeit-Entscheidungen, der Critic den langen Ausblick – das Beste aus MPC und RL.
+      - text: Weil MPPI nur mit 5 Schritten funktioniert.
+        correct: false
+        why: MPPI funktioniert mit jedem Horizont; lange Horizonte sind nur teuer und anfällig für Modellfehler.
+      - text: Weil $Q$ die Belohnungen der 5 Schritte ersetzt.
+        correct: false
+        why: Die Belohnungen im Horizont werden weiter summiert; $Q$ kommt nur am Ende dazu.
+  - type: example
+    intro: |
+      Spielversion in 1D: Ein Punkt bewegt sich mit $v \in [-1, 1]$ m/s, $\Delta t = 0{,}1$ s. Belohnung 1 gibt es nur nahe $x = 3$ m (**spärliche** Belohnung), Start bei $x = 0$. MPPI plant 5 Schritte – höchstens 0,5 m weit. Als Stellvertreter für einen gelernten Critic nehmen wir $V(x) = -|x - 3|$.
+    code: |
+      import numpy as np
+      import lab
+
+      GOAL = 3.0
+
+      def reward(X):
+          return (np.abs(X - GOAL) < 0.2).astype(float)
+
+      def value(x):
+          return -np.abs(x - GOAL)
+
+      def plan(x, mu, rng, use_value, H=5, N=200, gamma=0.95, temp=0.1):
+          U = np.clip(mu + 0.5 * rng.standard_normal((N, H)), -1, 1)
+          X = x + 0.1 * np.cumsum(U, axis=1)
+          score = np.sum(reward(X) * gamma ** np.arange(H), axis=1)
+          if use_value:
+              score = score + gamma ** H * value(X[:, -1])
+          w = np.exp((score - score.max()) / temp)
+          w = w / w.sum()
+          return w @ U
+
+      def run(use_value, x0=0.0, steps=50, seed=0):
+          rng = np.random.default_rng(seed)
+          x, mu, xs = x0, np.zeros(5), [x0]
+          for _ in range(steps):
+              mu = plan(x, mu, rng, use_value)
+              x = x + 0.1 * mu[0]
+              xs.append(x)
+              mu = np.append(mu[1:], mu[-1])
+          return np.array(xs)
+
+      fig = lab.Figure(title="MPPI mit Horizont 5", xlabel="Schritt", ylabel="x in m")
+      fig.line(run(False), label="nur Belohnung")
+      fig.line(run(True), label="Belohnung + Endwert V")
+      fig.hline(GOAL, label="Ziel")
+      fig.show()
+      print("Ende ohne V:", round(run(False)[-1], 2), "m | mit V:", round(run(True)[-1], 2), "m")
+    subgoals:
+      - lines: [6, 10]
+        label: Spärliche Belohnung und Endwert festlegen
+      - lines: [12, 20]
+        label: Folgen ziehen, im Modell rollen, bewerten, gewichtet mitteln
+      - lines: [22, 30]
+        label: MPC-Schleife mit Warmstart
+      - lines: [32, 37]
+        label: Mit und ohne Endwert vergleichen
+    after: |
+      Ohne Endwert sieht der Planer in 0,5 m Reichweite nie eine Belohnung – alle Folgen sind gleich gut, der Punkt irrt umher. Mit $V$ zieht schon der Endzustand jeder Folge Richtung Ziel.
+  - type: predict
+    intro: |
+      Was passiert, wenn der Planer **mit** Endwert bei $x_0 = 5{,}5$ m startet – also auf der anderen Seite des Ziels?
+    code: |
+      import numpy as np
+
+      def plan(x, mu, rng, H=5, N=200, gamma=0.95, temp=0.1):
+          U = np.clip(mu + 0.5 * rng.standard_normal((N, H)), -1, 1)
+          X = x + 0.1 * np.cumsum(U, axis=1)
+          score = np.sum((np.abs(X - 3.0) < 0.2) * gamma ** np.arange(H), axis=1)
+          score = score + gamma ** H * -np.abs(X[:, -1] - 3.0)
+          w = np.exp((score - score.max()) / temp)
+          return (w / w.sum()) @ U
+
+      rng = np.random.default_rng(0)
+      x, mu = 5.5, np.zeros(5)
+      for _ in range(50):
+          mu = plan(x, mu, rng)
+          x = x + 0.1 * mu[0]
+          mu = np.append(mu[1:], mu[-1])
+      print("erreicht" if abs(x - 3.0) < 0.2 else "nicht erreicht")
+    options: ["erreicht", "nicht erreicht"]
+    answer: "erreicht"
+    explanation: |
+      Der Endwert $-|x - 3|$ steigt von **beiden** Seiten zum Ziel hin. Folgen, die nach links fahren, enden näher am Ziel und bekommen mehr Gewicht – der Planer braucht dafür keine sichtbare Belohnung im Horizont.
+  - type: exercise
+    mode: modify
+    prompt: |
+      `plan` bewertet bisher nur die Belohnungen im Horizont. Ergänze den **Endwert**: Addiere zu `score` den mit $\gamma^H$ abgezinsten Wert `value` des **letzten** vorgestellten Zustands jeder Folge (`X[:, -1]`). Dann soll `run()` das Ziel von beiden Seiten erreichen.
+    starter: |
+      import numpy as np
+
+      GOAL = 3.0
+
+      def reward(X):
+          return (np.abs(X - GOAL) < 0.2).astype(float)
+
+      def value(x):
+          return -np.abs(x - GOAL)
+
+      def plan(x, mu, rng, H=5, N=200, gamma=0.95, temp=0.1):
+          U = np.clip(mu + 0.5 * rng.standard_normal((N, H)), -1, 1)
+          X = x + 0.1 * np.cumsum(U, axis=1)
+          score = np.sum(reward(X) * gamma ** np.arange(H), axis=1)
+          w = np.exp((score - score.max()) / temp)
+          w = w / w.sum()
+          return w @ U
+
+      def run(x0=0.0, steps=50, seed=0):
+          rng = np.random.default_rng(seed)
+          x, mu = x0, np.zeros(5)
+          for _ in range(steps):
+              mu = plan(x, mu, rng)
+              x = x + 0.1 * mu[0]
+              mu = np.append(mu[1:], mu[-1])
+          return x
+
+      print("Ende:", round(run(), 2), "m")
+    solution: |
+      import numpy as np
+
+      GOAL = 3.0
+
+      def reward(X):
+          return (np.abs(X - GOAL) < 0.2).astype(float)
+
+      def value(x):
+          return -np.abs(x - GOAL)
+
+      def plan(x, mu, rng, H=5, N=200, gamma=0.95, temp=0.1):
+          U = np.clip(mu + 0.5 * rng.standard_normal((N, H)), -1, 1)
+          X = x + 0.1 * np.cumsum(U, axis=1)
+          score = np.sum(reward(X) * gamma ** np.arange(H), axis=1)
+          score = score + gamma ** H * value(X[:, -1])
+          w = np.exp((score - score.max()) / temp)
+          w = w / w.sum()
+          return w @ U
+
+      def run(x0=0.0, steps=50, seed=0):
+          rng = np.random.default_rng(seed)
+          x, mu = x0, np.zeros(5)
+          for _ in range(steps):
+              mu = plan(x, mu, rng)
+              x = x + 0.1 * mu[0]
+              mu = np.append(mu[1:], mu[-1])
+          return x
+
+      print("Ende:", round(run(), 2), "m")
+    tests:
+      - name: Von links zum Ziel
+        code: |
+          for seed in [0, 1, 2]:
+              x = run(0.0, seed=seed)
+              assert abs(x - 3.0) < 0.2, f"Start bei 0 m (Seed {seed}): Endposition {x:.2f} m, sollte innerhalb von 0,2 m um 3 m liegen."
+      - name: Von rechts zum Ziel
+        code: |
+          x = run(5.5, seed=3)
+          assert abs(x - 3.0) < 0.2, f"Start bei 5,5 m: Endposition {x:.2f} m, sollte nahe 3 m liegen."
+      - name: Belohnungen zählen weiter
+        code: |
+          r = np.random.default_rng(0)
+          mu = plan(2.6, np.zeros(5), r)
+          assert np.all(np.abs(mu) <= 1.0) and np.shape(mu) == (5,), f"plan soll weiterhin 5 Aktionen in [-1, 1] liefern, bekommen {mu}"
+    mutants:
+      - |
+        import numpy as np
+        GOAL = 3.0
+        def reward(X):
+            return (np.abs(X - GOAL) < 0.2).astype(float)
+        def value(x):
+            return -np.abs(x - GOAL)
+        def plan(x, mu, rng, H=5, N=200, gamma=0.95, temp=0.1):
+            U = np.clip(mu + 0.5 * rng.standard_normal((N, H)), -1, 1)
+            X = x + 0.1 * np.cumsum(U, axis=1)
+            score = np.sum(reward(X) * gamma ** np.arange(H), axis=1)
+            score = score - gamma ** H * value(X[:, -1])
+            w = np.exp((score - score.max()) / temp)
+            w = w / w.sum()
+            return w @ U
+        def run(x0=0.0, steps=50, seed=0):
+            rng = np.random.default_rng(seed)
+            x, mu = x0, np.zeros(5)
+            for _ in range(steps):
+                mu = plan(x, mu, rng)
+                x = x + 0.1 * mu[0]
+                mu = np.append(mu[1:], mu[-1])
+            return x
+      - |
+        import numpy as np
+        GOAL = 3.0
+        def reward(X):
+            return (np.abs(X - GOAL) < 0.2).astype(float)
+        def value(x):
+            return -np.abs(x - GOAL)
+        def plan(x, mu, rng, H=5, N=200, gamma=0.95, temp=0.1):
+            U = np.clip(mu + 0.5 * rng.standard_normal((N, H)), -1, 1)
+            X = x + 0.1 * np.cumsum(U, axis=1)
+            score = np.sum(reward(X) * gamma ** np.arange(H), axis=1)
+            score = score + gamma ** H * value(x)
+            w = np.exp((score - score.max()) / temp)
+            w = w / w.sum()
+            return w @ U
+        def run(x0=0.0, steps=50, seed=0):
+            rng = np.random.default_rng(seed)
+            x, mu = x0, np.zeros(5)
+            for _ in range(steps):
+                mu = plan(x, mu, rng)
+                x = x + 0.1 * mu[0]
+                mu = np.append(mu[1:], mu[-1])
+            return x
+    hints:
+      - "Teilziel: Zu jeder Folge den abgezinsten Wert ihres letzten vorgestellten Zustands addieren."
+      - "`X` hat die Form `(N, H)`; die letzten Zustände aller Folgen sind `X[:, -1]`. Der Abzinsungsfaktor ist $\\gamma^H$."
+      - "`score = score + ...`"
+      - "`score = score + gamma ** H * value(X[:, -1])`"
+    explanation: |
+      Ließest du die Belohnungen im Horizont weg und nutztest **nur** den Endwert, käme der Punkt hier ebenfalls ans Ziel. Bei Aufgaben, in denen kurzfristige Belohnung und Wert nicht in dieselbe Richtung zeigen (z. B. ein Hindernis mit Strafe), verschenkt das aber Information – TD-MPC nutzt beides.
+  - type: quiz
+    question: |
+      TD-MPC verzichtet auf einen Decoder. Was ist der Hauptgrund?
+    options:
+      - text: Der latente Raum soll nur enthalten, was für Belohnung und Wert wichtig ist – Pixel zu rekonstruieren würde Kapazität für Unwichtiges verbrauchen.
+        correct: true
+        why: Stattdessen sorgt die latente Konsistenz dafür, dass das Dynamikmodell zu den codierten Beobachtungen passt.
+      - text: Decoder sind mathematisch unmöglich für latente Modelle.
+        correct: false
+        why: Dreamer und PlaNet haben einen Decoder.
+      - text: Weil TD-MPC keine Bilder, sondern nur Zahlen verarbeiten kann.
+        correct: false
+        why: TD-MPC wurde auch mit Bildbeobachtungen eingesetzt.
+  - type: quiz
+    question: |
+      Was unterscheidet TD-MPC beim **Handeln** von Dreamer?
+    options:
+      - text: TD-MPC plant in jedem Schritt mit MPPI im Modell (Policy und Wert helfen nur); Dreamer führt die Aktion seines in der Vorstellung trainierten Actors direkt aus.
+        correct: true
+        why: Online-Planung ist rechenintensiver, kann aber Fehler der Policy ausgleichen.
+      - text: Dreamer plant mit CEM, TD-MPC nutzt nur die Policy.
+        correct: false
+        why: Genau umgekehrt.
+      - text: Kein Unterschied – beide handeln identisch.
+        correct: false
+        why: Beide lernen in einem latenten Modell, nutzen es aber verschieden.
+cards:
+  - id: m17-c-td-mpc-endwert
+    concept: lwm-td-mpc
+    variants:
+      - type: quiz
+        question: Was ersetzt in TD-MPC den Teil der Zukunft hinter dem Planungshorizont?
+        options:
+          - text: Der gelernte Wert $Q(z_H, \pi(z_H))$ am Ende jeder vorgestellten Folge.
+            correct: true
+            why: Er schätzt die Belohnungen nach dem Horizont.
+          - text: Ein längerer Horizont von 1000 Schritten.
+            correct: false
+            why: TD-MPC plant gerade kurz.
+          - text: Der Decoder.
+            correct: false
+            why: TD-MPC hat keinen Decoder.
+      - type: quiz
+        question: Warum hilft ein Endwert besonders bei **spärlichen** Belohnungen?
+        options:
+          - text: Liegt die Belohnung außerhalb des Horizonts, sehen alle Folgen gleich aus – nur der Endwert unterscheidet sie.
+            correct: true
+            why: Wie im Beispiel mit dem Ziel bei 3 m.
+          - text: Weil spärliche Belohnungen negativ sind.
+            correct: false
+            why: Spärlich heißt selten, nicht negativ.
+          - text: Weil der Endwert die Belohnungsfunktion verändert.
+            correct: false
+            why: Er ergänzt die Bewertung, die Belohnung bleibt gleich.
+  - id: m17-c-told
+    concept: lwm-td-mpc
+    variants:
+      - type: quiz
+        question: Womit wird der latente Raum von TD-MPC trainiert?
+        options:
+          - text: Belohnungsvorhersage, TD-Lernen des Werts und latente Konsistenz der Dynamik.
+            correct: true
+            why: Alles Signale, die mit der Aufgabe zu tun haben – keine Pixelrekonstruktion.
+          - text: Nur mit Bildrekonstruktion.
+            correct: false
+            why: Das ist der Ansatz von Autoencoder/VAE-basierten Modellen.
+          - text: Gar nicht – der latente Raum ist fest vorgegeben.
+            correct: false
+            why: Der Encoder wird mittrainiert.
+      - type: quiz
+        question: Welcher Planer steckt in TD-MPC?
+        options:
+          - text: MPPI – gewichtete Mittelung vieler Aktionsfolgen, ergänzt um Vorschläge der gelernten Policy.
+            correct: true
+            why: Bekannt aus Modul 11, hier im latenten Raum.
+          - text: Value Iteration über alle Zustände.
+            correct: false
+            why: Kontinuierliche latente Räume lassen sich nicht vollständig aufzählen.
+          - text: Gar keiner, TD-MPC ist rein modellfrei.
+            correct: false
+            why: "Der Name sagt es: Model Predictive Control."

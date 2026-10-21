@@ -1,0 +1,46 @@
+id: m16
+number: 16
+title: World Models I – gelernte Dynamik + Planen
+summary: |
+  Capstone: Du sammelst Daten mit Zufallsaktionen, trainierst ein kleines Dynamikmodell in NumPy, misst seine Grenzen (Compounding Error, Ensemble-Unsicherheit) und steuerst den Reacher-Arm mit CEM auf dem **gelernten** Modell zum Ziel – inklusive Lernschleife aus Daten, Training und Planen.
+depth: voll
+lessons:
+  - m16-idee
+  - m16-daten-sammeln
+  - m16-dynamikmodell
+  - m16-compounding-error
+  - m16-ensembles
+  - m16-mpc-gelernt
+  - m16-iteration
+  - m16-checkpoint
+concepts:
+  - id: wm-world-model
+    name: World Model
+    description: Ein gelerntes Modell f(s, a) → s′ der Umgebung, mit dem ein Agent Folgen von Aktionen „im Kopf“ durchspielen kann (Rollout).
+  - id: wm-modellbasiert
+    name: Modellbasiert vs. modellfrei
+    description: Modellbasierte Verfahren lernen die Dynamik und planen damit; sie brauchen meist deutlich weniger echte Interaktionen, riskieren aber Modellfehler.
+  - id: wm-datensatz
+    name: Übergangsdatensatz (s, a, s′)
+    description: Gesammelte Übergänge aus echten Episoden; Abdeckung des Zustandsraums entscheidet, wo das Modell gut ist. Validierung mit getrennten Episoden.
+  - id: wm-delta-vorhersage
+    name: Δs vorhersagen
+    description: Das Netz sagt die Änderung Δs = s′ − s vorher; das Modell ist s + g(s, a). Kleine, einfache Ziele statt fast-identischer Kopien.
+  - id: wm-normalisierung
+    name: Normalisierung von Ein- und Ausgaben
+    description: Ein- und Ausgaben mit Mittelwert und Standardabweichung der Trainingsdaten auf Skala 1 bringen und beim Vorhersagen zurückrechnen.
+  - id: wm-compounding
+    name: Compounding Error
+    description: Bei Mehrschritt-Vorhersagen werden Vorhersagen wieder zu Eingaben; kleine Einschrittfehler summieren und verstärken sich.
+  - id: wm-ensemble
+    name: Ensemble-Unsicherheit
+    description: Mehrere Netze mit verschiedener Initialisierung und Bootstrap-Daten; ihre Streuung schätzt die epistemische Unsicherheit und wächst außerhalb der Trainingsdaten.
+  - id: wm-mpc-gelernt
+    name: MPC auf gelerntem Modell
+    description: CEM/MPC wie in Modul 11, aber mit dem gelernten Modell statt der wahren Dynamik; nur die erste Aktion wird ausgeführt, dann wird vom gemessenen Zustand neu geplant.
+  - id: wm-modell-ausnutzung
+    name: Modellausnutzung (Model Exploitation)
+    description: Ein Optimierer findet gezielt Aktionen, bei denen das Modell zu optimistisch falsch liegt – besonders außerhalb der Trainingsdaten.
+  - id: wm-iteration
+    name: Lernschleife des modellbasierten RL
+    description: Daten sammeln → Modell trainieren → planen und handeln → neue Daten hinzufügen → neu trainieren; die Daten wachsen dorthin, wo der Planer hinwill.

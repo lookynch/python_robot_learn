@@ -1,0 +1,140 @@
+id: m18-video-world-models
+title: Video-World-Models – Cosmos und Genie 3
+minutes: 8
+goals:
+  - Generative Video-World-Models von latenten Prädiktoren wie JEPA unterscheiden
+  - Einschätzen, wofür Cosmos und Genie 3 taugen und wofür nicht
+concepts: [video-weltmodell, jepa-latente-vorhersage]
+steps:
+  - type: text
+    body: |
+      ## Zwei Familien von World Models
+
+      | | latent (JEPA, Dreamer, TD-MPC) | generativ (Video) |
+      |---|---|---|
+      | sagt vorher | Repräsentation | Pixel / Videoframes |
+      | Ausgabe ansehen? | nein | ja, als Video |
+      | Rechenaufwand pro Vorhersage | klein | groß |
+      | gut für | Planen, Regelung | Simulation, synthetische Daten, Demos |
+
+      Generative Video-Modelle sind die bekanntesten „World Models“, weil man ihr Ergebnis anschauen kann. Für Regelung zählt aber, ob die Vorhersage **schnell** und **physikalisch verlässlich** ist – nicht, ob sie schön aussieht.
+  - type: text
+    body: |
+      ## NVIDIA Cosmos
+
+      Cosmos ist eine Plattform von **World Foundation Models** für „Physical AI“: allgemeine Weltmodelle, die man für eigene Anwendungen nachtrainiert ([Paper, Jan. 2025, arXiv:2501.03575](https://arxiv.org/abs/2501.03575)).
+
+      - Bis 2025: getrennte Modelle **Predict** (Zukunftsvideo vorhersagen), **Transfer** (z. B. Simulationsbilder in realistische Videos übersetzen) und **Reason** (Video verstehen, Text ausgeben), mit offenen Gewichten ([Predict 2.5](https://github.com/nvidia-cosmos/cosmos-predict2.5)).
+      - Seit Mai 2026: **Cosmos 3** – laut Repository *ein* Modell mit zwei Schnittstellen: „Reasoner“ (Bild/Video + Text rein, Text raus) und „Generator“, der auch Aktionen ein- und ausgeben kann. Größen 4 Mrd. bis 64 Mrd. Parameter, Lizenz OpenMDW-1.1 ([GitHub](https://github.com/nvidia/cosmos)).
+
+      *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Google DeepMind Genie 3
+
+      Genie 3 (vorgestellt August 2025) erzeugt aus einem Text-Prompt eine **interaktive** Welt, durch die man sich in Echtzeit bewegen kann: 720p, 24 Bilder/s, „für mehrere Minuten weitgehend konsistent“ ([DeepMind-Blog](https://deepmind.google/discover/blog/genie-3-a-new-frontier-for-world-models/)). DeepMind nennt selbst Grenzen: begrenzter Aktionsraum, schwierige Interaktion mehrerer Agenten, ungenaue reale Orte, Text im Bild, begrenzte Dauer.
+
+      Seit Januar 2026 gibt es den Prototyp **Project Genie** in Google Labs – zunächst nur für Google-AI-Ultra-Abos in den USA, Generierungen auf 60 s begrenzt; weitere Länder sind laut Blog angekündigt ([Google-Blog](https://blog.google/innovation-and-ai/models-and-research/google-deepmind/project-genie/)). Der Zugang läuft über diese Web-App; herunterladbare Modellgewichte bieten die genannten Quellen nicht an.
+
+      *Stand: Oktober 2026.*
+  - type: explain
+    question: |
+      Ein Video-World-Model erzeugt täuschend echte Videos eines greifenden Roboterarms. Warum ist es trotzdem nicht automatisch ein guter Planer für deinen Arm?
+    options:
+      - text: Fotorealismus garantiert keine korrekte Physik, und jede Vorhersage ist teuer – Planen braucht Tausende Rollouts.
+        correct: true
+        why: Genau. Im V-JEPA-2-Paper brauchte ein Cosmos-Modell als Planer ca. 4 min pro Aktion, V-JEPA 2-AC ca. 16 s. Und „sieht plausibel aus“ heißt nicht „Kontaktkräfte stimmen“.
+      - text: Video-Modelle können grundsätzlich keine Aktionen als Eingabe verarbeiten.
+        correct: false
+        why: Es gibt aktionsbedingte Varianten (Genie 3 nimmt Navigationsbefehle, Cosmos 3 laut Repository Aktionen). Das Problem ist Verlässlichkeit und Rechenzeit.
+      - text: Videos haben keine Zeitachse, deshalb kann man damit nicht vorhersagen.
+        correct: false
+        why: Gerade die Zeitachse ist der Kern eines Videos – Vorhersage ist ihre Hauptaufgabe.
+      - text: Planer brauchen Pixel nicht, also sind die Videos nutzlos.
+        correct: false
+        why: Zu absolut. Videos sind z. B. als synthetische Trainingsdaten oder zur Bewertung von Policies nützlich.
+  - type: quiz
+    question: |
+      Wofür sind generative Video-World-Models heute (Stand: Oktober 2026) am plausibelsten nützlich?
+    options:
+      - text: Synthetische Trainings- und Testdaten erzeugen, Szenarien variieren, Agenten in simulierten Welten erproben
+        correct: true
+        why: "So beschreiben es die Anbieter selbst – Cosmos nennt synthetische Daten und Policy-Learning, Genie 3 erzeugte Welten für den SIMA-Agenten. Echtzeit-Regelung eines Arms gehört nicht dazu."
+      - text: Als 1-kHz-Gelenkregler direkt auf dem Roboter
+        correct: false
+        why: Viel zu langsam – selbst Genie 3 schafft 24 Bilder/s, also rund 40 ms pro Bild statt 1 ms.
+      - text: Als exakter Ersatz für Physik-Simulatoren wie MuJoCo
+        correct: false
+        why: Gelernte Videos sind nicht physikalisch garantiert; DeepMind nennt selbst Grenzen bei Genauigkeit und Dauer.
+  - type: quiz
+    question: |
+      Was unterscheidet die Vorhersage von V-JEPA 2-AC grundsätzlich von der eines generativen Video-Modells?
+    options:
+      - text: V-JEPA 2-AC sagt Repräsentationen vorher und erzeugt nie Pixel; ein Video-Modell erzeugt Bilder.
+        correct: true
+        why: Das ist der Kern von JEPA – und der Grund für die kürzere Planungszeit.
+      - text: V-JEPA 2-AC braucht keine Videos zum Training.
+        correct: false
+        why: Es lernt ausschließlich aus Videos (plus Aktionen bei der AC-Variante).
+      - text: Video-Modelle arbeiten immer ohne neuronale Netze.
+        correct: false
+        why: Beide Familien sind große neuronale Netze.
+cards:
+  - id: m18-c-video-vs-latent
+    concept: video-weltmodell
+    variants:
+      - type: quiz
+        question: |
+          Du willst mit einem World Model per CEM 500 Aktionsfolgen pro Regelschritt bewerten. Welche Modellfamilie passt besser?
+        options:
+          - text: Ein latentes Modell, das nur Repräsentationen vorhersagt
+            correct: true
+            why: Latente Vorhersagen sind viel billiger als ganze Videoframes – entscheidend bei vielen Rollouts.
+          - text: Ein generatives Video-Modell, weil es realistischer aussieht
+            correct: false
+            why: Realistische Pixel kosten viel Rechenzeit und helfen dem Planer nicht direkt.
+          - text: Egal, beide sind gleich schnell.
+            correct: false
+            why: Pixel-Generierung ist um Größenordnungen aufwendiger.
+      - type: quiz
+        question: |
+          Ein generiertes Video zeigt, wie ein Becher sauber gegriffen wird. Was kannst du daraus sicher schließen?
+        options:
+          - text: Nur, dass das Modell ein plausibles Video erzeugt hat – nicht, dass die Physik stimmt
+            correct: true
+            why: Plausibel aussehen und physikalisch korrekt sein sind zwei verschiedene Dinge.
+          - text: Dass ein echter Roboter mit denselben Aktionen den Becher greift
+            correct: false
+            why: Das müsste man erst am Roboter oder in einem verlässlichen Simulator prüfen.
+          - text: Dass das Modell die Kontaktkräfte korrekt berechnet hat
+            correct: false
+            why: Ein Video-Modell gibt keine Kräfte aus; es erzeugt Bilder.
+  - id: m18-c-weltmodell-nutzen
+    concept: video-weltmodell
+    variants:
+      - type: quiz
+        question: |
+          Welche Nutzung eines Video-World-Models ist am realistischsten?
+        options:
+          - text: Variationen einer Szene (Licht, Wetter, Objekte) als zusätzliche Trainingsdaten erzeugen
+            correct: true
+            why: Daten-Vielfalt ist eine der Kernanwendungen, die die Anbieter selbst nennen.
+          - text: Die Motorströme eines Arms in Echtzeit regeln
+            correct: false
+            why: Dafür ist es weder schnell noch genau genug.
+          - text: Kalibrierung der Gelenkencoder
+            correct: false
+            why: Kalibrierung braucht Messungen am echten Gerät, keine generierten Videos.
+      - type: quiz
+        question: |
+          Warum werden große Video-Modelle oft „World Foundation Models“ genannt?
+        options:
+          - text: Sie sind allgemein vortrainiert und werden für konkrete Anwendungen nachtrainiert.
+            correct: true
+            why: „Foundation“ meint die allgemeine Basis, auf der man spezialisiert.
+          - text: Sie enthalten ein exaktes Physikmodell der Welt.
+            correct: false
+            why: Sie lernen statistische Muster aus Videos, keine exakten Gleichungen.
+          - text: Sie laufen nur auf speziellen Robotern.
+            correct: false
+            why: Sie sind Software-Modelle; mit einem bestimmten Roboter hat der Name nichts zu tun.

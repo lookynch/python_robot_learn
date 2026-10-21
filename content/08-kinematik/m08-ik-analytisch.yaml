@@ -1,0 +1,375 @@
+id: m08-ik-analytisch
+title: Inverse Kinematik analytisch
+minutes: 10
+goals:
+  - Die Gelenkwinkel zu einem Zielpunkt mit Kosinussatz und `atan2` berechnen
+  - Beide Lösungen (Ellbogen oben/unten) unterscheiden
+  - Unerreichbare Ziele erkennen und das Ergebnis über FK prüfen
+concepts: [inverse-kinematik]
+steps:
+  - type: text
+    body: |
+      ## Rückwärts: vom Ziel zu den Winkeln
+
+      **Inverse Kinematik** (IK): Gegeben $(x, y)$, gesucht $q$. Beim 2-Gelenk-Arm geht das geschlossen:
+
+      1. Abstand $r^2 = x^2 + y^2$. Kosinussatz im Dreieck Basis–Ellbogen–Spitze:
+         $$\cos q_2 = \frac{r^2 - l_1^2 - l_2^2}{2 l_1 l_2}$$
+      2. $q_2 = \pm\arccos(\dots)$ – **zwei** Lösungen, spiegelbildlich zur Linie Basis–Ziel (Ellbogen oben/unten, elbow up/down). Wir wählen sie über das Vorzeichen `elbow = +1` oder `-1`.
+      3. $q_1 = \operatorname{atan2}(y, x) - \operatorname{atan2}(l_2\sin q_2,\; l_1 + l_2\cos q_2)$
+
+      Liegt $\cos q_2$ außerhalb von $[-1, 1]$, ist das Ziel nicht erreichbar.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          q2 = elbow * np.arccos(c2)
+          q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+          return np.array([q1, q2])
+
+      target = (0.8, 1.2)
+      for elbow in (1, -1):
+          q = ik(target, elbow=elbow)
+          print("elbow", elbow, "q =", np.round(q, 3), "fk =", np.round(fk(q), 3))
+          lab.arm(q, target=target, title=f"elbow = {elbow}")
+    subgoals:
+      - lines: [9, 10]
+        label: Kosinussatz für q2
+      - lines: 11
+        label: Ellbogenlösung wählen
+      - lines: [12, 13]
+        label: q1 aus zwei Winkeln
+      - lines: [15, 19]
+        label: Über FK zurückrechnen und zeichnen
+    after: |
+      Beide Stellungen treffen das Ziel – die FK bestätigt es. **Immer** so prüfen: IK-Ergebnis in FK einsetzen.
+  - type: explain
+    question: |
+      Warum `np.arctan2(y, x)` und nicht `np.arctan(y / x)`?
+    options:
+      - text: "`arctan2` kennt den Quadranten (über die Vorzeichen von x und y) und funktioniert auch bei $x = 0$."
+        correct: true
+        why: "`arctan(y / x)` liefert nur Winkel in $(-\\pi/2, \\pi/2)$ – für Ziele links der Basis wäre $q_1$ um $\\pi$ falsch."
+      - text: "`arctan2` ist genauer gerundet."
+        correct: false
+        why: Es geht nicht um Rundung, sondern um den Wertebereich $(-\pi, \pi]$.
+      - text: "`arctan2` rechnet in Grad."
+        correct: false
+        why: Beide liefern Radiant.
+  - type: predict
+    code: |
+      import numpy as np
+
+      x, y = 2.2, 0.0
+      l1, l2 = 1.0, 1.0
+      c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+      print(round(c2, 2))
+      print(np.arccos(c2))
+    options:
+      - |
+        1.42
+        nan
+      - |
+        1.42
+        0.0
+      - |
+        1.42
+        ValueError
+      - |
+        1.1
+        0.0
+    answer: |
+      1.42
+      nan
+    explanation: |
+      $\cos q_2 = 1.42 > 1$ – kein Winkel hat diesen Kosinus, das Ziel liegt außerhalb der Reichweite 2. `np.arccos` wirft **keinen** Fehler, sondern liefert `nan` (not a number) und eine Warnung. `nan` breitet sich still durch alle weiteren Rechnungen aus – deshalb vorher prüfen.
+  - type: predict
+    code: |
+      import numpy as np
+
+      x, y = 1.0, 1.0
+      c2 = (x**2 + y**2 - 1 - 1) / 2
+      q2 = np.arccos(c2)
+      q1 = np.arctan2(y, x) - np.arctan2(np.sin(q2), 1 + np.cos(q2))
+      print(round(q1, 3), round(q2, 3))
+    options: ["0.0 1.571", "0.785 1.571", "0.785 0.0", "1.571 0.0"]
+    answer: "0.0 1.571"
+    explanation: |
+      $\cos q_2 = 0$, also $q_2 = \pi/2$. Dann $q_1 = \pi/4 - \pi/4 = 0$: Glied 1 auf der x-Achse bis $(1, 0)$, Glied 2 nach oben bis $(1, 1)$. `0.785 …` vergisst den Korrekturwinkel.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Formel für $q_1$.
+    code: |
+      import numpy as np
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          q2 = elbow * np.arccos(c2)
+          q1 = ___ - np.arctan2(l2 * np.sin(q2), ___)
+          return np.array([q1, q2])
+    blanks:
+      - answer: "np.arctan2(y, x)"
+        options: ["np.arctan2(y, x)", "np.arctan2(x, y)", "np.arctan(y / x)"]
+      - answer: "l1 + l2 * np.cos(q2)"
+        options: ["l1 + l2 * np.cos(q2)", "l2 * np.cos(q2)", "l1 + l2"]
+    tests:
+      - name: FK trifft das Ziel
+        code: |
+          import numpy as np
+          def fk(q, l1=1.0, l2=1.0):
+              return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+          for p in [(0.8, 1.2), (-1.1, 0.4), (-0.3, -1.5)]:
+              for e in (1, -1):
+                  assert close(fk(ik(p, elbow=e)), p), f"fk(ik({p})) sollte {p} ergeben, ergibt {np.round(fk(ik(p, elbow=e)), 3)}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `ik(p, l1=1.0, l2=1.0, elbow=1)` vollständig:
+
+      - liefert `np.array([q1, q2])` mit `fk(ik(p)) ≈ p`,
+      - das Vorzeichen von $q_2$ entspricht `elbow`,
+      - für unerreichbare Ziele `raise ValueError("nicht erreichbar")`.
+
+      `fk` ist gegeben.
+    starter: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          # 1. cos(q2) per Kosinussatz, Erreichbarkeit prüfen
+          # 2. q2 mit Vorzeichen elbow
+          # 3. q1
+          pass
+    solution: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          if c2 > 1 or c2 < -1:
+              raise ValueError("nicht erreichbar")
+          q2 = elbow * np.arccos(c2)
+          q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+          return np.array([q1, q2])
+    tests:
+      - name: Zurückrechnen über FK (beide Ellbogen)
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(11)
+          for _ in range(6):
+              l1, l2 = rng.uniform(0.5, 1.5, 2)
+              p = fk(rng.uniform([-np.pi, 0.2], [np.pi, 2.9]), l1, l2)
+              for e in (1, -1):
+                  q = ik(p, l1, l2, elbow=e)
+                  assert close(fk(q, l1, l2), p), f"fk(ik(p)) ≠ p für p={np.round(p, 3)}, l1={l1:.2f}, l2={l2:.2f}, elbow={e}: bekommen {np.round(fk(q, l1, l2), 3)}"
+      - name: Ziele links der Basis
+        code: |
+          import numpy as np
+          for p in [(-1.2, 0.3), (-0.5, -1.4), (0.0, -1.0)]:
+              q = ik(p)
+              assert close(fk(q), p), f"Für das Ziel {p} trifft die Spitze nicht: {np.round(fk(q), 3)} (atan2 benutzt?)"
+      - name: Vorzeichen von q2 = elbow
+        code: |
+          import numpy as np
+          assert ik((0.8, 1.2), elbow=1)[1] > 0, "elbow=+1 sollte q2 > 0 liefern."
+          assert ik((0.8, 1.2), elbow=-1)[1] < 0, "elbow=-1 sollte q2 < 0 liefern."
+      - name: Rand und unerreichbare Ziele
+        code: |
+          assert close(ik((2.0, 0.0)), [0.0, 0.0]), f"Ziel (2, 0) = gestreckter Arm, erwartet q = [0, 0], bekommen {ik((2.0, 0.0))}"
+          for p, l in [((2.5, 0.0), (1.0, 1.0)), ((0.1, 0.1), (1.0, 0.5))]:
+              try:
+                  ik(p, *l)
+              except ValueError:
+                  pass
+              else:
+                  raise AssertionError(f"ik({p}, l1={l[0]}, l2={l[1]}) sollte ValueError auslösen – das Ziel ist nicht erreichbar.")
+    mutants:
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            if c2 > 1 or c2 < -1:
+                raise ValueError("nicht erreichbar")
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan2(y, x) + np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            if c2 > 1 or c2 < -1:
+                raise ValueError("nicht erreichbar")
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan(y / x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            if c2 > 1 or c2 < -1:
+                raise ValueError("nicht erreichbar")
+            q2 = np.arccos(c2)
+            q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            if c2 > 1 or c2 < -1:
+                raise ValueError("nicht erreichbar")
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan2(x, y) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+    hints:
+      - "Teilziel: erst Kosinussatz für q2 (mit Erreichbarkeitsprüfung), dann q1."
+      - Unerreichbar heißt $\cos q_2 > 1$ oder $\cos q_2 < -1$. Das Vorzeichen von $q_2$ ist `elbow`.
+      - |
+        ```python
+        c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+        if c2 > 1 or c2 < -1:
+            raise ValueError("nicht erreichbar")
+        q2 = elbow * np.arccos(c2)
+        ```
+      - "`q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))`"
+    explanation: |
+      In der Praxis setzt man nach der Prüfung oft noch `c2 = np.clip(c2, -1, 1)`: Rundungsfehler können am Rand sonst `1.0000000000000002` liefern und damit `nan`.
+  - type: example
+    title: Gerade Linie im Arbeitsraum
+    intro: |
+      Mit IK kann die Spitze eine **Gerade** fahren: Punkte auf der Linie wählen, für jeden die IK lösen.
+    code: |
+      import numpy as np
+      import lab
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          c2 = np.clip((x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2), -1, 1)
+          q2 = elbow * np.arccos(c2)
+          q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+          return np.array([q1, q2])
+
+      start, end = np.array([1.6, -0.6]), np.array([-0.4, 1.4])
+      qs = [ik(start + s * (end - start)) for s in np.linspace(0, 1, 80)]
+      lab.arm(qs, target=tuple(end), title="Geradlinig dank IK")
+    subgoals:
+      - lines: [4, 9]
+        label: IK als Funktion
+      - lines: 11
+        label: Start und Ziel im Arbeitsraum
+      - lines: 12
+        label: Für jeden Punkt der Linie IK lösen
+      - lines: 13
+        label: Bewegung animieren
+    after: |
+      Vergleiche mit der Lektion zum Gelenkraum: Dort war die Spur ein Bogen, hier ist sie gerade. Die Gelenkwinkel ändern sich dafür **ungleichmäßig**.
+  - type: quiz
+    question: |
+      Wie viele IK-Lösungen hat ein 2-Gelenk-Arm ohne Gelenkgrenzen für einen Punkt **genau auf dem Außenrand** $r = l_1 + l_2$?
+    options:
+      - text: Eine
+        correct: true
+        why: $\cos q_2 = 1$, also $q_2 = 0$ – „oben“ und „unten“ fallen zusammen (gestreckter Arm).
+      - text: Zwei
+        correct: false
+        why: Zwei verschiedene Lösungen gibt es nur strikt **innerhalb** des Rings.
+      - text: Keine
+        correct: false
+        why: Der Rand gehört noch zum Arbeitsraum.
+      - text: Unendlich viele
+        correct: false
+        why: Das passiert beim 2-Gelenk-Arm nur bei $l_1 = l_2$ für die Basis selbst ($r = 0$); bei Armen mit mehr Gelenken als nötig (redundant) dagegen häufig.
+cards:
+  - id: m08-c-kosinussatz
+    concept: inverse-kinematik
+    variants:
+      - type: predict
+        code: |
+          x, y, l1, l2 = 0.0, 1.0, 1.0, 1.0
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          print(c2)
+        options: ["-0.5", "0.5", "0.0", "-1.0"]
+        answer: "-0.5"
+        explanation: $(1 - 1 - 1)/2 = -0.5$, also $q_2 = \pm 2\pi/3$ – der Arm ist stark eingeknickt.
+      - type: predict
+        code: |
+          x, y, l1, l2 = 3.0, 0.0, 2.0, 1.0
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          print(c2)
+        options: ["1.0", "0.0", "-1.0", "2.0"]
+        answer: "1.0"
+        explanation: Das Ziel liegt auf dem Außenrand $l_1 + l_2 = 3$, also $q_2 = 0$.
+      - type: predict
+        code: |
+          x, y, l1, l2 = 3.0, 0.0, 1.0, 1.0
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          print(c2)
+        options: ["3.5", "1.0", "1.5", "0.5"]
+        answer: "3.5"
+        explanation: $\cos q_2 = 3.5 > 1$ – nicht erreichbar.
+  - id: m08-c-ik-loesungen
+    concept: inverse-kinematik
+    variants:
+      - type: quiz
+        question: Wie viele IK-Lösungen hat ein Punkt **strikt innerhalb** des Arbeitsraum-Rings?
+        options:
+          - text: Zwei (Ellbogen oben und unten)
+            correct: true
+            why: $q_2 = \pm\arccos(\dots)$ mit $\arccos \in (0, \pi)$.
+          - text: Eine
+            correct: false
+            why: Nur auf dem Rand fallen beide zusammen.
+          - text: Keine
+            correct: false
+            why: Innerhalb des Rings ist der Punkt erreichbar.
+      - type: quiz
+        question: Was liefert `np.arccos(1.3)`?
+        options:
+          - text: "`nan` (mit Warnung)"
+            correct: true
+            why: NumPy gibt bei ungültigen Werten `nan` zurück, statt abzubrechen.
+          - text: Einen ValueError
+            correct: false
+            why: Das macht `math.acos(1.3)` – NumPy nicht.
+          - text: "`0.0`"
+            correct: false
+            why: NumPy schneidet nicht automatisch ab; dafür bräuchte man `np.clip`.

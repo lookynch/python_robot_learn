@@ -1,0 +1,206 @@
+id: m01-print
+title: Dein erstes Programm
+minutes: 6
+goals:
+  - Mit `print` Text und Zahlen ins Terminal schreiben
+  - Text (in Anführungszeichen) von Code unterscheiden
+concepts: [print-ausgabe, string-literal]
+steps:
+  - type: text
+    body: |
+      ## Das Terminal
+
+      Ein Programm ist eine Liste von Anweisungen. Damit du siehst, was es tut, schreibt es Ausgaben ins **Terminal** – das schwarze Feld unter dem Code.
+
+      Die wichtigste Anweisung dafür heißt `print`. Was in den runden Klammern steht, wird ausgegeben.
+  - type: example
+    code: |
+      print("Hallo")
+      print(42)
+      print("Gelenk", 1, "ist bereit")
+    subgoals:
+      - lines: 1
+        label: Text ausgeben
+      - lines: 2
+        label: Zahl ausgeben
+      - lines: 3
+        label: Mehrere Werte in einer Zeile ausgeben
+    after: |
+      - Jeder `print`-Aufruf erzeugt **eine neue Zeile**.
+      - Mehrere Werte, durch Kommas getrennt, werden mit **einem Leerzeichen** dazwischen ausgegeben.
+      - Text steht in Anführungszeichen (`"…"` oder `'…'`), Zahlen nicht.
+  - type: explain
+    question: |
+      Warum steht `Hallo` in Anführungszeichen, `42` aber nicht?
+    options:
+      - text: Ohne Anführungszeichen würde Python `Hallo` für einen Namen halten, den es nicht kennt.
+        correct: true
+        why: Genau. Anführungszeichen markieren *Text*. Ohne sie sucht Python nach einer Variablen namens `Hallo` – und meldet einen `NameError`.
+      - text: Anführungszeichen machen die Ausgabe fett.
+        correct: false
+        why: Sie erscheinen gar nicht in der Ausgabe und formatieren nichts.
+      - text: Zahlen dürfen nie in Anführungszeichen stehen.
+        correct: false
+        why: Dürfen sie schon – `"42"` ist dann aber Text, keine Zahl, und man kann damit nicht rechnen.
+  - type: predict
+    code: |
+      print("Arm")
+      print("links", "oben")
+    options:
+      - |
+        Arm
+        links oben
+      - |
+        Arm links oben
+      - |
+        Arm
+        linksoben
+    answer: |
+      Arm
+      links oben
+    explanation: |
+      Zwei `print`-Aufrufe → zwei Zeilen. Die Kommas im zweiten Aufruf werden zu einem Leerzeichen.
+  - type: predict
+    code: |
+      print("3 * 4")
+      print(3 * 4)
+    options:
+      - |
+        12
+        12
+      - |
+        3 * 4
+        12
+      - |
+        3 * 4
+        3 * 4
+    answer: |
+      3 * 4
+      12
+    explanation: |
+      In der ersten Zeile ist `3 * 4` **Text** und wird wörtlich ausgegeben. In der zweiten ist es **Code**: Python rechnet zuerst, dann wird das Ergebnis ausgegeben.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Lücke, sodass im Terminal genau `Motor an` steht.
+    code: |
+      print(___)
+    blanks:
+      - answer: '"Motor an"'
+        options: ['"Motor an"', 'Motor an', '"Motor" + "an"', "Motor_an"]
+    expect_output: "Motor an"
+    explanation: |
+      Text braucht Anführungszeichen. Ohne sie ist `Motor an` ungültiger Code. `"Motor" + "an"` klebt zwei Texte **ohne** Leerzeichen zusammen: `Motoran`.
+  - type: parsons
+    fading: true
+    prompt: |
+      Ordne die Zeilen so, dass der Countdown `3`, `2`, `1`, `Start!` ausgegeben wird.
+    lines:
+      - "print(3)"
+      - "print(2)"
+      - "print(1)"
+      - 'print("Start!")'
+    expect_output: |
+      3
+      2
+      1
+      Start!
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ändere das Programm so, dass es **zwei** Zeilen ausgibt:
+
+      ```
+      Roboter 1
+      bereit
+      ```
+    starter: |
+      print("Roboter 1 bereit")
+    solution: |
+      print("Roboter", 1)
+      print("bereit")
+    tests:
+      - name: Zwei Zeilen
+        code: |
+          assert lines() == ["Roboter 1", "bereit"], f"Erwartet ['Roboter 1', 'bereit'], bekommen {lines()}"
+    mutants:
+      - |
+        print("Roboter 1", "bereit")
+      - |
+        print("Roboter1")
+        print("bereit")
+    hints:
+      - "Teilziel: Für jede Zeile ein eigenes `print`."
+      - Jeder `print`-Aufruf erzeugt genau eine Zeile.
+      - |
+        ```python
+        print("Roboter 1")
+        print(...)
+        ```
+  - type: quiz
+    question: |
+      Was gibt `print("a", "b", "c")` aus?
+    options:
+      - text: "`a b c`"
+        correct: true
+        why: Kommas trennen Werte; `print` setzt je ein Leerzeichen dazwischen.
+      - text: "`abc`"
+        correct: false
+        why: Ohne Trennzeichen müsste man die Texte verketten (`"a" + "b" + "c"`).
+      - text: drei Zeilen `a`, `b`, `c`
+        correct: false
+        why: Ein einziger `print`-Aufruf erzeugt eine einzige Zeile.
+cards:
+  - id: m01-c-print-komma
+    concept: print-ausgabe
+    variants:
+      - type: predict
+        code: |
+          print("x", 5, "y")
+        options: ["x 5 y", "x5y", "x, 5, y"]
+        answer: "x 5 y"
+        explanation: Mehrere Werte in `print` werden mit Leerzeichen getrennt.
+      - type: predict
+        code: |
+          print(1, 2)
+          print(3)
+        options:
+          - |
+            1 2
+            3
+          - |
+            1 2 3
+          - |
+            12
+            3
+        answer: |
+          1 2
+          3
+        explanation: Jeder Aufruf eine Zeile, Kommas werden zu Leerzeichen.
+  - id: m01-c-text-vs-code
+    concept: string-literal
+    variants:
+      - type: predict
+        code: |
+          print("7 + 1")
+        options: ["8", "7 + 1", "Fehler"]
+        answer: "7 + 1"
+        explanation: In Anführungszeichen ist es Text – Python rechnet nicht.
+      - type: predict
+        code: |
+          print(2 * 3)
+          print("2 * 3")
+        options:
+          - |
+            6
+            2 * 3
+          - |
+            6
+            6
+          - |
+            2 * 3
+            2 * 3
+        answer: |
+          6
+          2 * 3
+        explanation: Ohne Anführungszeichen wird gerechnet, mit Anführungszeichen wird der Text wörtlich ausgegeben.

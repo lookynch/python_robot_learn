@@ -1,0 +1,65 @@
+id: m02
+number: 2
+title: Funktionen & Datenstrukturen
+summary: |
+  Eigene Funktionen schreiben, Daten in Listen, Tupeln und Dictionaries ordnen, Module wie `math` und `random` nutzen und Fehler gezielt abfangen – die Bausteine, aus denen später jede Simulation und jeder Regler besteht.
+depth: voll
+lessons:
+  - m02-funktionen
+  - m02-rueckgabe
+  - m02-scope
+  - m02-listen-vertieft
+  - m02-tupel-dicts
+  - m02-comprehensions
+  - m02-module
+  - m02-exceptions
+  - m02-checkpoint
+concepts:
+  - id: m02-funktion-def
+    name: Funktionen definieren und aufrufen
+    description: def name(parameter) legt eine Funktion an; ihr Körper läuft erst beim Aufruf name(argument).
+  - id: m02-return
+    name: return statt print
+    description: return gibt einen Wert an den Aufrufer zurück; print zeigt nur an. Ohne return liefert eine Funktion None.
+  - id: m02-mehrfach-rueckgabe
+    name: Mehrere Rückgabewerte
+    description: return a, b liefert ein Tupel, das man mit x, y = f() entpacken kann.
+  - id: m02-standardwerte
+    name: Standardwerte und Keyword-Argumente
+    description: Parameter können Standardwerte haben (def f(x, k=2)); Argumente lassen sich per Namen übergeben (f(x=1, k=3)).
+  - id: m02-scope
+    name: Lokale und globale Variablen
+    description: Variablen, die in einer Funktion zugewiesen werden, sind lokal; Werte gehen über Parameter hinein und über return heraus.
+  - id: m02-slicing
+    name: Slicing und negative Indizes
+    description: liste[-1] ist das letzte Element; liste[start:stop:step] liefert eine neue Teilliste, stop ist ausgeschlossen.
+  - id: m02-sorted-in
+    name: sorted, in, sum, min, max
+    description: sorted(liste) liefert eine neue sortierte Liste, liste.sort() sortiert an Ort und Stelle; x in liste prüft Enthaltensein.
+  - id: m02-aliasing
+    name: Veränderliche Listen und Aliasing
+    description: b = a erzeugt keine neue Liste, sondern einen zweiten Namen für dieselbe; eine Kopie macht a.copy().
+  - id: m02-tupel
+    name: Tupel
+    description: Tupel (x, y) sind unveränderliche Folgen fester Länge, ideal für Paare wie Koordinaten.
+  - id: m02-dict
+    name: Dictionaries
+    description: Ein dict ordnet Schlüsseln Werte zu; d[k] liest, d.get(k, standard) liest ohne KeyError, d.items() liefert Paare.
+  - id: m02-comprehension
+    name: List- und Dict-Comprehensions
+    description: "[ausdruck for x in folge if bedingung] baut eine neue Liste in einer Zeile; analog {k: v for ...} für Dicts."
+  - id: m02-zip-enumerate
+    name: zip und enumerate
+    description: zip(a, b) läuft parallel über zwei Folgen (bis zur kürzeren), enumerate(a) liefert Paare (Index, Element).
+  - id: m02-import
+    name: Module importieren
+    description: import math macht math.sin, math.cos, math.atan2, math.sqrt, math.pi verfügbar; Winkel in Radiant.
+  - id: m02-zufall-seed
+    name: Zufall mit Seed
+    description: random.seed(n) macht Zufallsfolgen reproduzierbar; uniform, randint und choice ziehen Werte.
+  - id: m02-exceptions
+    name: Ausnahmen abfangen
+    description: try/except fängt einen bestimmten Fehlertyp ab; danach läuft das Programm weiter.
+  - id: m02-raise
+    name: Ausnahmen auslösen
+    description: raise ValueError("…") meldet ungültige Eingaben, statt still mit falschen Werten weiterzurechnen.

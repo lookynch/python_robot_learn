@@ -1,0 +1,212 @@
+id: m01-rechnen
+title: Rechnen mit Python
+minutes: 8
+goals:
+  - Die Operatoren `+ - * / // % **` sicher einsetzen
+  - Punkt-vor-Strich und Klammern anwenden
+  - Ganzzahldivision und Rest für praktische Aufgaben nutzen
+concepts: [arithmetik, ganzzahl-division]
+steps:
+  - type: text
+    body: |
+      ## Python als Taschenrechner
+
+      | Operator | Bedeutung | Beispiel | Ergebnis |
+      |---|---|---|---|
+      | `+` `-` `*` | wie gewohnt | `7 * 3` | `21` |
+      | `/` | Division (immer Kommazahl) | `7 / 2` | `3.5` |
+      | `//` | Ganzzahldivision (abgerundet) | `7 // 2` | `3` |
+      | `%` | Rest (Modulo) | `7 % 2` | `1` |
+      | `**` | Potenz | `2 ** 3` | `8` |
+
+      Es gilt Punkt vor Strich, `**` bindet am stärksten. Klammern ändern die Reihenfolge.
+  - type: example
+    code: |
+      sekunden = 135
+      minuten = sekunden // 60
+      rest = sekunden % 60
+      print(minuten, "min", rest, "s")
+    subgoals:
+      - lines: 1
+        label: Eingabewert festlegen
+      - lines: [2, 3]
+        label: In Ganzes und Rest zerlegen
+      - lines: 4
+        label: Ergebnis ausgeben
+    after: |
+      `//` und `%` gehören zusammen: $135 = 2 \cdot 60 + 15$. Das brauchst du später oft, z. B. um aus einer Zustandsnummer in einer Gitterwelt Zeile und Spalte zu berechnen.
+  - type: predict
+    code: |
+      print(2 + 3 * 4)
+      print((2 + 3) * 4)
+    options:
+      - |
+        14
+        20
+      - |
+        20
+        20
+      - |
+        20
+        14
+    answer: |
+      14
+      20
+    explanation: Punkt vor Strich – Klammern zuerst.
+  - type: predict
+    code: |
+      print(9 / 3)
+      print(9 // 2)
+      print(9 % 2)
+    options:
+      - |
+        3.0
+        4
+        1
+      - |
+        3
+        4.5
+        1
+      - |
+        3
+        4
+        0
+    answer: |
+      3.0
+      4
+      1
+    explanation: |
+      `/` liefert **immer** eine Kommazahl (`3.0`). `9 // 2` ist 4 (abgerundet), Rest `9 % 2` ist 1.
+  - type: explain
+    question: |
+      Wofür ist `zahl % 2` nützlich?
+    options:
+      - text: Um zu prüfen, ob eine Zahl gerade ist – der Rest ist dann 0.
+        correct: true
+        why: Gerade Zahlen lassen beim Teilen durch 2 keinen Rest.
+      - text: Um Prozent auszurechnen.
+        correct: false
+        why: "`%` ist in Python der Rest-Operator, kein Prozentzeichen."
+      - text: Um eine Zahl zu halbieren.
+        correct: false
+        why: Halbieren ist `zahl / 2`.
+  - type: predict
+    code: |
+      print(2 ** 3 ** 2)
+    options: ["64", "512", "36"]
+    answer: "512"
+    explanation: |
+      `**` wird von **rechts** ausgewertet: $2^{(3^2)} = 2^9 = 512$. Im Zweifel Klammern setzen – das ist auch für Lesende klarer.
+  - type: fill
+    fading: true
+    prompt: |
+      Ein Gitter hat 4 Spalten. Feld Nummer 9 (gezählt ab 0, zeilenweise) liegt in Zeile 2, Spalte 1. Ergänze die Operatoren.
+    code: |
+      feld = 9
+      spalten = 4
+      zeile = feld ___ spalten
+      spalte = feld ___ spalten
+      print(zeile, spalte)
+    blanks:
+      - answer: "//"
+        options: ["//", "/", "%", "*"]
+      - answer: "%"
+        options: ["%", "//", "-", "/"]
+    expect_output: "2 1"
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Rad hat den Radius `r = 0.5` (Meter). Berechne den Umfang $U = 2 \pi r$ mit `pi = 3.14159` und speichere ihn in `umfang`. Berechne außerdem in `umdrehungen`, wie viele **volle** Umdrehungen das Rad auf einer Strecke von `strecke = 20` Metern macht (abgerundet), und gib beides in einer Zeile aus.
+    starter: |
+      pi = 3.14159
+      r = 0.5
+      strecke = 20
+      # umfang = ...
+      # umdrehungen = ...
+    solution: |
+      pi = 3.14159
+      r = 0.5
+      strecke = 20
+      umfang = 2 * pi * r
+      umdrehungen = strecke // umfang
+      print(umfang, umdrehungen)
+    tests:
+      - name: Umfang
+        code: |
+          assert close(umfang, 3.14159), f"umfang sollte etwa 3.14159 sein, ist {umfang}"
+      - name: Volle Umdrehungen
+        code: |
+          assert umdrehungen == 6, f"Auf 20 m macht das Rad 6 volle Umdrehungen, umdrehungen ist {umdrehungen}"
+      - name: Ausgabe
+        code: |
+          assert len(lines()) == 1, "Bitte beides in einer print-Zeile ausgeben."
+    mutants:
+      - |
+        pi = 3.14159
+        r = 0.5
+        strecke = 20
+        umfang = pi * r ** 2
+        umdrehungen = strecke // umfang
+        print(umfang, umdrehungen)
+      - |
+        pi = 3.14159
+        r = 0.5
+        strecke = 20
+        umfang = 2 * pi * r
+        umdrehungen = strecke / umfang
+        print(umfang, umdrehungen)
+    hints:
+      - "Teilziel: erst den Umfang berechnen, dann die Strecke in volle Umfänge zerlegen."
+      - "Volle Umdrehungen = ganzzahliger Anteil von Strecke geteilt durch Umfang → `//`."
+      - "`umfang = 2 * pi * r` und `umdrehungen = strecke // umfang`"
+    explanation: |
+      `20 // 3.14159` ergibt `6.0` – auch `//` liefert eine Kommazahl, wenn ein Operand eine ist. Der Wert ist trotzdem ganzzahlig.
+  - type: quiz
+    question: Welcher Ausdruck ergibt `1`?
+    options:
+      - text: "`10 % 3`"
+        correct: true
+        why: 10 = 3·3 + 1, der Rest ist 1.
+      - text: "`10 // 3`"
+        correct: false
+        why: Das ist der ganzzahlige Anteil, also 3.
+      - text: "`10 / 3`"
+        correct: false
+        why: Das ist 3.333…
+cards:
+  - id: m01-c-punkt-vor-strich
+    concept: arithmetik
+    variants:
+      - type: predict
+        code: |
+          print(1 + 2 * 3 ** 2)
+        options: ["19", "81", "37", "55"]
+        answer: "19"
+        explanation: "`**` zuerst (9), dann `*` (18), dann `+` (19)."
+      - type: predict
+        code: |
+          print((1 + 2) * 3)
+        options: ["9", "7", "6"]
+        answer: "9"
+        explanation: Klammer zuerst.
+  - id: m01-c-div-rest
+    concept: ganzzahl-division
+    variants:
+      - type: predict
+        code: |
+          print(17 // 5, 17 % 5)
+        options: ["3 2", "3.4 2", "2 3"]
+        answer: "3 2"
+        explanation: 17 = 3·5 + 2.
+      - type: predict
+        code: |
+          print(23 // 6, 23 % 6)
+        options: ["3 5", "3.83 5", "5 3"]
+        answer: "3 5"
+        explanation: 23 = 3·6 + 5.
+      - type: predict
+        code: |
+          print(8 / 4, 8 // 4)
+        options: ["2.0 2", "2 2", "2.0 2.0"]
+        answer: "2.0 2"
+        explanation: "`/` liefert immer float, `//` mit zwei int ein int."

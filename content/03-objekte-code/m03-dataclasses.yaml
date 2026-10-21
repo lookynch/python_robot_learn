@@ -1,0 +1,410 @@
+id: m03-dataclasses
+title: Dataclasses und lesbare Objekte
+minutes: 10
+goals:
+  - Klassen für Daten mit `@dataclass` kurz schreiben
+  - Verstehen, was `@dataclass` automatisch erzeugt (`__init__`, `__repr__`, `__eq__`)
+  - Mit `__repr__` festlegen, wie ein Objekt angezeigt wird
+concepts: [m03-dataclass, m03-repr]
+steps:
+  - type: text
+    body: |
+      ## Weniger Tipparbeit für Datenklassen
+
+      Viele Klassen speichern vor allem Daten: ein Gelenk, eine Messung, ein Ziel. Ihr `__init__` besteht nur aus `self.x = x`-Zeilen, und `print(objekt)` zeigt etwas Nutzloses wie `<__main__.Joint object at 0x7f…>`.
+
+      Der **Decorator** `@dataclass` aus dem Modul `dataclasses` erledigt das für dich. Du listest nur die **Felder** mit ihrem Typ (`name: str`), optional mit Standardwert. Python erzeugt daraus automatisch:
+
+      - `__init__` mit genau diesen Parametern,
+      - `__repr__` für eine lesbare Anzeige,
+      - `__eq__`, damit `==` Feld für Feld vergleicht.
+  - type: example
+    code: |
+      from dataclasses import dataclass
+
+      @dataclass
+      class Joint:
+          name: str
+          angle: float = 0.0
+          limit: float = 3.0
+
+      j = Joint("schulter", 0.5)
+      print(j)
+      print(j.angle)
+      print(Joint("ellbogen") == Joint("ellbogen", 0.0, 3.0))
+    subgoals:
+      - lines: 1
+        label: Decorator importieren
+      - lines: [3, 7]
+        label: Felder mit Typ und Standardwert festlegen
+      - lines: [9, 11]
+        label: Objekt erzeugen und anzeigen
+      - lines: 12
+        label: Objekte Feld für Feld vergleichen
+    after: |
+      `@dataclass` steht direkt über `class` und verändert die Klasse beim Definieren. Die Reihenfolge der Felder ist die Reihenfolge der Parameter von `__init__`. Felder **mit** Standardwert müssen hinter denen **ohne** stehen – wie bei Funktionsparametern.
+  - type: predict
+    code: |
+      from dataclasses import dataclass
+
+      @dataclass
+      class Point:
+          x: float
+          y: float = 0.0
+
+      p = Point(1.5)
+      q = Point(y=2.0, x=1.5)
+      print(p)
+      print(p == q)
+    options:
+      - |
+        Point(x=1.5, y=0.0)
+        False
+      - |
+        Point(x=1.5, y=0.0)
+        True
+      - |
+        Point(1.5)
+        False
+      - |
+        <Point object>
+        False
+    answer: |
+      Point(x=1.5, y=0.0)
+      False
+    explanation: |
+      `__repr__` zeigt alle Felder mit Namen. `p` und `q` unterscheiden sich in `y`, also ist `==` falsch. Keyword-Argumente funktionieren wie bei Funktionen.
+  - type: predict
+    code: |
+      from dataclasses import dataclass
+
+      class A:
+          def __init__(self, x):
+              self.x = x
+
+      @dataclass
+      class B:
+          x: int
+
+      print(A(1) == A(1))
+      print(B(1) == B(1))
+    options:
+      - |
+        False
+        True
+      - |
+        True
+        True
+      - |
+        False
+        False
+      - |
+        True
+        False
+    answer: |
+      False
+      True
+    explanation: |
+      Ohne eigenes `__eq__` prüft `==` bei normalen Klassen nur, ob es **dasselbe Objekt** ist. `A(1)` und `A(1)` sind zwei verschiedene Objekte. Die Dataclass vergleicht dagegen die Felder.
+  - type: explain
+    question: |
+      Wann ist der feldweise Vergleich der Dataclass nützlich?
+    options:
+      - text: In Tests, z. B. `assert ziel == Target(0.5, 1.0)` – es zählt, ob die Werte stimmen, nicht ob es dasselbe Objekt ist.
+        correct: true
+        why: Genau. Zwei Messungen oder Ziele mit gleichen Werten sollen als gleich gelten.
+      - text: Er macht Objekte schneller.
+        correct: false
+        why: Es geht um die Bedeutung von `==`, nicht um Geschwindigkeit.
+      - text: Er verhindert, dass zwei Namen auf dasselbe Objekt zeigen.
+        correct: false
+        why: Aliasing gibt es bei Dataclasses genauso. `==` ändert daran nichts.
+  - type: text
+    body: |
+      ## `__repr__` selbst schreiben
+
+      Auch ohne Dataclass kannst du festlegen, wie ein Objekt angezeigt wird. Schreibe eine Methode `__repr__(self)`, die einen **String zurückgibt**. Die Anzeige in Listen verwendet ihn, und auch `print(objekt)` – solange die Klasse keine eigene `__str__`-Methode hat (die brauchst du in diesem Kurs nicht).
+
+      Dataclasses dürfen außerdem ganz normale Methoden haben – sie sind Klassen wie alle anderen, nur mit weniger Schreibarbeit.
+  - type: example
+    code: |
+      class Motor:
+          def __init__(self, name, speed):
+              self.name = name
+              self.speed = speed
+
+          def __repr__(self):
+              return f"Motor {self.name}: {self.speed} rad/s"
+
+      m1 = Motor("links", 1.5)
+      m2 = Motor("rechts", -0.5)
+      print(m1)
+      print([m1, m2])
+    subgoals:
+      - lines: [1, 4]
+        label: Normale Klasse mit Attributen
+      - lines: [6, 7]
+        label: Anzeige als String zurückgeben
+      - lines: [9, 12]
+        label: Einzeln und in einer Liste anzeigen
+    after: |
+      `__repr__` muss den Text **zurückgeben**, nicht ausgeben. Steht dort `print(...)` statt `return ...`, liefert `__repr__` `None`, und `print(m1)` bricht mit einem `TypeError` ab.
+  - type: trace
+    code: |
+      from dataclasses import dataclass
+
+      @dataclass
+      class Joint:
+          name: str
+          angle: float = 0.0
+
+          def move_by(self, delta):
+              self.angle = self.angle + delta
+
+      j = Joint("hand")
+      j.move_by(0.5)
+      j.move_by(0.25)
+      print(j)
+    questions:
+      - line: 9
+        hit: 1
+        var: self
+        prompt: Nach dem ersten Durchlauf von Zeile 9 – wie sieht `self` aus?
+        answer: "Joint(name='hand', angle=0.5)"
+      - line: 14
+        var: j
+        prompt: Am Ende – wie sieht `j` aus?
+        answer: "Joint(name='hand', angle=0.75)"
+    after: |
+      Dank `__repr__` sieht man im Trace den ganzen Zustand des Objekts. `self` und `j` sind dasselbe Objekt.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Dataclass für eine Sensormessung, deren Einheit standardmäßig Meter ist. Erwartet: `Reading(sensor='abstand', value=0.42, unit='m')`.
+    code: |
+      from dataclasses import dataclass
+
+      ___
+      class Reading:
+          sensor: str
+          value: float
+          unit: str = ___
+
+      r = Reading("abstand", 0.42)
+      print(r)
+    blanks:
+      - answer: "@dataclass"
+        options: ["@dataclass", dataclass, def dataclass]
+      - answer: '"m"'
+        options: ['"m"', m, '"unit"']
+    expect_output: "Reading(sensor='abstand', value=0.42, unit='m')"
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue eine Dataclass `Target` mit Toleranz 0.01 als Standardwert. Ausgabe: `0.01 1.5`.
+    lines:
+      - "from dataclasses import dataclass"
+      - "@dataclass"
+      - "class Target:"
+      - "    x: float"
+      - "    y: float"
+      - "    tolerance: float = 0.01"
+      - "t = Target(0.5, 1.0)"
+      - "print(t.tolerance, t.x + t.y)"
+    distractors:
+      - "    tolerance: float"
+    expect_output: "0.01 1.5"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe eine Dataclass `Pose` mit den Feldern `x: float`, `y: float` und `theta: float` (Standardwert `0.0`) sowie einer Methode `distance_to(self, other)`, die den euklidischen Abstand der Positionen zweier Posen zurückgibt ($\theta$ spielt dafür keine Rolle).
+
+      Beispiel: `Pose(0.0, 0.0).distance_to(Pose(3.0, 4.0))` → `5.0`
+    starter: |
+      import math
+      from dataclasses import dataclass
+
+      # @dataclass
+      # class Pose:
+      #     ...
+    solution: |
+      import math
+      from dataclasses import dataclass
+
+      @dataclass
+      class Pose:
+          x: float
+          y: float
+          theta: float = 0.0
+
+          def distance_to(self, other):
+              return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+    tests:
+      - name: Felder und Anzeige
+        code: |
+          p = Pose(1.0, 2.0)
+          assert repr(p) == "Pose(x=1.0, y=2.0, theta=0.0)", f"Erwartet Pose(x=1.0, y=2.0, theta=0.0), bekommen {p!r}"
+          assert Pose(1.0, 2.0, 0.5).theta == 0.5, "Das dritte Argument sollte theta setzen"
+      - name: Vergleich
+        code: |
+          assert Pose(1.0, 2.0) == Pose(1.0, 2.0, 0.0), "Pose sollte eine Dataclass sein (== vergleicht Felder)"
+      - name: Abstand
+        code: |
+          d = Pose(0.0, 0.0).distance_to(Pose(3.0, 4.0))
+          assert close(d, 5.0), f"Abstand (0,0)-(3,4) sollte 5.0 sein, ist {d}"
+          d = Pose(1.0, -1.0, 2.0).distance_to(Pose(1.0, 1.0, -2.0))
+          assert close(d, 2.0), f"Abstand (1,-1)-(1,1) sollte 2.0 sein (theta egal), ist {d}"
+    mutants:
+      - |
+        import math
+        from dataclasses import dataclass
+
+        @dataclass
+        class Pose:
+            x: float
+            y: float
+            theta: float = 0.0
+
+            def distance_to(self, other):
+                return (self.x - other.x)**2 + (self.y - other.y)**2
+      - |
+        import math
+        from dataclasses import dataclass
+
+        @dataclass
+        class Pose:
+            theta: float = 0.0
+            x: float = 0.0
+            y: float = 0.0
+
+            def distance_to(self, other):
+                return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+      - |
+        import math
+
+        class Pose:
+            def __init__(self, x, y, theta=0.0):
+                self.x = x
+                self.y = y
+                self.theta = theta
+
+            def distance_to(self, other):
+                return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+      - |
+        import math
+        from dataclasses import dataclass
+
+        @dataclass
+        class Pose:
+            x: float
+            y: float
+            theta: float = 0.0
+
+            def distance_to(self, other):
+                return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2 + (self.theta - other.theta)**2)
+    hints:
+      - "Teilziel: Dataclass mit drei Feldern anlegen, dann eine Methode ergänzen."
+      - "Felder ohne Standardwert zuerst: `x: float`, `y: float`, dann `theta: float = 0.0`. Die Methode greift über `self.x` und `other.x` auf beide Posen zu."
+      - "`return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)`"
+  - type: quiz
+    question: Was erzeugt `@dataclass` **nicht** automatisch?
+    options:
+      - text: Eigene Methoden wie `distance_to`
+        correct: true
+        why: Fachliche Methoden schreibst du selbst; `@dataclass` kümmert sich nur um die Standard-Methoden.
+      - text: "`__init__`"
+        correct: false
+        why: "`__init__` wird aus den Feldern erzeugt."
+      - text: "`__repr__`"
+        correct: false
+        why: "`__repr__` wird erzeugt und zeigt alle Felder mit Namen."
+      - text: "`__eq__`"
+        correct: false
+        why: "`__eq__` wird erzeugt und vergleicht Feld für Feld."
+cards:
+  - id: m03-c-dataclass-repr
+    concept: m03-dataclass
+    variants:
+      - type: predict
+        code: |
+          from dataclasses import dataclass
+
+          @dataclass
+          class Gain:
+              kp: float
+              kd: float = 0.1
+
+          print(Gain(2.0))
+        options: ["Gain(kp=2.0, kd=0.1)", "Gain(2.0)", "Gain(kp=2.0)"]
+        answer: "Gain(kp=2.0, kd=0.1)"
+        explanation: "`__repr__` zeigt alle Felder, auch die mit Standardwert."
+      - type: predict
+        code: |
+          from dataclasses import dataclass
+
+          @dataclass
+          class Cell:
+              row: int
+              col: int
+
+          c = Cell(col=3, row=1)
+          print(c)
+        options: ["Cell(row=1, col=3)", "Cell(col=3, row=1)", "Cell(3, 1)"]
+        answer: "Cell(row=1, col=3)"
+        explanation: Die Anzeige folgt der Reihenfolge der Felder in der Klasse, nicht der Reihenfolge beim Aufruf.
+  - id: m03-c-dataclass-eq
+    concept: m03-dataclass
+    variants:
+      - type: predict
+        code: |
+          from dataclasses import dataclass
+
+          @dataclass
+          class P:
+              x: int
+              y: int
+
+          print(P(1, 2) == P(1, 2), P(1, 2) == P(2, 1))
+        options: ["True False", "False False", "True True"]
+        answer: "True False"
+        explanation: Feldweiser Vergleich – Reihenfolge der Werte zählt.
+      - type: predict
+        code: |
+          class P:
+              def __init__(self, x):
+                  self.x = x
+
+          a = P(1)
+          b = a
+          print(a == P(1), a == b)
+        options: ["False True", "True True", "False False"]
+        answer: "False True"
+        explanation: Ohne Dataclass vergleicht `==` die Identität; `b` ist dasselbe Objekt wie `a`.
+  - id: m03-c-repr
+    concept: m03-repr
+    variants:
+      - type: predict
+        code: |
+          class Joint:
+              def __init__(self, q):
+                  self.q = q
+
+              def __repr__(self):
+                  return f"J({self.q})"
+
+          print([Joint(0.5), Joint(1.0)])
+        options: ["[J(0.5), J(1.0)]", "[0.5, 1.0]", "J(0.5) J(1.0)"]
+        answer: "[J(0.5), J(1.0)]"
+        explanation: Listen zeigen ihre Elemente mit `__repr__` an.
+      - type: quiz
+        question: Was muss `__repr__` tun?
+        options:
+          - text: Einen String zurückgeben, der das Objekt beschreibt.
+            correct: true
+            why: "`print` und Listen rufen `__repr__` auf und zeigen dessen Rückgabewert."
+          - text: Das Objekt mit `print` ausgeben.
+            correct: false
+            why: "`__repr__` soll den Text liefern, nicht selbst ausgeben – sonst entsteht ein `TypeError`, weil `None` zurückkommt."
+          - text: Alle Attribute auf ihre Standardwerte zurücksetzen.
+            correct: false
+            why: "`__repr__` ist nur für die Darstellung zuständig."

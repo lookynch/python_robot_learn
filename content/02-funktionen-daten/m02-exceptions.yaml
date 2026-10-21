@@ -1,0 +1,390 @@
+id: m02-exceptions
+title: Ausnahmen – Fehler abfangen und melden
+minutes: 10
+goals:
+  - Mit `try`/`except` einen bestimmten Fehlertyp abfangen
+  - Den Programmablauf bei einer Ausnahme vorhersagen
+  - Ungültige Eingaben in eigenen Funktionen mit `raise ValueError` melden
+concepts: [m02-exceptions, m02-raise]
+steps:
+  - type: text
+    body: |
+      ## Wenn etwas schiefgeht
+
+      Fehler, die erst beim Ausführen auftreten – `ValueError`, `ZeroDivisionError`, `KeyError` … –, heißen **Ausnahmen** (exceptions). Normalerweise brechen sie das Programm ab.
+
+      Mit `try`/`except` fängst du eine erwartete Ausnahme ab:
+
+      ```python
+      try:
+          wert = float(text)        # kann scheitern
+      except ValueError:
+          wert = 0.0                # Plan B
+      ```
+
+      Tritt im `try`-Block die Ausnahme auf, springt Python **sofort** in den passenden `except`-Block; der Rest des `try`-Blocks wird übersprungen. Danach geht es normal weiter.
+  - type: example
+    code: |
+      eingaben = ["0.5", "abc", "1.2"]
+      for text in eingaben:
+          try:
+              wert = float(text)
+              print("ok:", wert)
+          except ValueError:
+              print("keine Zahl:", text)
+      print("fertig")
+    subgoals:
+      - lines: [3, 5]
+        label: Riskanten Schritt versuchen
+      - lines: [6, 7]
+        label: Erwarteten Fehler behandeln
+      - lines: 8
+        label: Normal weitermachen
+    after: |
+      Bei `"abc"` scheitert `float`, `print("ok:", …)` wird übersprungen – aber die Schleife läuft weiter.
+  - type: predict
+    code: |
+      try:
+          print("A")
+          x = 1 / 0
+          print("B")
+      except ZeroDivisionError:
+          print("C")
+      print("D")
+    options:
+      - |
+        A
+        C
+        D
+      - |
+        A
+        B
+        C
+        D
+      - |
+        C
+        D
+      - |
+        A
+        B
+        D
+    answer: |
+      A
+      C
+      D
+    explanation: |
+      `A` wird noch ausgegeben. In Zeile 3 entsteht die Ausnahme, Python springt direkt zu `except` – `B` kommt nie. Danach läuft das Programm normal weiter.
+  - type: explain
+    question: |
+      Warum schreibt man `except ValueError:` statt einfach `except:` (fängt alles)?
+    options:
+      - text: Ein nacktes `except:` verschluckt auch Fehler, mit denen du nicht gerechnet hast – etwa einen Tippfehler im Variablennamen (`NameError`).
+        correct: true
+        why: Genau. Dann läuft das Programm still mit falschen Werten weiter, und du suchst den Fehler stundenlang.
+      - text: Ohne Fehlertyp funktioniert `except` nicht.
+        correct: false
+        why: "`except:` ohne Typ ist erlaubt – aber fast immer eine schlechte Idee."
+      - text: Der Fehlertyp macht das Programm schneller.
+        correct: false
+        why: Es geht um Korrektheit, nicht um Geschwindigkeit.
+  - type: text
+    body: |
+      ## Selbst eine Ausnahme auslösen
+
+      Deine eigenen Funktionen sollen bei unsinnigen Eingaben **laut scheitern**, statt still falsche Werte zu liefern. Ein Motorbefehl mit 50 rad/s ist ein Fehler, kein Wert zum Weiterrechnen.
+
+      ```python
+      raise ValueError("Geschwindigkeit zu hoch")
+      ```
+
+      bricht die Funktion sofort ab. Wer sie aufruft, kann die Ausnahme fangen – und mit `except ValueError as e:` an die Meldung `e` kommen.
+  - type: example
+    code: |
+      def setze_winkel(q, q_max=3.0):
+          if abs(q) > q_max:
+              raise ValueError(f"Winkel {q} rad außerhalb von ±{q_max} rad")
+          return q
+
+      print(setze_winkel(1.0))
+      try:
+          setze_winkel(4.5)
+      except ValueError as e:
+          print("Fehler:", e)
+    subgoals:
+      - lines: [2, 3]
+        label: Eingabe prüfen und ggf. Ausnahme auslösen
+      - lines: 4
+        label: Gültigen Wert zurückgeben
+      - lines: [7, 10]
+        label: Ausnahme beim Aufrufer behandeln
+  - type: trace
+    code: |
+      def sicher_teilen(a, b):
+          try:
+              return a / b
+          except ZeroDivisionError:
+              return 0.0
+
+      x = sicher_teilen(6, 3)
+      y = sicher_teilen(1, 0)
+      print(x, y)
+    questions:
+      - line: 9
+        var: x
+        prompt: Welchen Wert hat `x` am Ende?
+        answer: "2.0"
+      - line: 9
+        var: y
+        prompt: Und `y`?
+        answer: "0.0"
+    after: |
+      Im zweiten Aufruf scheitert `a / b` in Zeile 3. Python springt zu Zeile 4 und gibt `0.0` zurück. Ob 0.0 hier ein sinnvoller Ersatz ist, hängt von der Anwendung ab – manchmal ist es besser, die Ausnahme durchzulassen.
+  - type: predict
+    code: |
+      werte = {"a": 1}
+      try:
+          print(werte["b"])
+      except ValueError:
+          print("ValueError")
+      except KeyError:
+          print("KeyError")
+      print("weiter")
+    options:
+      - |
+        KeyError
+        weiter
+      - |
+        ValueError
+        weiter
+      - |
+        ValueError
+        KeyError
+        weiter
+      - |
+        weiter
+    answer: |
+      KeyError
+      weiter
+    explanation: |
+      Python prüft die `except`-Blöcke der Reihe nach und nimmt den **ersten passenden**. Ein fehlender Dict-Schlüssel ist ein `KeyError`, kein `ValueError`.
+  - type: fill
+    fading: true
+    prompt: |
+      `lese_winkel` soll Text in eine Zahl umwandeln und bei ungültigem Text `None` zurückgeben. Erwartet: `0.25 None`.
+    code: |
+      def lese_winkel(text):
+          try:
+              return float(text)
+          ___ ValueError:
+              return ___
+
+      print(lese_winkel("0.25"), lese_winkel("links"))
+    blanks:
+      - answer: except
+        options: [except, else, catch, if]
+      - answer: None
+        options: [None, "0", text]
+    expect_output: "0.25 None"
+  - type: parsons
+    fading: true
+    prompt: |
+      `pruefe_geschw` soll gültige Geschwindigkeiten zurückgeben und negative ablehnen; der Aufrufer fängt die Ausnahme und gibt die Meldung aus.
+    lines:
+      - "def pruefe_geschw(v):"
+      - "    if v < 0:"
+      - '        raise ValueError("v muss >= 0 sein")'
+      - "    return v"
+      - "try:"
+      - "    print(pruefe_geschw(0.5))"
+      - "    pruefe_geschw(-1)"
+      - "except ValueError as e:"
+      - '    print("abgelehnt:", e)'
+    distractors:
+      - 'return ValueError("v muss >= 0 sein")'
+      - "except ValueError:"
+    expect_output: |
+      0.5
+      abgelehnt: v muss >= 0 sein
+    explanation: |
+      `return ValueError(...)` erzeugt nur ein Fehlerobjekt und gibt es zurück – ausgelöst wird es erst mit `raise`. Ohne `as e` gibt es keinen Namen `e` für die Meldung.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `lese_geschwindigkeit(text, v_max=2.0)`. Sie wandelt `text` in eine Kommazahl um und gibt sie zurück. Ist der Wert **negativ** oder **größer als `v_max`**, löst sie einen `ValueError` mit einer verständlichen Meldung aus. Ungültiger Text (z. B. `"schnell"`) soll ebenfalls zu einem `ValueError` führen – das erledigt `float` schon von selbst.
+    starter: |
+      def lese_geschwindigkeit(text, v_max=2.0):
+          v = float(text)
+          # prüfen
+          return v
+    solution: |
+      def lese_geschwindigkeit(text, v_max=2.0):
+          v = float(text)
+          if v < 0 or v > v_max:
+              raise ValueError(f"Geschwindigkeit {v} außerhalb von 0 bis {v_max}")
+          return v
+    tests:
+      - name: Gültige Werte
+        code: |
+          assert lese_geschwindigkeit("1.5") == 1.5, "lese_geschwindigkeit('1.5') sollte 1.5 liefern"
+          assert lese_geschwindigkeit("0") == 0.0, "0 ist erlaubt"
+          assert lese_geschwindigkeit("2.0") == 2.0, "Genau v_max ist erlaubt"
+      - name: Negativ
+        code: |
+          try:
+              lese_geschwindigkeit("-1")
+              assert False, "lese_geschwindigkeit('-1') sollte einen ValueError auslösen"
+          except ValueError:
+              pass
+      - name: Zu groß
+        code: |
+          try:
+              lese_geschwindigkeit("3")
+              assert False, "lese_geschwindigkeit('3') sollte einen ValueError auslösen (v_max = 2.0)"
+          except ValueError:
+              pass
+          assert lese_geschwindigkeit("3", v_max=5.0) == 3.0, "Mit v_max=5.0 ist 3 erlaubt"
+      - name: Kein Text-Zahl
+        code: |
+          try:
+              lese_geschwindigkeit("schnell")
+              assert False, "lese_geschwindigkeit('schnell') sollte einen ValueError auslösen"
+          except ValueError:
+              pass
+    mutants:
+      - |
+        def lese_geschwindigkeit(text, v_max=2.0):
+            v = float(text)
+            if v < 0 or v > v_max:
+                print("Fehler: ungültige Geschwindigkeit")
+            return v
+      - |
+        def lese_geschwindigkeit(text, v_max=2.0):
+            v = float(text)
+            if v < 0 or v >= v_max:
+                raise ValueError("ungültig")
+            return v
+      - |
+        def lese_geschwindigkeit(text, v_max=2.0):
+            v = float(text)
+            if v > v_max:
+                raise ValueError("zu groß")
+            return v
+      - |
+        def lese_geschwindigkeit(text, v_max=2.0):
+            try:
+                v = float(text)
+            except ValueError:
+                return 0.0
+            if v < 0 or v > 2.0:
+                raise ValueError("ungültig")
+            return v
+    hints:
+      - "Teilziel: nach der Umwandlung prüfen, ob der Wert im erlaubten Bereich liegt; sonst Ausnahme auslösen."
+      - Ungültig ist `v < 0` **oder** `v > v_max`. Ausnahmen löst du mit `raise` aus, nicht mit `return` oder `print`.
+      - |
+        ```python
+        if v < 0 or v > v_max:
+            raise ValueError("...")
+        ```
+  - type: quiz
+    question: Welcher `except`-Block fängt den Fehler von `int("3.5")`?
+    options:
+      - text: "`except ValueError:`"
+        correct: true
+        why: Der Typ (str) passt, aber der Inhalt lässt sich nicht als ganze Zahl lesen – das ist ein `ValueError`.
+      - text: "`except TypeError:`"
+        correct: false
+        why: Ein `TypeError` entsteht bei einem unpassenden **Typ**, z. B. `int([1, 2])`. Ein String ist für `int` grundsätzlich erlaubt.
+      - text: "`except ZeroDivisionError:`"
+        correct: false
+        why: Hier wird nicht geteilt.
+cards:
+  - id: m02-c-try-ablauf
+    concept: m02-exceptions
+    variants:
+      - type: predict
+        code: |
+          try:
+              x = int("12")
+              print("X", x)
+          except ValueError:
+              print("Y")
+          print("Z")
+        options:
+          - |
+            X 12
+            Z
+          - |
+            X 12
+            Y
+            Z
+          - |
+            Y
+            Z
+        answer: |
+          X 12
+          Z
+        explanation: Ohne Ausnahme wird der `except`-Block übersprungen.
+      - type: predict
+        code: |
+          for t in ["1", "x", "3"]:
+              try:
+                  print(int(t) * 2)
+              except ValueError:
+                  print("?")
+        options:
+          - |
+            2
+            ?
+            6
+          - |
+            2
+            ?
+          - |
+            2
+            6
+        answer: |
+          2
+          ?
+          6
+        explanation: Die Ausnahme betrifft nur den einen Durchlauf; die Schleife läuft weiter.
+  - id: m02-c-raise
+    concept: m02-raise
+    variants:
+      - type: predict
+        code: |
+          def f(x):
+              if x < 0:
+                  raise ValueError("negativ")
+              return x * 2
+
+          try:
+              print(f(3))
+              print(f(-1))
+          except ValueError as e:
+              print("Fehler:", e)
+        options:
+          - |
+            6
+            Fehler: negativ
+          - |
+            Fehler: negativ
+          - |
+            6
+            -2
+        answer: |
+          6
+          Fehler: negativ
+        explanation: "`f(3)` läuft normal; `f(-1)` löst die Ausnahme aus, die außen gefangen wird."
+      - type: quiz
+        question: Was ist der Unterschied zwischen `raise ValueError("x")` und `return ValueError("x")`?
+        options:
+          - text: "`raise` löst die Ausnahme aus und bricht ab; `return` gibt nur ein Fehlerobjekt als normalen Wert zurück."
+            correct: true
+            why: Nur `raise` unterbricht den Ablauf und kann mit `except` gefangen werden.
+          - text: Es gibt keinen Unterschied.
+            correct: false
+            why: Mit `return` läuft der Aufrufer einfach weiter, als wäre nichts passiert.
+          - text: "`return` ist die modernere Schreibweise für `raise`."
+            correct: false
+            why: Beide gibt es seit jeher mit völlig unterschiedlicher Bedeutung.

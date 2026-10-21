@@ -1,0 +1,48 @@
+id: m15
+number: 15
+title: RL III – Funktionsapproximation
+summary: |
+  Wenn Tabellen nicht mehr reichen: lineare Q-Funktionen, Policy Gradients mit REINFORCE, Baselines und Actor-Critic selbst implementiert – dazu DQN, PPO und SAC als Spielversion und Einordnung.
+depth: spiel
+lessons:
+  - m15-lineare-q
+  - m15-reinforce
+  - m15-baseline
+  - m15-actor-critic
+  - m15-dqn-ppo
+  - m15-sac-ueberblick
+  - m15-checkpoint
+concepts:
+  - id: lineare-q-features
+    name: Lineare Q-Funktion
+    description: "Q(s, a) ≈ w_a · φ(s) mit einem Merkmalsvektor φ(s); wenige Gewichte statt einer Tabelle, Lernen verallgemeinert auf ähnliche Zustände."
+  - id: semi-gradient
+    name: Semi-Gradient-Update
+    description: "w_a += α·δ·φ(s): Gradient nur durch die Vorhersage, das TD-Ziel wird als Konstante behandelt."
+  - id: policy-gradient
+    name: Policy Gradient
+    description: "Die Policy π_θ direkt optimieren: ∇J = E[G_t · ∇ log π_θ(a_t | s_t)] (Log-Ableitungs-Trick)."
+  - id: softmax-policy-gradient
+    name: Gradient der Softmax-Policy
+    description: "Für Logits s·W gilt ∇_W log π(a | s) = s ⊗ (onehot(a) − π(· | s))."
+  - id: reinforce-algorithmus
+    name: REINFORCE
+    description: Episode mit der Policy spielen, Returns berechnen, Parameter in Richtung G_t · ∇ log π verschieben.
+  - id: baseline-varianz
+    name: Baseline
+    description: "G_t − b(s) statt G_t: gleicher Erwartungswert des Gradienten, aber viel kleinere Varianz."
+  - id: actor-critic-td
+    name: Actor-Critic
+    description: "Ein Critic lernt V(s) per TD; der TD-Fehler δ ersetzt G_t − b im Policy-Update des Actors – Lernen nach jedem Schritt."
+  - id: toedliche-triade
+    name: Tödliche Triade
+    description: Funktionsapproximation + Bootstrapping + off-policy-Lernen können zusammen divergieren.
+  - id: dqn-replay-target
+    name: DQN-Bausteine
+    description: Replay Buffer gegen korrelierte Daten, Target-Netz gegen ein wanderndes Ziel – zusammen mit einem Q-Netz.
+  - id: ppo-clipping
+    name: PPO-Clipping
+    description: "Ziel min(ρ·A, clip(ρ, 1−ε, 1+ε)·A) mit ρ = π_neu/π_alt begrenzt, wie weit sich die Policy pro Update ändert."
+  - id: sac-max-entropie
+    name: SAC und maximale Entropie
+    description: "Belohnung plus α·Entropie maximieren; off-policy Actor-Critic für kontinuierliche Aktionen."

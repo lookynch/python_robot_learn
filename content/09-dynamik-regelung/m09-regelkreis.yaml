@@ -1,0 +1,316 @@
+id: m09-regelkreis
+title: Der Regelkreis – P-Regler für ein Gelenk
+minutes: 9
+goals:
+  - Soll, Ist, Fehler und Stellgröße im Regelkreis unterscheiden
+  - Einen P-Regler in eine Simulationsschleife einbauen
+  - Soll/Ist-Verläufe plotten und den Arm dazu animieren
+concepts: [regelkreis]
+steps:
+  - type: text
+    body: |
+      ## Messen – vergleichen – stellen
+
+      Bisher haben wir Gelenkwinkel einfach **gesetzt**. Echte Motoren erzeugen aber ein **Drehmoment** $\tau$; der Winkel folgt erst über die Dynamik. Ein Gelenk mit Trägheit $I$ und Reibung $b$:
+
+      $$I\,\ddot q = \tau - b\,\dot q$$
+
+      Ein **Regler** (controller) schließt den Kreis: Er vergleicht in jedem Zeitschritt den **Sollwert** $q_{\text{ref}}$ mit dem gemessenen **Istwert** $q$ und berechnet daraus $\tau$. Der einfachste ist der **P-Regler** (proportional):
+
+      $$e = q_{\text{ref}} - q, \qquad \tau = K_p\, e$$
+
+      Großer Fehler → großes Moment, das zum Sollwert zieht – wie eine Feder mit Steifigkeit $K_p$ (N·m/rad).
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      I, b = 1.0, 1.0                     # kg·m², N·m·s/rad
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I   # semi-implizit (Modul 6)
+          return np.array([q + dt * qd, qd])
+
+      Kp, q_ref, dt = 5.0, 1.0, 0.01
+      state = np.array([0.0, 0.0])
+      qs = [state[0]]
+      for k in range(400):
+          e = q_ref - state[0]
+          tau = Kp * e
+          state = step(state, tau, dt)
+          qs.append(state[0])
+
+      t = np.arange(len(qs)) * dt
+      fig = lab.Figure(title="P-Regler, Kp = 5", xlabel="t (s)", ylabel="q (rad)")
+      fig.line(qs, x=t, label="Ist q")
+      fig.hline(q_ref, label="Soll")
+      fig.show()
+      lab.arm([[q] for q in qs[::5]], links=(1.0,), target=(np.cos(q_ref), np.sin(q_ref)), title="Ein Gelenk, P-Regler")
+    subgoals:
+      - lines: [4, 9]
+        label: Strecke (Dynamik) festlegen
+      - lines: [11, 13]
+        label: Startwerte festlegen
+      - lines: [14, 18]
+        label: Messen, Fehler, Stellgröße, Simulationsschritt
+      - lines: [20, 25]
+        label: Soll/Ist plotten und animieren
+    after: |
+      Der Arm schießt über den Sollwert hinaus und schwingt aus. Das ist typisch für einen reinen P-Regler bei wenig Reibung: Er wirkt wie eine Feder, und Federn schwingen.
+  - type: explain
+    question: |
+      Warum schwingt der Arm über den Sollwert hinaus, obwohl das Moment bei $e = 0$ null ist?
+    options:
+      - text: Bei $e = 0$ hat das Gelenk noch Geschwindigkeit – Trägheit trägt es weiter, erst danach bremst das (jetzt negative) Moment.
+        correct: true
+        why: Der P-Regler „sieht“ nur die Position, nicht die Geschwindigkeit. Genau das ergänzt der D-Anteil in der nächsten Lektion.
+      - text: Weil der Simulationsschritt `dt` zu groß ist.
+        correct: false
+        why: Das Überschwingen ist echte Physik (Masse an Feder), kein numerischer Fehler.
+      - text: Weil der Sollwert falsch berechnet wird.
+        correct: false
+        why: Der Sollwert ist konstant 1.0 rad; das Problem ist die fehlende Dämpfung.
+  - type: predict
+    intro: |
+      Gleicher Regler, aber 20 s lang simuliert.
+    code: |
+      import numpy as np
+
+      I, b = 1.0, 1.0
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      state = np.array([0.0, 0.0])
+      for k in range(2000):
+          state = step(state, 5.0 * (1.0 - state[0]), 0.01)
+      print(round(state[0], 2))
+    options: ["1.0", "0.83", "0.0", "5.0"]
+    answer: "1.0"
+    explanation: |
+      Ohne äußere Last (keine Schwerkraft) ist $q = q_{\text{ref}}$ die einzige Ruhelage: Dort ist $\tau = 0$ und $\dot q = 0$. Die Reibung $b$ dämpft das Schwingen allmählich weg. Eine bleibende Abweichung entsteht erst mit einer Störung – siehe nächste Lektion.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den P-Regler, sodass das Gelenk auf $q_{\text{ref}} = -0.5$ rad fährt.
+    code: |
+      import numpy as np
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - qd)
+          return np.array([q + dt * qd, qd])
+
+      Kp, q_ref = 8.0, -0.5
+      state = np.array([0.0, 0.0])
+      for k in range(1500):
+          e = ___
+          state = step(state, ___, 0.01)
+      print(round(state[0], 2))
+    blanks:
+      - answer: "q_ref - state[0]"
+        options: ["q_ref - state[0]", "state[0] - q_ref", "q_ref"]
+      - answer: "Kp * e"
+        options: ["Kp * e", "Kp", "e / Kp"]
+    expect_output: "-0.5"
+    explanation: |
+      `state[0] - q_ref` dreht das Vorzeichen um: Das Moment drückt vom Sollwert **weg**, das Gelenk läuft davon (instabil). `e / Kp` ist viel zu schwach und kommt in 15 s nicht an.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `simulate_p(Kp, q_ref, T=10.0, dt=0.01)`. Sie startet bei $q = 0$, $\dot q = 0$, regelt mit einem P-Regler und gibt ein NumPy-Array **aller** Winkel zurück (inklusive Start, also `round(T / dt) + 1` Werte). `step` ist gegeben.
+    starter: |
+      import numpy as np
+      import lab
+
+      I, b = 1.0, 1.0
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      def simulate_p(Kp, q_ref, T=10.0, dt=0.01):
+          state = np.array([0.0, 0.0])
+          qs = [state[0]]
+          # Regelschleife
+          return np.array(qs)
+
+      qs = simulate_p(10.0, 0.8)
+      fig = lab.Figure(title="Mein P-Regler", xlabel="Schritt", ylabel="q (rad)")
+      fig.line(qs, label="Ist")
+      fig.hline(0.8, label="Soll")
+      fig.show()
+    solution: |
+      import numpy as np
+      import lab
+
+      I, b = 1.0, 1.0
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      def simulate_p(Kp, q_ref, T=10.0, dt=0.01):
+          state = np.array([0.0, 0.0])
+          qs = [state[0]]
+          for k in range(round(T / dt)):
+              e = q_ref - state[0]
+              state = step(state, Kp * e, dt)
+              qs.append(state[0])
+          return np.array(qs)
+
+      qs = simulate_p(10.0, 0.8)
+      fig = lab.Figure(title="Mein P-Regler", xlabel="Schritt", ylabel="q (rad)")
+      fig.line(qs, label="Ist")
+      fig.hline(0.8, label="Soll")
+      fig.show()
+    tests:
+      - name: Länge und Start
+        code: |
+          qs = simulate_p(5.0, 1.0, T=2.0)
+          assert len(qs) == 201, f"Bei T=2 s und dt=0.01 s erwartet 201 Werte (inkl. Start), bekommen {len(qs)}"
+          assert qs[0] == 0.0, f"Der erste Wert sollte der Start q = 0 sein, ist {qs[0]}"
+      - name: Bewegt sich zum Sollwert hin
+        code: |
+          qs = simulate_p(5.0, -1.0, T=1.0)
+          assert qs[20] < 0, f"Bei q_ref = -1 sollte q zuerst negativ werden, q nach 0.2 s = {qs[20]:.3f} (Vorzeichen des Fehlers?)"
+      - name: Erreicht den Sollwert
+        code: |
+          for Kp, q_ref in [(5.0, 1.0), (10.0, -0.5), (20.0, 0.3)]:
+              qs = simulate_p(Kp, q_ref, T=15.0)
+              assert abs(qs[-1] - q_ref) < 0.02, f"Kp={Kp}, q_ref={q_ref}: nach 15 s ist q = {qs[-1]:.3f}, erwartet ±0.02 um den Sollwert"
+    mutants:
+      - |
+        import numpy as np
+        I, b = 1.0, 1.0
+        def step(state, tau, dt):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_p(Kp, q_ref, T=10.0, dt=0.01):
+            state = np.array([0.0, 0.0])
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                e = state[0] - q_ref
+                state = step(state, Kp * e, dt)
+                qs.append(state[0])
+            return np.array(qs)
+      - |
+        import numpy as np
+        I, b = 1.0, 1.0
+        def step(state, tau, dt):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_p(Kp, q_ref, T=10.0, dt=0.01):
+            state = np.array([0.0, 0.0])
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                e = q_ref - state[0]
+                new_state = step(state, Kp * e, dt)
+                qs.append(new_state[0])
+            return np.array(qs)
+      - |
+        import numpy as np
+        I, b = 1.0, 1.0
+        def step(state, tau, dt):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_p(Kp, q_ref, T=10.0, dt=0.01):
+            state = np.array([0.0, 0.0])
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                state = step(state, Kp * q_ref, dt)
+                qs.append(state[0])
+            return np.array(qs)
+      - |
+        import numpy as np
+        I, b = 1.0, 1.0
+        def step(state, tau, dt):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_p(Kp, q_ref, T=10.0, dt=0.01):
+            state = np.array([0.0, 0.0])
+            qs = []
+            for k in range(round(T / dt)):
+                e = q_ref - state[0]
+                state = step(state, Kp * e, dt)
+                qs.append(state[0])
+            return np.array(qs)
+    hints:
+      - "Teilziel: Messen, Fehler, Stellgröße, Simulationsschritt – in jedem Zeitschritt."
+      - "Anzahl Schritte: `round(T / dt)`. Fehler = Soll minus Ist, Moment = Kp mal Fehler."
+      - |
+        ```python
+        for k in range(round(T / dt)):
+            e = q_ref - state[0]
+            ...
+        ```
+      - "`state = step(state, Kp * e, dt)` und `qs.append(state[0])` – den neuen Zustand wieder in `state` speichern."
+  - type: quiz
+    question: |
+      Soll $q_{\text{ref}} = 1.2$ rad, Ist $q = 0.8$ rad, $K_p = 5$ N·m/rad. Welches Moment stellt der P-Regler?
+    options:
+      - text: $+2.0$ N·m
+        correct: true
+        why: $e = 1.2 - 0.8 = 0.4$, $\tau = 5 \cdot 0.4$.
+      - text: $-2.0$ N·m
+        correct: false
+        why: Vorzeichenfehler – $e$ ist Soll **minus** Ist.
+      - text: $6.0$ N·m
+        correct: false
+        why: Das wäre $K_p \cdot q_{\text{ref}}$ – der Regler muss den Istwert berücksichtigen.
+cards:
+  - id: m09-c-p-moment
+    concept: regelkreis
+    variants:
+      - type: predict
+        code: |
+          Kp, q_ref, q = 4.0, 0.5, 0.8
+          e = q_ref - q
+          print(round(Kp * e, 2))
+        options: ["-1.2", "1.2", "2.0", "3.2"]
+        answer: "-1.2"
+        explanation: Das Gelenk steht **über** dem Sollwert, also zieht das Moment zurück (negativ).
+      - type: predict
+        code: |
+          Kp, q_ref, q = 10.0, -0.2, 0.1
+          e = q_ref - q
+          print(round(Kp * e, 2))
+        options: ["-3.0", "3.0", "-1.0", "-2.0"]
+        answer: "-3.0"
+        explanation: $e = -0.2 - 0.1 = -0.3$, $\tau = 10 \cdot (-0.3)$.
+  - id: m09-c-vorzeichen-regler
+    concept: regelkreis
+    variants:
+      - type: quiz
+        question: Ein Regler nutzt versehentlich $\tau = K_p (q - q_{\text{ref}})$. Was passiert?
+        options:
+          - text: Das Gelenk läuft vom Sollwert weg – der Kreis ist instabil
+            correct: true
+            why: Das Moment verstärkt den Fehler statt ihn abzubauen (Mitkopplung).
+          - text: Das Gelenk erreicht den Sollwert langsamer
+            correct: false
+            why: Es erreicht ihn gar nicht – jede Abweichung wächst.
+          - text: Nichts, das Vorzeichen ist egal
+            correct: false
+            why: Das Vorzeichen entscheidet zwischen Gegen- und Mitkopplung.
+      - type: quiz
+        question: Was ist beim P-Regler die **Stellgröße**?
+        options:
+          - text: Das Drehmoment $\tau$
+            correct: true
+            why: Das gibt der Regler an den Motor.
+          - text: Der Fehler $e$
+            correct: false
+            why: Der Fehler ist der Eingang des Reglers.
+          - text: Der Sollwert $q_{\text{ref}}$
+            correct: false
+            why: Der Sollwert wird vorgegeben, nicht gestellt.

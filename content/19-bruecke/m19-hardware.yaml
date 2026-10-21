@@ -1,0 +1,136 @@
+id: m19-hardware
+title: Ein echter Arm – SO-101 und ehrliche Erwartungen
+minutes: 9
+goals:
+  - Aufbau und ungefähre Kosten eines SO-101-Paars kennen
+  - Realistisch einordnen, welche Lernverfahren auf Hobby-Armen heute funktionieren
+  - Einen eigenen Fahrplan vom Browser zum echten Arm aufstellen
+concepts: [hobby-arm-einordnung, lerobot-workflow]
+steps:
+  - type: text
+    body: |
+      ## Der SO-101
+
+      Der **SO-101** ist ein offener, 3D-druckbarer Arm von TheRobotStudio und Hugging Face, Nachfolger des SO-100 ([GitHub](https://github.com/TheRobotStudio/SO-ARM100)):
+
+      - Pro Arm **6 Feetech-STS3215-Servos** (5 Gelenke + Greifer). Der **Follower** führt aus (alle Servos 1:345), der **Leader** wird von Hand geführt und hat anders übersetzte Servos, damit er leicht beweglich bleibt ([Doku](https://huggingface.co/docs/lerobot/so101)).
+      - Kaufteile laut Stückliste: ca. **124 €** für einen Follower, ca. **226 €** für Leader + Follower. Die Gehäuseteile druckst du selbst (PLA+) oder kaufst sie als Kit; Versand und Zoll kommen hinzu.
+      - Bausätze und fertige Arme gibt es bei mehreren Händlern, die im README gelistet sind.
+
+      Preise schwanken. *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Was du zusätzlich brauchst
+
+      - Einen Rechner mit USB für die beiden Servo-Controller (die Arme hängen per USB direkt am Rechner, kein ROS nötig)
+      - Netzteil passend zur Servo-Variante (7,4 V oder 12 V; der Leader ist laut README immer 7,4 V)
+      - 1–2 Kameras (z. B. USB-Webcams, in LeRobot über OpenCV eingebunden)
+      - Für das Training eine GPU – oder Colab bzw. Hugging Face Jobs
+      - 3D-Drucker oder Druckservice, Schraubendreher, etwas Geduld beim Zusammenbau
+
+      Sicherheitshinweis: Auch kleine Servos klemmen Finger ein. Beim ersten Ausführen einer Policy Hand weg vom Arbeitsraum und Stromversorgung in Reichweite.
+  - type: text
+    body: |
+      ## Ehrliche Einordnung
+
+      Dieser Kurs hat dich bis zu World Models und modellbasiertem RL geführt. Auf **Hobby-Armen** wie dem SO-101 wird heute aber fast immer **Imitation Learning** eingesetzt: ACT aus wenigen Dutzend Demos oder ein feinjustiertes kleines VLA wie SmolVLA. Der offizielle LeRobot-Einstieg ist genau dieser Weg, und SmolVLA wurde überwiegend mit Community-Daten vom SO-100 trainiert ([HF-Blog](https://huggingface.co/blog/smolvla)).
+
+      **V-JEPA 2-AC** – das bekannteste Beispiel für Planen mit einem gelernten World Model am echten Arm – lief auf **Franka-Panda-Forschungsarmen** und nutzte Daten aus dem DROID-Datensatz, der mit solchen Armen aufgenommen wurde ([arXiv:2506.09985](https://arxiv.org/abs/2506.09985)). Auf einen SO-101 überträgt sich das nicht ohne Weiteres. *Stand: Oktober 2026.*
+  - type: explain
+    question: |
+      Warum ist Reinforcement Learning direkt auf einem echten Hobby-Arm so viel schwerer als Imitation Learning?
+    options:
+      - text: RL braucht eine messbare Belohnung und sehr viele Versuche mit Zurücksetzen der Szene; das kostet Zeit, verschleißt Servos und ist riskant – BC braucht nur ~50 Demos.
+        correct: true
+        why: Genau. In der Simulation ist ein Reset gratis, in der Realität muss jemand den Becher zurückstellen. Und wer erkennt automatisch, ob der Griff gelungen ist?
+      - text: Auf echter Hardware lassen sich keine neuronalen Netze ausführen.
+        correct: false
+        why: Gelernte Policies laufen sehr wohl auf echten Armen – das ist ja der Zweck von LeRobot.
+      - text: RL funktioniert nur mit diskreten Aktionen.
+        correct: false
+        why: Verfahren wie SAC oder PPO arbeiten mit kontinuierlichen Aktionen (Modul 15).
+      - text: Imitation Learning ist immer besser als RL.
+        correct: false
+        why: Nicht immer – RL kann über die Demonstrationen hinaus besser werden (siehe π*0.6). Für den Einstieg auf Hobby-Hardware ist IL aber der praktikable Weg.
+  - type: quiz
+    question: |
+      Welche Fähigkeit aus diesem Kurs nutzt du beim SO-101 **am unmittelbarsten**, wenn du dem offiziellen LeRobot-Weg folgst?
+    options:
+      - text: Behavior Cloning – Regression von Beobachtung auf Aktion (Modul 12 und 18)
+        correct: true
+        why: ACT und SmolVLA sind Imitation Learning; dein Verständnis von Regression, Overfitting und Verteilungsverschiebung hilft direkt beim Datensammeln und Debuggen.
+      - text: Value Iteration auf einer Gitterwelt (Modul 13)
+        correct: false
+        why: Wichtig für das RL-Verständnis, aber für einen Greif-Arm mit Kamera nicht direkt anwendbar.
+      - text: Analytische inverse Kinematik (Modul 8)
+        correct: false
+        why: Hilft beim Verständnis des Arms, wird beim gelernten Ansatz aber nicht explizit gebraucht – die Policy gibt Gelenkstellungen direkt aus.
+  - type: text
+    body: |
+      ## Dein Fahrplan
+
+      1. **Simulation** (kein Geld): Reacher-v5 in Colab; dein Dynamikmodell + CEM aus Modul 16 in PyTorch.
+      2. **SO-101 aufbauen**, kalibrieren, eine einfache Greif-und-Ablege-Aufgabe mit ACT (≥ 50 Episoden).
+      3. **SmolVLA feinjustieren** auf deinen Daten, mit Sprachbefehl.
+      4. **Forschungsprojekt**: Deine LeRobot-Datensätze enthalten Beobachtungen und Aktionen – genau das, was ein World Model braucht. Trainiere ein latentes Dynamikmodell darauf und vergleiche Planen mit der ACT-Policy.
+
+      Schritt 4 ist offenes Terrain – erwarte, dass es nicht auf Anhieb funktioniert. Genau dort wird es interessant.
+cards:
+  - id: m19-c-hobby-weg
+    concept: hobby-arm-einordnung
+    variants:
+      - type: quiz
+        question: |
+          Welcher Ansatz ist für einen SO-101 als Einstieg am realistischsten?
+        options:
+          - text: Imitation Learning mit ACT aus Teleoperations-Demos
+            correct: true
+            why: Das ist der dokumentierte LeRobot-Weg und braucht nur einige Dutzend Episoden.
+          - text: Modellfreies RL direkt am Arm über Tausende Episoden
+            correct: false
+            why: Zu viele Versuche, keine automatische Belohnung, ständiges Zurücksetzen.
+          - text: V-JEPA 2-AC ohne Anpassung übernehmen
+            correct: false
+            why: Das lief auf Franka-Armen mit Daten von solchen Armen; die Übertragung ist offen.
+      - type: quiz
+        question: |
+          Auf welchem Arm wurde V-JEPA 2-AC im Paper eingesetzt?
+        options:
+          - text: Franka Emika Panda
+            correct: true
+            why: Laut Paper in zwei Laboren, ohne neue Daten von diesen Armen.
+          - text: SO-101
+            correct: false
+            why: Hobby-Arme werden heute meist mit Imitation Learning gesteuert.
+          - text: Ein simulierter Reacher
+            correct: false
+            why: Gerade der Einsatz am echten Arm war das Besondere.
+  - id: m19-c-reset-problem
+    concept: hobby-arm-einordnung
+    variants:
+      - type: quiz
+        question: |
+          Was ist bei RL am echten Arm ein Problem, das es in der Simulation nicht gibt?
+        options:
+          - text: Jede Episode braucht ein Zurücksetzen der Szene, und Versuche kosten Zeit und Verschleiß.
+            correct: true
+            why: In der Simulation ist `reset()` gratis.
+          - text: Der Arm kann keine Aktionen empfangen.
+            correct: false
+            why: Natürlich kann er das – sonst gäbe es keine Teleoperation.
+          - text: Es gibt keine Beobachtungen.
+            correct: false
+            why: Kameras und Gelenkwinkel liefern Beobachtungen.
+      - type: quiz
+        question: |
+          Warum braucht Imitation Learning am echten Arm keine Belohnungsfunktion?
+        options:
+          - text: Es lernt direkt, die vorgemachten Aktionen nachzuahmen.
+            correct: true
+            why: Die Demonstrationen ersetzen die Belohnung.
+          - text: Weil die Servos die Belohnung messen
+            correct: false
+            why: Servos messen Positionen, keine Aufgabenerfüllung.
+          - text: Weil Hugging Face die Belohnung bereitstellt
+            correct: false
+            why: Es gibt keine allgemeine Belohnung für beliebige Aufgaben.

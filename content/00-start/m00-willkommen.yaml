@@ -1,0 +1,108 @@
+id: m00-willkommen
+title: Willkommen – wie diese App lernt
+minutes: 5
+goals:
+  - Wissen, was dich auf dem Weg von Python bis World Models erwartet
+  - Die Lernschritte der App kennen und ihren Zweck verstehen
+concepts: [lernmethode]
+steps:
+  - type: text
+    body: |
+      ## Von `print` bis zum Roboterarm
+
+      Am Ende dieses Kurses steuerst du einen simulierten Roboterarm mit einem **World Model** – einem neuronalen Netz, das gelernt hat, wie die Welt auf Aktionen reagiert – und trainierst Agenten mit **Reinforcement Learning**.
+
+      Der Weg dorthin:
+
+      1. Python-Grundlagen und NumPy
+      2. Lineare Algebra, Simulation und Optimierung – in Code
+      3. Kinematik, Dynamik und Regelung eines Arms
+      4. Planen mit Modell, Machine Learning von Grund auf
+      5. Reinforcement Learning und World Models
+
+      Jeder Schritt ist klein. Alles läuft echt in deinem Browser – auch offline, sobald Python einmal geladen ist.
+  - type: text
+    body: |
+      ## Warum du hier oft *vorhersagen* musst
+
+      Bevor du Code ausführst, sagst du voraus, was passiert. Das fühlt sich langsamer an, ist aber messbar wirksamer als Lesen: Wer aktiv abruft und Vorhersagen prüft, behält deutlich mehr (*Testing-Effekt*).
+
+      Zusätzlich gibst du an, **wie sicher** du bist. Lagst du sicher daneben, zeigt die App die Erklärung besonders deutlich – genau diese Irrtümer korrigiert man am nachhaltigsten.
+  - type: example
+    intro: |
+      So sieht ein Codebeispiel aus. Tippe auf **Ausführen** – die Ausgabe erscheint im Terminal darunter.
+    code: |
+      print("Hallo, Roboter!")
+      print(2 + 3)
+    subgoals:
+      - lines: 1
+        label: Text ausgeben
+      - lines: 2
+        label: Ergebnis einer Rechnung ausgeben
+    after: |
+      Die Beschriftungen links (Teilziele) zeigen, *wozu* eine Zeile da ist. Achte darauf – die gleichen Teilziele tauchen später in Hinweisen wieder auf.
+  - type: predict
+    intro: |
+      Jetzt du: Erst vorhersagen, dann ausführen.
+    code: |
+      print("2 + 3")
+    options: ["5", "2 + 3", "Fehler"]
+    answer: "2 + 3"
+    explanation: |
+      Alles zwischen Anführungszeichen ist **Text** und wird genau so ausgegeben – Python rechnet nicht darin. Ohne Anführungszeichen (`print(2 + 3)`) wäre es eine Rechnung.
+  - type: explain
+    question: |
+      Warum wiederholt die App Fragen nach Tagen oder Wochen erneut?
+    options:
+      - text: Weil verteiltes Wiederholen kurz vor dem Vergessen das Gedächtnis stärker festigt als einmaliges Pauken.
+        correct: true
+        why: Das ist der Spacing-Effekt. Die App plant Wiederholungen mit dem FSRS-Algorithmus genau dann, wenn du sie voraussichtlich gerade noch weißt.
+      - text: Damit man mehr Zeit in der App verbringt.
+        correct: false
+        why: Im Gegenteil – gut geplante Wiederholungen sparen Zeit, weil Bekanntes seltener kommt.
+      - text: Weil die Fragen beim ersten Mal falsch bewertet wurden.
+        correct: false
+        why: Die Bewertung ist korrekt; die Wiederholung dient dem Behalten, nicht der Korrektur.
+  - type: text
+    body: |
+      ## Hinweise, Lösungen und KI
+
+      - Bei Aufgaben gibt es **gestufte Hinweise**. Probiere erst selbst – jeder Hinweis verrät etwas mehr.
+      - Die Lösung kannst du jederzeit ansehen. Die Aufgabe kommt dann später in der Wiederholung erneut.
+      - Mit **„Kontext für KI kopieren“** bekommst du Aufgabe, deinen Code und die Fehlermeldung als Text, den du z. B. in Claude einfügen kannst.
+      - Jedes Modul endet mit einem **Checkpoint**. Kennst du ein Thema schon, kannst du den Checkpoint direkt machen und das Modul überspringen.
+  - type: quiz
+    question: |
+      Was ist die beste Reaktion, wenn du eine Vorhersage mit „sicher“ markiert hast und falsch lagst?
+    options:
+      - text: Die Erklärung genau lesen und herausfinden, *welche* Annahme falsch war.
+        correct: true
+        why: Gerade sichere Irrtümer lassen sich gut korrigieren, wenn man den Denkfehler benennt.
+      - text: Schnell weitertippen, beim nächsten Mal klappt es.
+        correct: false
+        why: Ohne die Ursache zu verstehen, wiederholt sich der Fehler.
+      - text: Künftig immer „unsicher“ wählen.
+        correct: false
+        why: Die Sicherheitsangabe soll ehrlich sein – sie hilft dir, deine Selbsteinschätzung zu kalibrieren.
+cards:
+  - id: m00-c-vorhersage
+    concept: lernmethode
+    variants:
+      - type: quiz
+        question: Warum sollst du vor dem Ausführen vorhersagen, was der Code tut?
+        options:
+          - text: Aktives Abrufen und Prüfen der eigenen Erwartung festigt Wissen stärker als Zuschauen.
+            correct: true
+            why: Das ist der Testing-Effekt (Retrieval Practice).
+          - text: Damit das Programm schneller läuft.
+            correct: false
+            why: Die Vorhersage beeinflusst das Programm nicht.
+          - text: Weil die App sonst keinen Fortschritt speichert.
+            correct: false
+            why: Es geht ums Lernen, nicht um die Technik.
+      - type: predict
+        code: |
+          print("10 - 4")
+        options: ["6", "10 - 4", "Fehler"]
+        answer: "10 - 4"
+        explanation: Text in Anführungszeichen wird unverändert ausgegeben.

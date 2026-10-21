@@ -1,0 +1,319 @@
+id: m06-step-funktion
+title: Das Muster step(state, action, dt)
+minutes: 10
+goals:
+  - Eine Simulation als reine Funktion `step(state, action, dt) -> state` schreiben
+  - Mit einer Aktionsfolge einen Rollout erzeugen
+  - Eine Trajektorie mit `lab.Scene` animieren
+concepts: [step-funktion, rollout, semi-implizit-euler]
+steps:
+  - type: text
+    body: |
+      ## Eine Schnittstelle für den ganzen Kurs
+
+      Bisher steckte die Physik direkt in der Schleife. Jetzt trennen wir sie heraus:
+
+      ```python
+      def step(state, action, dt):
+          ...
+          return next_state
+      ```
+
+      - `state`: Zustand als NumPy-Array, z. B. `[x, v]`
+      - `action`: was der Roboter tut, z. B. eine Kraft $u$ in N
+      - Rückgabe: der Zustand nach `dt` Sekunden, als **neues** Array
+
+      Dieses Muster begleitet dich durch den Kurs: Ein Regler berechnet `action` aus `state` (Modul 9), ein Planer probiert viele Aktionen durch `step` aus (Modul 11), RL-Umgebungen haben genau diese Form (Modul 13–15), und ein **World Model** ist ein `step`, das aus Daten gelernt wurde (Modul 16).
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def step(state, action, dt, m=1.0, c=0.5):
+          x, v = state
+          a = (action - c * v) / m
+          v_new = v + dt * a
+          x_new = x + dt * v_new
+          return np.array([x_new, v_new])
+
+      dt = 0.05
+      state = np.array([0.0, 0.0])
+      states = [state]
+      for k in range(80):
+          if k < 40:
+              u = 2.0
+          elif state[1] > 0:
+              u = -2.0
+          else:
+              u = 0.0
+          state = step(state, u, dt)
+          states.append(state)
+
+      scene = lab.Scene(title="Wagen mit Kraft u", bounds=[-0.5, 4.8, -1.2, 1.2], fps=20)
+      scene.line([(-0.5, -0.2), (4.8, -0.2)], color="muted", static=True)
+      for k, s in enumerate(states):
+          if k > 0:
+              scene.next_frame()
+          scene.rect(s[0] - 0.25, -0.2, 0.5, 0.35, color="fg", fill="c2")
+          scene.caption(f"t = {k * dt:.2f} s   x = {s[0]:.2f} m   v = {s[1]:.2f} m/s")
+      scene.show()
+      print(f"Ende: x = {states[-1][0]:.2f} m")
+    subgoals:
+      - lines: [4, 9]
+        label: Physik in step kapseln
+      - lines: [11, 22]
+        label: Schleife ruft step mit einer Aktion auf
+      - lines: [24, 31]
+        label: Trajektorie animieren
+    after: |
+      Die Schleife enthält **keine Physik** mehr, nur noch die Entscheidung, welche Kraft wirkt: 2 s schieben, dann bremsen, bis der Wagen steht. Genau an dieser Stelle sitzt später ein Regler oder eine gelernte Policy. Innen nutzt `step` den semi-impliziten Euler.
+  - type: explain
+    question: |
+      Warum gibt `step` ein **neues** Array zurück, statt `state` direkt zu verändern?
+    options:
+      - text: Damit man vom selben Zustand aus mehrere Aktionen ausprobieren kann, ohne dass der Ausgangszustand verloren geht.
+        correct: true
+        why: Genau das tut ein Planer – hundertmal vom aktuellen Zustand aus „Was wäre, wenn …?“. Eine Funktion ohne Seiteneffekte nennt man **rein** (pure).
+      - text: Weil man NumPy-Arrays nicht verändern kann.
+        correct: false
+        why: Kann man – `state[0] = 1.0` funktioniert. Gerade deshalb ist es gefährlich.
+      - text: Weil es schneller ist.
+        correct: false
+        why: Ein neues Array anzulegen kostet sogar ein wenig mehr. Es geht um Korrektheit.
+  - type: predict
+    intro: |
+      Diese Variante ändert das übergebene Array. Was passiert mit `s0`?
+    code: |
+      import numpy as np
+
+      def step_bad(state, action, dt):
+          state[1] = state[1] + dt * action
+          state[0] = state[0] + dt * state[1]
+          return state
+
+      s0 = np.array([0.0, 0.0])
+      s1 = step_bad(s0, 1.0, 0.5)
+      print(s0[1], s1[1])
+    options: ["0.5 0.5", "0.0 0.5", "0.5 0.0", "0.0 0.0"]
+    answer: "0.5 0.5"
+    explanation: |
+      `state` ist keine Kopie, sondern **derselbe** Speicher wie `s0` (Aliasing). `s0` und `s1` sind dasselbe Array – der Startzustand ist überschrieben. In einem Planer wäre jeder weitere Versuch vom falschen Zustand aus gestartet.
+  - type: fill
+    fading: true
+    prompt: |
+      Ein **Rollout** wendet `step` nacheinander auf eine Aktionsfolge an. Ergänze so, dass die Form `(5, 2)` und der Endzustand ausgegeben werden.
+    code: |
+      import numpy as np
+
+      def step(state, action, dt, m=1.0, c=0.5):
+          x, v = state
+          v_new = v + dt * (action - c * v) / m
+          return np.array([x + dt * v_new, v_new])
+
+      def rollout(state, actions, dt):
+          states = [state]
+          for u in actions:
+              state = step(___, ___, dt)
+              states.append(state)
+          return np.array(states)
+
+      traj = rollout(np.array([0.0, 0.0]), [1.0, 1.0, -1.0, -1.0], 0.5)
+      print(traj.shape, round(traj[-1, 0], 4), round(traj[-1, 1], 4))
+    blanks:
+      - answer: state
+        options: [state, "states[0]", "traj"]
+      - answer: u
+        options: [u, actions, "1.0"]
+    expect_output: "(5, 2) 0.5742 -0.3828"
+    explanation: |
+      Jeder Schritt startet vom **zuletzt berechneten** Zustand. `states[0]` würde immer wieder vom Start aus rechnen. Mit `rollout` kann ein Planer später eine ganze Aktionsfolge bewerten, ohne den echten Roboter zu bewegen.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `step(state, action, dt)` für einen Masse-Feder-Dämpfer mit Kraft `action` (N):
+
+      $$\ddot x = (-K x - C v + u)/M$$
+
+      Verwende den semi-impliziten Euler (erst `v`, dann `x`). `state` darf **nicht** verändert werden; gib ein neues Array `[x, v]` zurück.
+    starter: |
+      import numpy as np
+
+      K, C, M = 4.0, 0.4, 1.0   # N/m, N·s/m, kg
+
+      def step(state, action, dt):
+          x, v = state
+          # Beschleunigung, dann v, dann x
+          return state
+    solution: |
+      import numpy as np
+
+      K, C, M = 4.0, 0.4, 1.0   # N/m, N·s/m, kg
+
+      def step(state, action, dt):
+          x, v = state
+          a = (-K * x - C * v + action) / M
+          v_new = v + dt * a
+          x_new = x + dt * v_new
+          return np.array([x_new, v_new])
+    tests:
+      - name: Kraft aus der Ruhe
+        code: |
+          s = step(np.array([0.0, 0.0]), 1.0, 0.1)
+          assert close(s, [0.01, 0.1]), f"Aus [0, 0] mit u = 1, dt = 0.1 erwartet [0.01, 0.1], bekommen {s}"
+      - name: Feder und Dämpfer
+        code: |
+          s = step(np.array([1.0, 2.0]), 0.0, 0.05)
+          a = -4.0 * 1.0 - 0.4 * 2.0
+          v = 2.0 + 0.05 * a
+          assert close(s, [1.0 + 0.05 * v, v]), f"Erwartet [{1.0 + 0.05 * v:.4f}, {v:.4f}], bekommen {s}"
+      - name: Eingabe bleibt unverändert
+        code: |
+          s0 = np.array([0.5, -1.0])
+          s1 = step(s0, 2.0, 0.1)
+          assert s0[0] == 0.5 and s0[1] == -1.0, f"step hat den übergebenen Zustand verändert: {s0}"
+          assert s1 is not s0, "step muss ein neues Array zurückgeben"
+      - name: Rückgabe ist ein Array
+        code: |
+          s = step(np.array([0.0, 0.0]), 0.0, 0.1)
+          assert isinstance(s, np.ndarray), f"Rückgabe sollte ein NumPy-Array sein, ist {type(s).__name__}"
+    mutants:
+      - |
+        import numpy as np
+
+        K, C, M = 4.0, 0.4, 1.0
+
+        def step(state, action, dt):
+            a = (-K * state[0] - C * state[1] + action) / M
+            state[1] = state[1] + dt * a
+            state[0] = state[0] + dt * state[1]
+            return state
+      - |
+        import numpy as np
+
+        K, C, M = 4.0, 0.4, 1.0
+
+        def step(state, action, dt):
+            x, v = state
+            a = (-K * x - C * v + action) / M
+            x_new = x + dt * v
+            v_new = v + dt * a
+            return np.array([x_new, v_new])
+      - |
+        import numpy as np
+
+        K, C, M = 4.0, 0.4, 1.0
+
+        def step(state, action, dt):
+            x, v = state
+            a = (-K * x - C * v) / M
+            v_new = v + dt * a
+            x_new = x + dt * v_new
+            return np.array([x_new, v_new])
+    hints:
+      - "Teilziel: Physik in step kapseln – Beschleunigung, dann `v`, dann `x`, neues Array zurückgeben."
+      - "Neue Werte in **neuen** Variablen (`v_new`, `x_new`) speichern und am Ende `np.array([...])` bauen – so bleibt `state` unberührt."
+      - |
+        ```python
+        a = (-K * x - C * v + action) / M
+        v_new = v + dt * a
+        x_new = ...
+        ```
+      - "`return np.array([x + dt * v_new, v_new])`"
+  - type: quiz
+    question: |
+      In Modul 16 wird `step` durch ein neuronales Netz ersetzt, das aus Messdaten gelernt wurde. Was muss dabei gleich bleiben, damit Planer und Regler weiter funktionieren?
+    options:
+      - text: Die Schnittstelle – Zustand und Aktion rein, nächster Zustand raus.
+        correct: true
+        why: Wer `step` aufruft, muss nicht wissen, ob innen Physik-Formeln oder ein gelerntes Modell stecken. Genau das macht ein World Model austauschbar.
+      - text: Der semi-implizite Euler im Inneren.
+        correct: false
+        why: Ein gelerntes Modell enthält keinen Euler-Schritt; es sagt den nächsten Zustand direkt vorher.
+      - text: Die Federkonstante `K`.
+        correct: false
+        why: Ein gelerntes Modell hat keine benannten physikalischen Parameter, sondern Gewichte.
+cards:
+  - id: m06-c-step-aliasing
+    concept: step-funktion
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+
+          def step(state, action, dt):
+              state[0] = state[0] + dt * action
+              return state
+
+          s = np.array([1.0])
+          t = step(s, 4.0, 0.5)
+          print(s[0], t[0])
+        options: ["3.0 3.0", "1.0 3.0", "3.0 1.0", "1.0 1.0"]
+        answer: "3.0 3.0"
+        explanation: "`state` und `s` sind dasselbe Array – der Startzustand wurde überschrieben."
+      - type: predict
+        code: |
+          import numpy as np
+
+          def step(state, action, dt):
+              return np.array([state[0] + dt * action])
+
+          s = np.array([1.0])
+          t = step(s, 4.0, 0.5)
+          print(s[0], t[0])
+        options: ["1.0 3.0", "3.0 3.0", "1.0 1.0", "3.0 1.0"]
+        answer: "1.0 3.0"
+        explanation: "Hier wird ein **neues** Array gebaut; `s` bleibt unverändert."
+  - id: m06-c-rollout-laenge
+    concept: rollout
+    variants:
+      - type: predict
+        code: |
+          def step(state, action, dt):
+              return state + dt * action
+
+          states = [0.0]
+          for u in [1.0, 2.0, 3.0]:
+              states.append(step(states[-1], u, 1.0))
+          print(len(states), states[-1])
+        options: ["4 6.0", "3 6.0", "4 3.0", "3 3.0"]
+        answer: "4 6.0"
+        explanation: "3 Aktionen → 3 Schritte → 4 Zustände; 0 + 1 + 2 + 3 = 6."
+      - type: predict
+        code: |
+          def step(state, action, dt):
+              return state + dt * action
+
+          states = [10.0]
+          for u in [-2.0, -2.0]:
+              states.append(step(states[-1], u, 0.5))
+          print(len(states), states[-1])
+        options: ["3 8.0", "2 8.0", "3 6.0", "3 9.0"]
+        answer: "3 8.0"
+        explanation: "2 Schritte à $0{,}5 \\cdot (-2) = -1$: 10 → 9 → 8, drei Zustände."
+  - id: m06-c-step-rein
+    concept: step-funktion
+    variants:
+      - type: quiz
+        question: Welche Eigenschaft braucht `step`, damit ein Planer 100 Aktionsfolgen vom selben Startzustand testen kann?
+        options:
+          - text: Sie darf den übergebenen Zustand nicht verändern.
+            correct: true
+            why: Sonst startet jeder weitere Versuch von einem schon veränderten Zustand.
+          - text: Sie muss den Zustand global speichern.
+            correct: false
+            why: Globaler Zustand ist genau das Problem – jeder Aufruf würde ihn verändern.
+          - text: Sie muss `print` aufrufen.
+            correct: false
+            why: Ausgaben haben mit der Wiederverwendbarkeit nichts zu tun.
+      - type: quiz
+        question: Welche Rückgabe passt zum Muster `step(state, action, dt)`?
+        options:
+          - text: der Zustand nach `dt` Sekunden als neues Array
+            correct: true
+            why: Genau ein Ergebnis – der nächste Zustand. Der übergebene Zustand bleibt unverändert.
+          - text: "`None`, weil `step` den Zustand direkt im übergebenen Array ändert"
+            correct: false
+            why: Dann könnte man denselben Startzustand nicht mehrfach verwenden (Aliasing).
+          - text: die ganze Trajektorie ab Startzustand
+            correct: false
+            why: Das ist die Aufgabe eines Rollouts, der `step` wiederholt aufruft.

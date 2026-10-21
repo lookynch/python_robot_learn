@@ -1,0 +1,203 @@
+id: m17-checkpoint
+title: "Checkpoint: latente World Models"
+kind: checkpoint
+minutes: 12
+goals:
+  - Beobachtungen, latente Modelle, V-M-C, Dreamer und TD-MPC sicher einordnen und anwenden
+concepts: [lwm-beobachtung-bild, lwm-autoencoder, lwm-latente-dynamik, lwm-vmc, lwm-rssm, lwm-imagination, lwm-td-mpc]
+steps:
+  - type: quiz
+    question: |
+      Ein Agent sieht ein Pendel nur als **ein** Kamerabild pro Zeitschritt. Was fehlt ihm, um die Zukunft vorherzusagen?
+    options:
+      - text: Die Winkelgeschwindigkeit – sie ist in einem Einzelbild nicht sichtbar; man braucht mehrere Bilder oder ein Gedächtnis.
+        correct: true
+        why: Deshalb hat das RSSM einen rekurrenten Zustand $h_t$.
+      - text: Der Winkel – er ist in Bildern grundsätzlich nicht ablesbar.
+        correct: false
+        why: Der Winkel ist im Bild gut zu sehen.
+      - text: Nichts, ein Bild ist immer ein vollständiger Zustand.
+        correct: false
+        why: Für Systeme mit Trägheit gilt das nicht.
+  - type: predict
+    code: |
+      def to_pixel(x, y, n=16, r=2.2):
+          col = int((x + r) / (2 * r) * n)
+          row = int((r - y) / (2 * r) * n)
+          return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+
+      print(to_pixel(-1.1, 1.1), to_pixel(3.0, 0.0))
+    options:
+      - "(4, 4) (8, 15)"
+      - "(12, 4) (8, 15)"
+      - "(4, 4) (8, 16)"
+      - "(4, 12) (8, 15)"
+    answer: "(4, 4) (8, 15)"
+    explanation: |
+      $(-1{,}1;\ 1{,}1)$ liegt links oben: Spalte $\lfloor 1{,}1/4{,}4 \cdot 16 \rfloor = 4$, Zeile ebenso 4. $x = 3$ liegt außerhalb und wird auf Spalte 15 begrenzt.
+  - type: fill
+    prompt: |
+      Bilde Ein- und Ausgaben für das latente Dynamikmodell: Eingabe = latenter Zustand und Aktion, Ziel = Änderung des latenten Zustands.
+    code: |
+      import numpy as np
+      Z = np.zeros((50, 8))
+      A = np.ones((50, 2))
+      Z2 = np.full((50, 8), 0.5)
+      X, Y = np.hstack([Z, ___]), Z2 - ___
+      print(X.shape, Y.shape, Y[0, 0])
+    blanks:
+      - answer: A
+        options: [A, Z2, Z]
+      - answer: Z
+        options: [Z, A, Z2]
+    expect_output: "(50, 10) (50, 8) 0.5"
+  - type: quiz
+    question: |
+      Welcher Teil des V-M-C-Modells von Ha & Schmidhuber lernt die eigentliche Aufgabe (Belohnung) – und womit?
+    options:
+      - text: Der kleine lineare Controller C, mit der Evolutionsstrategie CMA-ES.
+        correct: true
+        why: V und M lernen ohne Belohnung; C hat nur wenige hundert Parameter.
+      - text: Der VAE V, mit Backpropagation der Belohnung.
+        correct: false
+        why: V lernt nur Bilder zu rekonstruieren.
+      - text: Das MDN-RNN M, mit Q-Learning.
+        correct: false
+        why: M lernt die Zukunft vorherzusagen, nicht die Aufgabe.
+  - type: predict
+    intro: |
+      λ-Return rückwärts: $G_H = v_H$, $G_t = r_t + \gamma\big((1-\lambda)\, v_{t+1} + \lambda\, G_{t+1}\big)$.
+    code: |
+      gamma, lam = 1.0, 1.0
+      r = [1.0, 2.0]
+      v = [0.0, 0.0, 3.0]
+      G = [0.0, 0.0]
+      nxt = v[2]
+      for t in [1, 0]:
+          nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+          G[t] = nxt
+      print(G)
+    options: ["[6.0, 5.0]", "[1.0, 2.0]", "[3.0, 5.0]", "[6.0, 3.0]"]
+    answer: "[6.0, 5.0]"
+    explanation: |
+      Mit λ = 1 ist der λ-Return die Summe der Belohnungen bis zum Horizont plus Endwert: $G_1 = 2 + 3$, $G_0 = 1 + 2 + 3$.
+  - type: quiz
+    question: |
+      Im RSSM von Dreamer: Welche Verteilung wird beim **Vorstellen** benutzt, welche beim **Beobachten**?
+    options:
+      - text: Vorstellen – Prior $p(z_t \mid h_t)$; Beobachten – Posterior $q(z_t \mid h_t, o_t)$.
+        correct: true
+        why: In der Vorstellung gibt es kein Bild $o_t$, also nur den Prior.
+      - text: Vorstellen – Posterior; Beobachten – Prior.
+        correct: false
+        why: Der Posterior braucht das Bild, das es in der Vorstellung nicht gibt.
+      - text: Beide Male dieselbe; Prior und Posterior sind identisch.
+        correct: false
+        why: Der KL-Term bringt sie nur zusammen, sie bleiben verschieden.
+  - type: parsons
+    prompt: |
+      Rolle eine Vorstellung mit dem Modell $f(z, a) = z + a$ und speichere alle latenten Zustände inklusive Start. Erwartete Ausgabe: `[0.0, 1.0, 3.0, 2.0]`.
+    lines:
+      - "def f(z, a):"
+      - "    return z + a"
+      - "z = 0.0"
+      - "traj = [z]"
+      - "for a in [1.0, 2.0, -1.0]:"
+      - "    z = f(z, a)"
+      - "    traj.append(z)"
+      - "print(traj)"
+    distractors:
+      - "    z = f(0.0, a)"
+      - "traj = []"
+    expect_output: "[0.0, 1.0, 3.0, 2.0]"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `score_sequences(R, X_last, gamma, value)` für einen TD-MPC-artigen Planer: `R` hat die Form `(N, H)` (Belohnungen von $N$ vorgestellten Folgen), `X_last` die Form `(N,)` (letzter Zustand jeder Folge). Gib für jede Folge
+
+      $$\sum_{t=0}^{H-1} \gamma^t R_{t} + \gamma^H\, \text{value}(x_H)$$
+
+      zurück (Array der Länge $N$).
+    starter: |
+      import numpy as np
+
+      def score_sequences(R, X_last, gamma, value):
+          # dein Code
+          pass
+
+      def value(x):
+          return -np.abs(x - 3.0)
+
+      R = np.array([[0.0, 1.0], [1.0, 1.0]])
+      print(score_sequences(R, np.array([3.0, 1.0]), 0.5, value))
+    solution: |
+      import numpy as np
+
+      def score_sequences(R, X_last, gamma, value):
+          H = R.shape[1]
+          return np.sum(R * gamma ** np.arange(H), axis=1) + gamma ** H * value(X_last)
+
+      def value(x):
+          return -np.abs(x - 3.0)
+
+      R = np.array([[0.0, 1.0], [1.0, 1.0]])
+      print(score_sequences(R, np.array([3.0, 1.0]), 0.5, value))
+    tests:
+      - name: Kleines Beispiel
+        code: |
+          got = score_sequences(np.array([[0.0, 1.0], [1.0, 1.0]]), np.array([3.0, 1.0]), 0.5, value)
+          assert close(got, [0.5, 1.0]), f"Erwartet [0.5, 1.0] (0 + 0,5·1 + 0,25·0 bzw. 1 + 0,5 + 0,25·(−2)), bekommen {got}"
+      - name: Zufällige Folgen
+        code: |
+          rr = np.random.default_rng(4)
+          R = rr.uniform(0, 1, (6, 5))
+          Xl = rr.uniform(-2, 5, 6)
+          def v2(x):
+              return 2.0 * x
+          want = np.array([sum(0.9 ** t * R[i, t] for t in range(5)) + 0.9 ** 5 * 2.0 * Xl[i] for i in range(6)])
+          got = np.asarray(score_sequences(R, Xl, 0.9, v2), dtype=float)
+          assert got.shape == (6,) and close(got, want), f"Erwartet {np.round(want, 3)}, bekommen {np.round(got, 3)}"
+      - name: Ohne Belohnung zählt nur der Endwert
+        code: |
+          got = score_sequences(np.zeros((2, 3)), np.array([0.0, 3.0]), 1.0, value)
+          assert close(got, [-3.0, 0.0]), f"Mit R = 0 und γ = 1 ist der Score nur value(x_H): erwartet [-3, 0], bekommen {got}"
+    mutants:
+      - |
+        import numpy as np
+        def score_sequences(R, X_last, gamma, value):
+            H = R.shape[1]
+            return np.sum(R * gamma ** np.arange(H), axis=1) + value(X_last)
+        def value(x):
+            return -np.abs(x - 3.0)
+      - |
+        import numpy as np
+        def score_sequences(R, X_last, gamma, value):
+            H = R.shape[1]
+            return np.sum(R * gamma ** np.arange(1, H + 1), axis=1) + gamma ** H * value(X_last)
+        def value(x):
+            return -np.abs(x - 3.0)
+      - |
+        import numpy as np
+        def score_sequences(R, X_last, gamma, value):
+            H = R.shape[1]
+            return np.sum(R * gamma ** np.arange(H), axis=1)
+        def value(x):
+            return -np.abs(x - 3.0)
+    hints:
+      - "Teilziel: abgezinste Summe der Belohnungen pro Zeile plus abgezinster Endwert."
+      - "`gamma ** np.arange(H)` ergibt $[1, \\gamma, \\gamma^2, \\dots]$; Multiplikation mit `R` wirkt zeilenweise (Broadcasting), dann `np.sum(..., axis=1)`."
+      - "`np.sum(R * gamma ** np.arange(H), axis=1) + ...`"
+      - "`return np.sum(R * gamma ** np.arange(H), axis=1) + gamma ** H * value(X_last)`"
+  - type: quiz
+    question: |
+      Welche Aussage über TD-MPC und Dreamer stimmt?
+    options:
+      - text: Dreamer lernt einen Actor in der Vorstellung und führt dessen Aktionen aus; TD-MPC plant in jedem Schritt mit MPPI und nutzt einen gelernten Wert am Horizontende.
+        correct: true
+        why: Beide lernen im latenten Raum – handeln aber verschieden.
+      - text: Beide rekonstruieren Bilder mit einem Decoder.
+        correct: false
+        why: TD-MPC verzichtet bewusst auf einen Decoder.
+      - text: TD-MPC braucht keine Wertfunktion, weil es plant.
+        correct: false
+        why: Gerade der Endwert $Q$ macht den kurzen Horizont möglich.

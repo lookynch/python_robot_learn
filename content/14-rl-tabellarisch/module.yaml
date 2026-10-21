@@ -1,0 +1,48 @@
+id: m14
+number: 14
+title: RL II – modellfrei und tabellarisch
+summary: |
+  Lernen ohne bekanntes Modell: Monte Carlo, TD(0), SARSA und Q-Learning auf Gitterwelten und CartPole – mit Erkundung, Diskretisierung und Dyna-Q als erstem gelernten „World Model“.
+depth: voll
+lessons:
+  - m14-monte-carlo
+  - m14-td
+  - m14-sarsa-qlearning
+  - m14-exploration
+  - m14-cartpole-diskret
+  - m14-dyna-q
+  - m14-checkpoint
+concepts:
+  - id: mc-prediction
+    name: Monte-Carlo-Schätzung
+    description: Werte als Mittelwert beobachteter Returns schätzen – ohne Modell, aber erst am Episodenende.
+  - id: mc-control
+    name: Monte-Carlo-Steuerung
+    description: Q(s, a) aus Returns mitteln und ε-greedy verbessern; Q statt V, weil ohne Modell kein Blick auf Folgezustände möglich ist.
+  - id: td0-update
+    name: TD(0) und TD-Fehler
+    description: "V(s) += α·(r + γ·V(s′) − V(s)) nach jedem Schritt; das Ziel enthält eine Schätzung (Bootstrapping)."
+  - id: sarsa-update
+    name: SARSA (on-policy)
+    description: "Q(s, a) += α·(r + γ·Q(s′, a′) − Q(s, a)) mit der tatsächlich gewählten nächsten Aktion a′."
+  - id: q-learning-update
+    name: Q-Learning (off-policy)
+    description: "Q(s, a) += α·(r + γ·maxₐ′ Q(s′, a′) − Q(s, a)) – lernt die greedy Policy, egal wie erkundet wird."
+  - id: on-vs-off-policy
+    name: On- vs. off-policy
+    description: On-policy bewertet die Policy, die handelt; off-policy lernt eine andere (meist greedy) Zielpolicy.
+  - id: epsilon-zerfall
+    name: ε-Zerfall
+    description: "ε schrumpft über die Episoden (z. B. ε = max(ε_min, ε₀·dᵏ)) – erst erkunden, später ausnutzen."
+  - id: optimistische-q-init
+    name: Optimistische Q-Initialisierung
+    description: Zu hohe Startwerte machen jede ausprobierte Aktion zur Enttäuschung und treiben so systematische Erkundung an.
+  - id: zustands-diskretisierung
+    name: Zustände diskretisieren
+    description: Kontinuierliche Zustände per Intervallgrenzen (np.digitize) auf Tabellenindizes abbilden; die Tabelle wächst exponentiell mit der Dimension.
+  - id: terminal-vs-abbruch
+    name: Terminal vs. Zeitlimit
+    description: Echtes Episodenende → kein Bootstrapping (V = 0); Abbruch wegen Zeitlimit → weiter mit γ·V(s′) rechnen.
+  - id: dyna-q-planen
+    name: Dyna-Q
+    description: Erlebte Übergänge in einem Tabellenmodell speichern und daraus zusätzliche Q-Updates (Planen) rechnen.

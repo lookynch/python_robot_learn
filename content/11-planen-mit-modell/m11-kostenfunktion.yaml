@@ -1,0 +1,308 @@
+id: m11-kostenfunktion
+title: Kostenfunktion und Rollout
+minutes: 9
+goals:
+  - Ein Regelziel als Kostenfunktion $c(s, u)$ formulieren und lesen
+  - Funktionen wie `env.dynamics` als Argument an eigene Funktionen übergeben
+  - Eine Aktionsfolge im Modell vorausrechnen (Rollout) und ihre Gesamtkosten bestimmen
+concepts: [plan-kosten, plan-rollout]
+steps:
+  - type: text
+    body: |
+      ## Planen heißt: im Kopf vorausrechnen
+
+      In Modul 9 hat ein PD-Regler das Pendel oben gehalten – aber hochschwingen konnte er es nicht. Jetzt drehen wir die Frage um: **Welche Folge von Drehmomenten bringt das Pendel nach oben?**
+
+      Wenn wir ein **Modell** $s_{t+1} = f(s_t, u_t)$ haben, können wir jede Kandidatenfolge $u_0, \dots, u_{H-1}$ erst **simulieren** (Rollout) und dann bewerten. Das Ziel steht als **Kosten pro Schritt** $c(s, u)$, die Folge wird nach
+
+      $$
+      J = \sum_{t=0}^{H-1} c(s_t, u_t)
+      $$
+
+      bewertet. Kleine Kosten = gut. Beim Pendel aus `lab.envs`:
+
+      $$
+      c(s, u) = \theta^2 + 0.1\,\dot\theta^2 + 0.001\,u^2 \qquad (\theta \text{ auf } [-\pi, \pi) \text{ normiert})
+      $$
+  - type: example
+    intro: |
+      `Pendulum` liefert Modell und Kosten als Funktionen. Mit $\theta = 0$ oben hängt es bei $\theta = \pi$. Das Motormoment ist auf $|u| \le 2$ N·m begrenzt.
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      env = Pendulum()
+      s = env.reset()
+      print("Start:", s, "Kosten:", round(float(env.cost(s, 0.0)), 3))
+      print("Oben:", round(float(env.cost(np.array([0.0, 0.0]), 0.0)), 3))
+
+      f = env.dynamics
+      s_neu = f(s, 2.0)
+      print("nach einem Schritt mit u = 2:", np.round(s_neu, 3))
+    subgoals:
+      - lines: [4, 5]
+        label: Umgebung anlegen und zurücksetzen
+      - lines: [6, 7]
+        label: Kosten auswerten
+      - lines: [9, 11]
+        label: Modell einen Schritt rechnen
+    after: |
+      Unten kostet ein Schritt $\pi^2 \approx 9.87$, oben 0. In Zeile 9 steht `env.dynamics` **ohne Klammern**: Die Funktion selbst wird unter dem Namen `f` gespeichert und erst in Zeile 10 aufgerufen. So kann man Modell und Kosten an einen Planer übergeben, der sie nicht kennen muss.
+  - type: predict
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum
+      env = Pendulum()
+      print(round(float(env.cost(np.array([2 * np.pi, 0.0]), 0.0)), 3))
+    options: ["0.0", "39.478", "9.87", "6.283"]
+    answer: "0.0"
+    explanation: |
+      Der Winkel wird vor dem Quadrieren auf $[-\pi, \pi)$ normiert (`angle_normalize`). $2\pi$ ist dieselbe Stellung wie 0 – oben. Ohne Normierung wären es $(2\pi)^2 \approx 39.5$, und der Planer würde eine volle Umdrehung bestrafen.
+  - type: trace
+    intro: |
+      Ein Rollout an einem Spielzeugmodell: Zustand ist eine Zahl, $f(s, u) = s + u$, Kosten $c = s^2$.
+    code: |
+      def rollout(dynamics, cost, s0, actions):
+          s = s0
+          total = 0.0
+          for u in actions:
+              total = total + cost(s, u)
+              s = dynamics(s, u)
+          return total
+
+      def dyn(s, u):
+          return s + u
+
+      def c(s, u):
+          return s ** 2
+
+      print(rollout(dyn, c, 3.0, [-1.0, -1.0, -1.0]))
+    questions:
+      - line: 6
+        hit: 2
+        var: total
+        answer: "13.0"
+        prompt: Soeben wurde `s` zum zweiten Mal aktualisiert. Welchen Wert hat `total`?
+    after: |
+      Die Kosten werden **vor** dem Schritt mit dem aktuellen Zustand bewertet: $3^2 + 2^2 + 1^2 = 14$. Der Endzustand 0 wird nicht mehr bewertet – wer das will, ergänzt Endkosten.
+  - type: explain
+    question: |
+      Ein Rollout mit konstant $u = 2$ N·m senkt die Kosten (von 592 auf 441 über 60 Schritte), aber das Pendel kommt nie nach oben. Warum?
+    options:
+      - text: "Das Schwerkraftmoment erreicht $m g l / 2 = 5$ N·m und ist größer als das maximale Motormoment von 2 N·m – das Pendel muss Schwung holen."
+        correct: true
+        why: Mit konstantem $u = 2$ verschiebt sich nur die Ruhelage um etwa 0,4 rad aus der hängenden Lage ($5\sin\varphi = 2$); das Pendel schwingt um sie herum und kommt höchstens etwa 0,85 rad aus der hängenden Lage. Nur abwechselnde Momente im richtigen Takt bauen genug Energie auf.
+      - text: Die Simulation ist zu ungenau, mit kleinerem `dt` käme es hoch.
+        correct: false
+        why: Das ist ein physikalisches Limit, kein numerisches. Auch die exakte Lösung bleibt unten.
+      - text: Die Kostenfunktion belohnt das Hochkommen nicht.
+        correct: false
+        why: Oben sind die Kosten 0, unten fast 10 pro Schritt – das Ziel ist klar. Die Folge konstanter Momente ist nur keine gute Lösung.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `rollout(dynamics, cost, s0, actions)`. Rückgabe: das Tupel `(total, states)`
+
+      - `total`: Summe der Kosten $c(s_t, u_t)$ **vor** jedem Schritt,
+      - `states`: NumPy-Array aller Zustände **inklusive** `s0`, also Länge `len(actions) + 1`.
+
+      Nutze nur die übergebenen Funktionen – so funktioniert `rollout` für jedes Modell.
+    starter: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout(dynamics, cost, s0, actions):
+          s = s0
+          total = 0.0
+          states = [s0]
+          # Schleife über die Aktionen
+          return total, np.array(states)
+
+      env = Pendulum()
+      total, states = rollout(env.dynamics, env.cost, env.reset(), np.full(60, 2.0))
+      print(round(float(total), 1), states.shape)
+      env.render(states, title="Konstant u = 2 N·m")
+    solution: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout(dynamics, cost, s0, actions):
+          s = s0
+          total = 0.0
+          states = [s0]
+          for u in actions:
+              total = total + cost(s, u)
+              s = dynamics(s, u)
+              states.append(s)
+          return total, np.array(states)
+
+      env = Pendulum()
+      total, states = rollout(env.dynamics, env.cost, env.reset(), np.full(60, 2.0))
+      print(round(float(total), 1), states.shape)
+      env.render(states, title="Konstant u = 2 N·m")
+    tests:
+      - name: Spielzeugmodell
+        code: |
+          def dyn_t(s, u):
+              return s + u
+          def cost_t(s, u):
+              return s ** 2 + u ** 2
+          total_t, states_t = rollout(dyn_t, cost_t, 3.0, [-1.0, -1.0, -1.0])
+          assert close(total_t, 17.0), f"Kosten (9+1) + (4+1) + (1+1) = 17 erwartet, bekommen {total_t}"
+          assert close(states_t, [3.0, 2.0, 1.0, 0.0]), f"Zustände [3, 2, 1, 0] erwartet, bekommen {states_t}"
+      - name: Pendel bleibt unten
+        code: |
+          env_t = Pendulum()
+          total_t, states_t = rollout(env_t.dynamics, env_t.cost, env_t.reset(), np.zeros(40))
+          assert np.shape(states_t) == (41, 2), f"40 Aktionen → 41 Zustände der Form (41, 2), bekommen {np.shape(states_t)}"
+          assert close(total_t, 40 * np.pi ** 2, tol=0.01), f"40 Schritte unten kosten 40·π² ≈ 394.78, bekommen {total_t}"
+      - name: Zustände passen zum Modell
+        code: |
+          env_t = Pendulum()
+          a_t = np.random.default_rng(4).uniform(-2, 2, size=15)
+          _, states_t = rollout(env_t.dynamics, env_t.cost, np.array([0.5, 0.0]), a_t)
+          for k in range(15):
+              soll = env_t.dynamics(states_t[k], a_t[k])
+              assert close(states_t[k + 1], soll), f"states[{k + 1}] passt nicht zu dynamics(states[{k}], actions[{k}])"
+    mutants:
+      - |
+        import numpy as np
+        def rollout(dynamics, cost, s0, actions):
+            s = s0
+            total = 0.0
+            states = [s0]
+            for u in actions:
+                s = dynamics(s, u)
+                total = total + cost(s, u)
+                states.append(s)
+            return total, np.array(states)
+      - |
+        import numpy as np
+        def rollout(dynamics, cost, s0, actions):
+            s = s0
+            total = 0.0
+            states = [s0]
+            for u in actions:
+                total = cost(s, u)
+                s = dynamics(s, u)
+                states.append(s)
+            return total, np.array(states)
+      - |
+        import numpy as np
+        def rollout(dynamics, cost, s0, actions):
+            s = s0
+            total = 0.0
+            states = []
+            for u in actions:
+                total = total + cost(s, u)
+                s = dynamics(s, u)
+                states.append(s)
+            return total, np.array(states)
+      - |
+        import numpy as np
+        def rollout(dynamics, cost, s0, actions):
+            s = s0
+            total = 0.0
+            states = [s0]
+            for u in actions:
+                total = total + cost(s, u)
+                s = dynamics(s0, u)
+                states.append(s)
+            return total, np.array(states)
+    hints:
+      - "Teilziel: Schleife über alle Aktionen – Kosten addieren, Zustand weiterrechnen, Zustand speichern."
+      - Die Reihenfolge zählt – erst `cost(s, u)` mit dem **aktuellen** Zustand, dann `s = dynamics(s, u)`.
+      - |
+        ```python
+        for u in actions:
+            total = total + cost(s, u)
+            ...
+        ```
+      - "Im Schleifenrumpf: `total = total + cost(s, u)`, `s = dynamics(s, u)`, `states.append(s)`"
+  - type: quiz
+    question: |
+      Welche Kostenfunktion passt, wenn der Arm mit der Spitze `fk(q)` den Punkt `ziel` erreichen und dabei nicht wild zappeln soll?
+    options:
+      - text: "`np.linalg.norm(fk(q) - ziel) + 0.01 * np.sum(u ** 2)`"
+        correct: true
+        why: Abstand zum Ziel plus kleine Strafe auf große Geschwindigkeiten – genau so ist `Reacher2D.cost` aufgebaut.
+      - text: "`-np.linalg.norm(fk(q) - ziel)`"
+        correct: false
+        why: Mit Minuszeichen würde ein **großer** Abstand belohnt, weil Planer Kosten minimieren.
+      - text: "`np.sum(q ** 2)`"
+        correct: false
+        why: Das bestraft nur Gelenkwinkel ungleich 0 – das Ziel kommt gar nicht vor.
+cards:
+  - id: m11-c-kosten-reihenfolge
+    concept: plan-rollout
+    variants:
+      - type: predict
+        code: |
+          s, total = 2.0, 0.0
+          for u in [1.0, 1.0]:
+              total = total + s ** 2
+              s = s + u
+          print(total, s)
+        options: ["13.0 4.0", "25.0 4.0", "29.0 4.0", "13.0 3.0"]
+        answer: "13.0 4.0"
+        explanation: Kosten vor jedem Schritt – $2^2 + 3^2 = 13$; der Endzustand 4 wird nicht bewertet.
+      - type: predict
+        code: |
+          s, total = 1.0, 0.0
+          for u in [-0.5, -0.5]:
+              total = total + s ** 2 + u ** 2
+              s = s + u
+          print(total, s)
+        options: ["1.75 0.0", "1.25 0.0", "0.75 0.0", "1.75 -1.0"]
+        answer: "1.75 0.0"
+        explanation: "Schritt 1: $1 + 0.25$, Schritt 2: $0.25 + 0.25$ – zusammen 1,75."
+  - id: m11-c-funktion-als-wert
+    concept: plan-rollout
+    variants:
+      - type: quiz
+        question: Was übergibt `rollout(env.dynamics, env.cost, s0, a)` als erstes Argument?
+        options:
+          - text: Die Funktion `env.dynamics` selbst, damit `rollout` sie aufrufen kann
+            correct: true
+            why: Ohne Klammern ist `env.dynamics` ein Wert vom Typ Funktion.
+          - text: Das Ergebnis eines Modellschritts
+            correct: false
+            why: Dafür müsste `env.dynamics(s, u)` mit Klammern und Argumenten dastehen.
+          - text: Einen Fehler, weil Argumente fehlen
+            correct: false
+            why: Aufgerufen wird die Funktion erst in `rollout` – dort mit Argumenten.
+      - type: quiz
+        question: Warum bekommt ein Planer Modell und Kosten als Funktionsargumente?
+        options:
+          - text: So funktioniert derselbe Planer für Pendel, Arm oder ein gelerntes Modell.
+            correct: true
+            why: Der Planer braucht nur „Zustand + Aktion → nächster Zustand“ und „Kosten“, nicht die Physik dahinter.
+          - text: Weil Python sonst die Umgebung nicht importieren kann
+            correct: false
+            why: Mit Importen hat das nichts zu tun – es geht um Wiederverwendbarkeit.
+          - text: Damit die Simulation schneller läuft
+            correct: false
+            why: Die Übergabe einer Funktion macht nichts schneller; sie macht den Code allgemein.
+  - id: m11-c-kosten-normiert
+    concept: plan-kosten
+    variants:
+      - type: quiz
+        question: Warum normiert `Pendulum.cost` den Winkel auf $[-\pi, \pi)$, bevor er quadriert wird?
+        options:
+          - text: "$\\theta = 2\\pi$ ist dieselbe Stellung wie $\\theta = 0$ und soll auch nichts kosten."
+            correct: true
+            why: Ohne Normierung würde eine volle Umdrehung bestraft, obwohl das Pendel oben steht.
+          - text: Damit die Kosten nie größer als 1 werden
+            correct: false
+            why: Unten kostet ein Schritt fast $\pi^2 \approx 9.9$.
+          - text: Weil `np.sin` sonst falsche Werte liefert
+            correct: false
+            why: Sinus ist $2\pi$-periodisch; die Normierung betrifft nur das Quadrat in den Kosten.
+      - type: predict
+        code: |
+          import numpy as np
+          from lab.envs import angle_normalize
+          print(round(float(angle_normalize(3 * np.pi / 2)), 3))
+        options: ["-1.571", "4.712", "1.571", "-4.712"]
+        answer: "-1.571"
+        explanation: $3\pi/2$ ist dieselbe Stellung wie $-\pi/2$ – waagrecht, eine Vierteldrehung im Uhrzeigersinn von oben.

@@ -1,0 +1,384 @@
+id: m15-dqn-ppo
+title: DQN und PPO – die Bausteine im Kleinen
+minutes: 14
+goals:
+  - Replay Buffer und Target-Netz von DQN begründen und selbst bauen
+  - Das PPO-Clipping-Ziel berechnen und deuten
+  - Einschätzen, was davon im Browser geht und was nicht
+concepts: [dqn-replay-target, toedliche-triade, ppo-clipping]
+steps:
+  - type: text
+    body: |
+      ## DQN: Q-Learning mit neuronalem Netz
+
+      **DQN** (Mnih et al., 2013; erweitert 2015 in *Nature*) lernte in der Nature-Version 49 Atari-Spiele direkt aus Bildern – mit einem Faltungsnetz als $Q(s, a; \theta)$ und denselben Hyperparametern für alle Spiele. Q-Learning mit einem Netz ist allerdings instabil. Sutton & Barto nennen die Ursache die **tödliche Triade**: Funktionsapproximation + Bootstrapping + off-policy-Lernen können zusammen divergieren.
+
+      DQN entschärft das mit zwei Tricks:
+
+      1. **Replay Buffer:** Übergänge $(s, a, r, s', \text{done})$ speichern und zufällige Minibatches daraus lernen. Aufeinanderfolgende Schritte sind stark korreliert – zufälliges Ziehen bricht das auf, und jede Erfahrung wird mehrfach genutzt.
+      2. **Target-Netz:** Das Ziel $y = r + \gamma \max_{a'} Q(s', a'; \theta^-)$ nutzt eine **eingefrorene Kopie** $\theta^-$, die nur alle $C$ Schritte aktualisiert wird. Sonst verschiebt jedes Update auch das eigene Ziel. (Das Target-Netz kam erst in der Version von 2015 dazu.)
+  - type: exercise
+    mode: make
+    prompt: |
+      Baue einen `ReplayBuffer` mit fester Kapazität:
+
+      - `add(transition)` hängt einen Übergang an; ist die Kapazität überschritten, fliegt der **älteste** raus.
+      - `sample(n, rng)` gibt eine Liste von `n` zufällig (mit Zurücklegen) gezogenen Übergängen zurück.
+      - `len(buffer)` liefert die aktuelle Anzahl.
+    starter: |
+      class ReplayBuffer:
+          def __init__(self, capacity):
+              self.capacity = capacity
+              self.data = []
+
+          def add(self, transition):
+              pass
+
+          def sample(self, n, rng):
+              pass
+
+          def __len__(self):
+              return len(self.data)
+    solution: |
+      class ReplayBuffer:
+          def __init__(self, capacity):
+              self.capacity = capacity
+              self.data = []
+
+          def add(self, transition):
+              self.data.append(transition)
+              if len(self.data) > self.capacity:
+                  self.data.pop(0)
+
+          def sample(self, n, rng):
+              idx = rng.integers(len(self.data), size=n)
+              return [self.data[i] for i in idx]
+
+          def __len__(self):
+              return len(self.data)
+    tests:
+      - name: Kapazität wird eingehalten
+        code: |
+          buf = ReplayBuffer(3)
+          for i in range(5):
+              buf.add((i, 0, 0.0, i + 1, False))
+          assert len(buf) == 3, f"Nach 5 add() bei Kapazität 3 sollten 3 Übergänge drin sein, sind {len(buf)}"
+      - name: Der älteste fliegt raus
+        code: |
+          import numpy as np
+          buf = ReplayBuffer(3)
+          for i in range(5):
+              buf.add((i, 0, 0.0, i + 1, False))
+          got = {t[0] for t in buf.sample(200, np.random.default_rng(0))}
+          assert got == {2, 3, 4}, f"Im Puffer sollten die neuesten Übergänge 2, 3, 4 liegen; gezogen wurden {sorted(got)}"
+      - name: Stichprobe hat die richtige Größe
+        code: |
+          import numpy as np
+          buf = ReplayBuffer(100)
+          for i in range(10):
+              buf.add((i, 1, -1.0, i, False))
+          batch = buf.sample(32, np.random.default_rng(1))
+          assert len(batch) == 32, f"sample(32, rng) sollte 32 Übergänge liefern, liefert {len(batch)}"
+          assert len({t[0] for t in batch}) > 3, "Die Stichprobe sollte zufällig verschiedene Übergänge enthalten."
+    mutants:
+      - |
+        class ReplayBuffer:
+            def __init__(self, capacity):
+                self.capacity = capacity
+                self.data = []
+
+            def add(self, transition):
+                self.data.append(transition)
+
+            def sample(self, n, rng):
+                idx = rng.integers(len(self.data), size=n)
+                return [self.data[i] for i in idx]
+
+            def __len__(self):
+                return len(self.data)
+      - |
+        class ReplayBuffer:
+            def __init__(self, capacity):
+                self.capacity = capacity
+                self.data = []
+
+            def add(self, transition):
+                self.data.append(transition)
+                if len(self.data) > self.capacity:
+                    self.data.pop()
+
+            def sample(self, n, rng):
+                idx = rng.integers(len(self.data), size=n)
+                return [self.data[i] for i in idx]
+
+            def __len__(self):
+                return len(self.data)
+      - |
+        class ReplayBuffer:
+            def __init__(self, capacity):
+                self.capacity = capacity
+                self.data = []
+
+            def add(self, transition):
+                self.data.append(transition)
+                if len(self.data) > self.capacity:
+                    self.data.pop(0)
+
+            def sample(self, n, rng):
+                return self.data[-n:]
+
+            def __len__(self):
+                return len(self.data)
+    hints:
+      - "Teilziel: anhängen und bei Überlauf vorne entfernen; zum Ziehen zufällige Indizes erzeugen."
+      - "`list.pop(0)` entfernt das **erste** (älteste) Element, `pop()` das letzte. `rng.integers(k, size=n)` liefert `n` Indizes aus `0 … k−1`."
+      - "In `add`: `self.data.append(transition)` und `if len(self.data) > self.capacity: self.data.pop(0)`"
+      - "In `sample`: `idx = rng.integers(len(self.data), size=n)` und `return [self.data[i] for i in idx]`"
+  - type: predict
+    intro: |
+      DQN-Ziele für einen Minibatch aus zwei Übergängen, vektorisiert. Der zweite endet in einem Endzustand.
+    code: |
+      import numpy as np
+      q_target_next = np.array([[1.0, 3.0],
+                                [2.0, 0.5]])     # Q(s', ·; θ⁻)
+      r = np.array([0.0, 1.0])
+      done = np.array([0.0, 1.0])
+      y = r + 0.9 * q_target_next.max(axis=1) * (1 - done)
+      print(y)
+    options: ["[2.7 1. ]", "[2.7 2.8]", "[3. 2.]", "[0.9 1. ]"]
+    answer: "[2.7 1. ]"
+    explanation: |
+      Zeile 1: $0 + 0.9 \cdot 3 = 2.7$. Zeile 2: `1 - done` ist 0, also nur $r = 1$. `max(axis=1)` nimmt das Maximum **pro Übergang** über die Aktionen.
+  - type: explain
+    question: |
+      Warum rechnet DQN das Ziel mit einem **eingefrorenen** Target-Netz $\theta^-$ statt mit dem aktuellen Netz?
+    options:
+      - text: Sonst ändert jedes Update auch das Ziel, dem es folgen soll – die Schätzung jagt sich selbst und kann aufschwingen.
+        correct: true
+        why: Mit $\theta^-$ bleibt das Ziel für $C$ Schritte fest; das Problem wird für eine Weile zu normalem überwachtem Lernen.
+      - text: Weil das Target-Netz genauer ist.
+        correct: false
+        why: Es ist eine **ältere** Kopie, also eher ungenauer – dafür stabil.
+      - text: Damit weniger Speicher gebraucht wird.
+        correct: false
+        why: Eine zweite Kopie des Netzes braucht sogar mehr Speicher.
+      - text: Weil Q-Learning ohne zweites Netz on-policy wäre.
+        correct: false
+        why: On/off-policy hängt vom Ziel ($\max$ vs. tatsächliche Aktion) ab, nicht von der Zahl der Netze.
+  - type: example
+    title: DQN-Spielversion
+    intro: |
+      Die DQN-Mechanik mit der linearen Q-Funktion aus der ersten Lektion statt eines Faltungsnetzes: Replay Buffer (Kapazität 2000), Minibatch von 8 Übergängen pro Schritt, Target-Gewichte `W_target` alle 50 Schritte kopiert.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      env = GridWorld(["S......."] + ["........"] * 6 + [".......G"], max_steps=200)
+
+      def features(s):
+          r, c = divmod(s, 8)
+          phi = np.zeros(16)
+          phi[r], phi[8 + c] = 1.0, 1.0
+          return phi
+
+      rng = np.random.default_rng(0)
+      W = np.zeros((4, 16))
+      W_target, buffer, steps, returns = W.copy(), [], 0, []
+      for k in range(60):
+          s, done, G = env.reset(), False, 0.0
+          while not done:
+              a = int(rng.integers(4)) if rng.random() < 0.1 else int(np.argmax(W @ features(s)))
+              s2, r, done = env.step(a)
+              buffer.append((features(s), a, r, features(s2), env.is_terminal(s2)))
+              if len(buffer) > 2000:
+                  buffer.pop(0)
+              for i in rng.integers(len(buffer), size=8):
+                  phi, a_i, r_i, phi2, end = buffer[i]
+                  y = r_i if end else r_i + np.max(W_target @ phi2)
+                  W[a_i] += 0.1 * (y - W[a_i] @ phi) * phi
+              steps += 1
+              if steps % 50 == 0:
+                  W_target = W.copy()
+              s, G = s2, G + r
+          returns.append(G)
+
+      lab.plot(returns, title="DQN-Spielversion: Return pro Episode", xlabel="Episode", ylabel="Return")
+      Q = np.array([W @ features(s) for s in range(env.n_states)])
+      env.render(values=Q.max(axis=1), policy=Q.argmax(axis=1), title="Gelernte Werte und Policy")
+    subgoals:
+      - lines: [13, 15]
+        label: Netz, Target-Kopie und Puffer anlegen
+      - lines: [19, 23]
+        label: Handeln und Übergang speichern
+      - lines: [24, 27]
+        label: Minibatch aus dem Puffer lernen
+      - lines: [28, 30]
+        label: Target-Netz synchronisieren
+      - lines: [34, 36]
+        label: Ergebnis zeigen
+    heavy: true
+    after: |
+      Hier lernt die Spielversion nicht schneller als einfaches lineares Q-Learning – die Aufgabe ist zu klein und die Merkmale passen zu gut. Die Tricks lohnen sich bei **Netzen**, die ohne sie leicht divergieren. Ehrlich: Echtes DQN auf Atari braucht ein Faltungsnetz und zig Millionen Bilder Training – das läuft nicht im Browser. In Modul 19 lernst du mit PyTorch das Werkzeug kennen, mit dem man solche Netze baut.
+  - type: text
+    body: |
+      ## PPO: Policy Gradient mit Sicherheitsgurt
+
+      Policy-Gradient-Schritte sind heikel: Ein zu großer Schritt kann die Policy ruinieren, und die gesammelten Daten passen dann nicht mehr. **PPO** (Proximal Policy Optimization, Schulman et al., 2017) nutzt einen Batch mehrfach und begrenzt, wie weit sich die Policy entfernen darf. Mit dem Verhältnis $\rho = \pi_\text{neu}(a \mid s) / \pi_\text{alt}(a \mid s)$ und einem Advantage $\hat A$ (z. B. vom Critic):
+
+      $$L^\text{CLIP} = \mathbb{E}\Big[\min\big(\rho \hat A,\; \operatorname{clip}(\rho, 1-\varepsilon, 1+\varepsilon)\, \hat A\big)\Big]$$
+
+      Im Paper ist $\varepsilon = 0.2$. Ist $\hat A > 0$, bringt ein $\rho$ über $1.2$ nichts mehr; ist $\hat A < 0$, bringt ein $\rho$ unter $0.8$ nichts mehr. Das $\min$ sorgt dafür, dass das Ziel eine **pessimistische** Schätzung bleibt. PPO ist on-policy und heute ein Standardverfahren, z. B. für Laufroboter in der Simulation.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `ppo_objective(ratio, adv, eps=0.2)`: elementweise $\min(\rho \hat A, \operatorname{clip}(\rho, 1-\varepsilon, 1+\varepsilon)\,\hat A)$, danach der **Mittelwert**. Nutze `np.minimum` und `np.clip`.
+    starter: |
+      import numpy as np
+
+      def ppo_objective(ratio, adv, eps=0.2):
+          ratio, adv = np.asarray(ratio, dtype=float), np.asarray(adv, dtype=float)
+          # ungeclippter Term, geclippter Term, Minimum, Mittelwert
+          pass
+    solution: |
+      import numpy as np
+
+      def ppo_objective(ratio, adv, eps=0.2):
+          ratio, adv = np.asarray(ratio, dtype=float), np.asarray(adv, dtype=float)
+          unclipped = ratio * adv
+          clipped = np.clip(ratio, 1 - eps, 1 + eps) * adv
+          return float(np.mean(np.minimum(unclipped, clipped)))
+    tests:
+      - name: Ohne Änderung der Policy
+        code: |
+          v = ppo_objective([1.0, 1.0], [2.0, -1.0])
+          assert v is not None and close(v, 0.5), f"Bei ratio = 1 ist das Ziel der mittlere Advantage 0.5, bekommen {v}"
+      - name: Positiver Advantage wird gedeckelt
+        code: |
+          v = ppo_objective([1.5], [1.0])
+          assert close(v, 1.2), f"ratio 1.5, A = 1: min(1.5, 1.2) = 1.2 erwartet, bekommen {v}"
+          v = ppo_objective([0.5], [1.0])
+          assert close(v, 0.5), f"ratio 0.5, A = 1: min(0.5, 0.8) = 0.5 erwartet, bekommen {v}"
+      - name: Negativer Advantage
+        code: |
+          v = ppo_objective([0.5], [-1.0])
+          assert close(v, -0.8), f"ratio 0.5, A = −1: min(−0.5, −0.8) = −0.8 erwartet, bekommen {v}"
+          v = ppo_objective([1.5], [-1.0])
+          assert close(v, -1.5), f"ratio 1.5, A = −1: min(−1.5, −1.2) = −1.5 erwartet, bekommen {v}"
+      - name: Anderes epsilon
+        code: |
+          v = ppo_objective([2.0, 0.2], [1.0, -2.0], eps=0.5)
+          assert close(v, 0.25), f"Mit eps = 0.5: (min(2, 1.5) + min(−0.4, −1.0)) / 2 = 0.25 erwartet, bekommen {v}"
+    mutants:
+      - |
+        import numpy as np
+
+        def ppo_objective(ratio, adv, eps=0.2):
+            ratio, adv = np.asarray(ratio, dtype=float), np.asarray(adv, dtype=float)
+            return float(np.mean(np.maximum(ratio * adv, np.clip(ratio, 1 - eps, 1 + eps) * adv)))
+      - |
+        import numpy as np
+
+        def ppo_objective(ratio, adv, eps=0.2):
+            ratio, adv = np.asarray(ratio, dtype=float), np.asarray(adv, dtype=float)
+            return float(np.mean(np.clip(ratio, 1 - eps, 1 + eps) * adv))
+      - |
+        import numpy as np
+
+        def ppo_objective(ratio, adv, eps=0.2):
+            ratio, adv = np.asarray(ratio, dtype=float), np.asarray(adv, dtype=float)
+            return float(np.mean(np.minimum(ratio * adv, np.clip(ratio, 1 - eps, 1 + eps))))
+      - |
+        import numpy as np
+
+        def ppo_objective(ratio, adv, eps=0.2):
+            ratio, adv = np.asarray(ratio, dtype=float), np.asarray(adv, dtype=float)
+            return float(np.mean(np.minimum(ratio * adv, np.clip(ratio, 0.8, 1.2) * adv)))
+    hints:
+      - "Teilziel: zwei Terme elementweise bilden, das kleinere nehmen, mitteln."
+      - "Der geclippte Term ist `np.clip(ratio, 1 - eps, 1 + eps) * adv` – der Advantage gehört **in** beide Terme."
+      - "`return float(np.mean(np.minimum(ratio * adv, np.clip(ratio, 1 - eps, 1 + eps) * adv)))`"
+  - type: quiz
+    question: |
+      Für einen Übergang mit $\hat A = +2$ ist das Verhältnis schon $\rho = 1.4$ ($\varepsilon = 0.2$). Was bewirkt das PPO-Ziel für diesen Übergang?
+    options:
+      - text: Er trägt keinen Gradienten mehr bei – das Ziel ist bei $1.2 \cdot 2$ gedeckelt.
+        correct: true
+        why: Der geclippte Term ist kleiner und konstant in $\rho$; die Policy wird für diese Aktion nicht weiter verschoben.
+      - text: Die Policy wird zurück auf $\rho = 1$ gezogen.
+        correct: false
+        why: Das Clipping zieht nicht zurück, es nimmt nur den Anreiz weg, weiterzugehen.
+      - text: Der Übergang wird noch stärker verstärkt, weil $\rho \hat A = 2.8$ groß ist.
+        correct: false
+        why: Das $\min$ wählt $2.4$, nicht $2.8$.
+      - text: Der Advantage wird auf $0.2$ begrenzt.
+        correct: false
+        why: Geclippt wird das Verhältnis $\rho$, nicht $\hat A$.
+cards:
+  - id: m15-c-dqn-ziel
+    concept: dqn-replay-target
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          q_next = np.array([0.5, 2.0, 1.0])     # Q(s', ·; θ⁻)
+          r, gamma, done = 1.0, 0.5, False
+          print(r + gamma * q_next.max() * (not done))
+        options: ["2.0", "1.25", "3.0", "1.0"]
+        answer: "2.0"
+        explanation: "1 + 0.5·2 = 2: das Maximum aus dem Target-Netz."
+      - type: predict
+        code: |
+          import numpy as np
+          q_next = np.array([4.0, 9.0])
+          r, gamma, done = -1.0, 0.9, True
+          print(r + gamma * q_next.max() * (not done))
+        options: ["-1.0", "7.1", "8.1", "0.0"]
+        answer: "-1.0"
+        explanation: Bei einem Endzustand zählt nur die Belohnung.
+  - id: m15-c-dqn-tricks
+    concept: dqn-replay-target
+    variants:
+      - type: quiz
+        question: Wogegen hilft der **Replay Buffer** in DQN vor allem?
+        options:
+          - text: Gegen stark korrelierte aufeinanderfolgende Trainingsdaten – und er nutzt Erfahrung mehrfach
+            correct: true
+            why: Zufällige Minibatches aus dem Puffer ähneln eher unabhängigen Stichproben.
+          - text: Gegen ein Ziel, das sich mit jedem Update verschiebt
+            correct: false
+            why: Dafür ist das Target-Netz da.
+          - text: Gegen zu wenig Erkundung
+            correct: false
+            why: Erkundet wird weiterhin ε-greedy; der Puffer speichert nur.
+      - type: quiz
+        question: Welche drei Zutaten bilden die „tödliche Triade“?
+        options:
+          - text: Funktionsapproximation, Bootstrapping, off-policy-Lernen
+            correct: true
+            why: Jede einzeln ist harmlos; zusammen kann das Lernen divergieren.
+          - text: Neuronale Netze, große Lernrate, kleine Batches
+            correct: false
+            why: Das sind Stabilitätsthemen, aber nicht die Triade aus Sutton & Barto.
+          - text: Exploration, Exploitation, Diskont
+            correct: false
+            why: Diese Begriffe gehören zu jedem RL-Verfahren.
+  - id: m15-c-ppo-clip
+    concept: ppo-clipping
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          ratio, adv, eps = 0.6, -1.0, 0.2
+          print(min(ratio * adv, np.clip(ratio, 1 - eps, 1 + eps) * adv))
+        options: ["-0.8", "-0.6", "0.6", "-1.2"]
+        answer: "-0.8"
+        explanation: "min(−0.6, −0.8) = −0.8. Die Aktion noch unwahrscheinlicher zu machen, bringt nichts mehr."
+      - type: predict
+        code: |
+          import numpy as np
+          ratio, adv, eps = 1.1, 3.0, 0.2
+          print(round(min(ratio * adv, np.clip(ratio, 1 - eps, 1 + eps) * adv), 2))
+        options: ["3.3", "3.6", "3.0", "0.6"]
+        answer: "3.3"
+        explanation: Innerhalb von $[0.8, 1.2]$ greift das Clipping nicht.

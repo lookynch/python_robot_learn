@@ -1,0 +1,256 @@
+id: m10-erwartung-varianz
+title: Erwartungswert und Varianz
+minutes: 8
+goals:
+  - Erwartungswert und Varianz einer diskreten Verteilung in NumPy berechnen
+  - Analytische Werte mit Stichproben-Schätzungen vergleichen
+  - "`np.var` mit und ohne `ddof=1` richtig einsetzen"
+concepts: [wk-erwartungswert, wk-varianz]
+steps:
+  - type: text
+    body: |
+      ## Kurz aufgefrischt
+
+      Für eine diskrete Zufallsvariable mit Werten $x_i$ und Wahrscheinlichkeiten $p_i$:
+
+      $$
+      \mu = E[X] = \sum_i x_i\,p_i \qquad \operatorname{Var}(X) = E[(X-\mu)^2] = \sum_i (x_i-\mu)^2\,p_i
+      $$
+
+      Die Standardabweichung $\sigma = \sqrt{\operatorname{Var}(X)}$ hat dieselbe Einheit wie $X$, die Varianz die Einheit zum Quadrat.
+
+      In NumPy sind beide Summen **eine Zeile**: Werte und Wahrscheinlichkeiten als Arrays, elementweise multiplizieren, summieren. Und aus Stichproben schätzt man dasselbe mit `np.mean` und `np.var`.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      werte = np.arange(1, 7)
+      p = np.full(6, 1 / 6)
+      mu = np.sum(werte * p)
+      var = np.sum((werte - mu) ** 2 * p)
+      print("analytisch:", round(mu, 4), round(var, 4))
+
+      rng = np.random.default_rng(0)
+      w = rng.integers(1, 7, size=10000)
+      print("empirisch: ", round(np.mean(w), 3), round(np.var(w), 3))
+
+      laufend = np.cumsum(w) / np.arange(1, len(w) + 1)
+      fig = lab.Figure(title="Laufender Mittelwert", xlabel="Anzahl Würfe", ylabel="Mittelwert")
+      fig.line(laufend, label="Stichprobe")
+      fig.hline(mu, label="E[X] = 3.5")
+      fig.show()
+    subgoals:
+      - lines: [4, 5]
+        label: Verteilung als Arrays
+      - lines: [6, 8]
+        label: Analytisch berechnen
+      - lines: [10, 12]
+        label: Aus Stichproben schätzen
+      - lines: [14, 18]
+        label: Konvergenz plotten
+    after: |
+      `np.cumsum(w)` bildet die laufenden Summen $w_1, w_1 + w_2, \dots$; geteilt durch $1, 2, \dots$ ergibt das den laufenden Mittelwert. Er springt anfangs stark und nähert sich dann $3.5$ – das **Gesetz der großen Zahlen**. Der Erwartungswert muss übrigens kein möglicher Wert sein: Eine 3,5 würfelt niemand.
+  - type: predict
+    code: |
+      import numpy as np
+      x = np.array([1.0, 2.0, 3.0, 4.0])
+      print(np.mean(x), np.var(x))
+    options: ["2.5 1.25", "2.5 1.6666666666666667", "2.5 1.118033988749895", "2.5 5.0"]
+    answer: "2.5 1.25"
+    explanation: |
+      Abweichungen $-1.5, -0.5, 0.5, 1.5$, Quadrate $2.25, 0.25, 0.25, 2.25$, Summe $5$, geteilt durch $N = 4$: $1.25$. `np.var` teilt standardmäßig durch $N$ (nicht $N-1$) und liefert die Varianz, nicht die Standardabweichung.
+  - type: explain
+    question: |
+      `np.var(x, ddof=1)` teilt durch $N - 1$ statt durch $N$. Wann und warum nimmt man das?
+    options:
+      - text: Wenn man aus einer Stichprobe die Varianz der Verteilung schätzt – weil $\mu$ aus denselben Daten geschätzt wurde, wäre $1/N$ im Mittel zu klein.
+        correct: true
+        why: Der Stichprobenmittelwert liegt immer „optimal“ in den Daten, die Abweichungen sind dadurch systematisch etwas kleiner. $N-1$ korrigiert das (erwartungstreue Schätzung). Für große $N$ ist der Unterschied winzig.
+      - text: Immer, weil `np.var` ohne `ddof` falsch rechnet.
+        correct: false
+        why: Ohne `ddof` ist es die exakte Varianz der Werte selbst (z. B. wenn alle Werte gleich wahrscheinlich sind). Beides ist richtig – für unterschiedliche Fragen.
+      - text: Damit die Varianz die gleiche Einheit wie die Daten bekommt.
+        correct: false
+        why: Die Einheit bleibt quadriert. Dafür zieht man die Wurzel (Standardabweichung).
+      - text: Nur bei diskreten Zufallsvariablen.
+        correct: false
+        why: Die Korrektur betrifft das Schätzen aus Stichproben – egal ob diskret oder stetig.
+  - type: predict
+    intro: |
+      $X$ ist 0 oder 1 mit je Wahrscheinlichkeit $0.5$, also $E[X] = 0.5$ und $\operatorname{Var}(X) = 0.25$. Was ergibt sich für $Y = 2X + 3$?
+    code: |
+      import numpy as np
+      werte = np.array([0.0, 1.0])
+      p = np.array([0.5, 0.5])
+      y = 2 * werte + 3
+      mu_y = np.sum(y * p)
+      var_y = np.sum((y - mu_y) ** 2 * p)
+      print(mu_y, var_y)
+    options: ["4.0 1.0", "4.0 0.5", "4.0 3.25", "3.5 1.0"]
+    answer: "4.0 1.0"
+    explanation: |
+      $E[aX+b] = a\,E[X] + b = 4$. Die Verschiebung $b$ ändert die Streuung nicht, der Faktor geht **quadratisch** ein: $\operatorname{Var}(aX+b) = a^2 \operatorname{Var}(X) = 4 \cdot 0.25 = 1$.
+  - type: fill
+    fading: true
+    prompt: |
+      Ein Greifer fasst beim 1., 2. oder 3. Versuch (Werte 0, 1, 2 = Anzahl Fehlversuche) mit den angegebenen Wahrscheinlichkeiten. Ergänze die Operatoren für Erwartungswert und Varianz.
+    code: |
+      import numpy as np
+      werte = np.array([0.0, 1.0, 2.0])
+      p = np.array([0.5, 0.3, 0.2])
+      mu = np.sum(werte ___ p)
+      var = np.sum((werte - mu) ___ 2 * p)
+      print(round(mu, 2), round(var, 2))
+    blanks:
+      - answer: "*"
+        options: ["*", "+", "/"]
+      - answer: "**"
+        options: ["**", "*", "//"]
+    expect_output: "0.7 0.61"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `erwartung_varianz(werte, p)`, die für eine diskrete Verteilung das Tupel `(mu, var)` zurückgibt. `werte` und `p` sind gleich lange Arrays, `p` summiert sich zu 1.
+    starter: |
+      import numpy as np
+
+      def erwartung_varianz(werte, p):
+          # dein Code
+          pass
+
+      print(erwartung_varianz(np.arange(1, 7), np.full(6, 1 / 6)))
+    solution: |
+      import numpy as np
+
+      def erwartung_varianz(werte, p):
+          mu = np.sum(werte * p)
+          var = np.sum((werte - mu) ** 2 * p)
+          return mu, var
+
+      print(erwartung_varianz(np.arange(1, 7), np.full(6, 1 / 6)))
+    tests:
+      - name: Würfel
+        code: |
+          r = erwartung_varianz(np.arange(1, 7), np.full(6, 1 / 6))
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          mu, var = r
+          assert close(mu, 3.5), f"E[X] beim Würfel ist 3.5, bekommen {mu}"
+          assert close(var, 35 / 12), f"Var(X) beim Würfel ist 35/12 ≈ 2.9167, bekommen {var}"
+      - name: Ungleiche Wahrscheinlichkeiten
+        code: |
+          mu, var = erwartung_varianz(np.array([0.0, 1.0]), np.array([0.7, 0.3]))
+          assert close(mu, 0.3), f"Für p = [0.7, 0.3] ist E[X] = 0.3, bekommen {mu}"
+          assert close(var, 0.21), f"Für p = [0.7, 0.3] ist Var(X) = 0.3·0.7 = 0.21, bekommen {var}"
+      - name: Drei Werte
+        code: |
+          mu, var = erwartung_varianz(np.array([-1.0, 0.0, 4.0]), np.array([0.25, 0.5, 0.25]))
+          assert close(mu, 0.75), f"E[X] sollte 0.75 sein, bekommen {mu}"
+          assert close(var, 3.6875), f"Var(X) sollte 3.6875 sein, bekommen {var}"
+    mutants:
+      - |
+        import numpy as np
+        def erwartung_varianz(werte, p):
+            mu = np.mean(werte)
+            return mu, np.sum((werte - mu) ** 2 * p)
+      - |
+        import numpy as np
+        def erwartung_varianz(werte, p):
+            mu = np.sum(werte * p)
+            return mu, np.var(werte)
+      - |
+        import numpy as np
+        def erwartung_varianz(werte, p):
+            mu = np.sum(werte * p)
+            return mu, np.sqrt(np.sum((werte - mu) ** 2 * p))
+      - |
+        import numpy as np
+        def erwartung_varianz(werte, p):
+            mu = np.sum(werte * p)
+            return mu, np.sum((werte - mu) * p)
+    hints:
+      - "Teilziel: erst `mu`, dann damit `var` berechnen, beides zurückgeben."
+      - Beide Formeln sind gewichtete Summen – jeder Summand wird mit seinem $p_i$ multipliziert.
+      - "`mu = np.sum(werte * p)`"
+      - "`var = np.sum((werte - mu) ** 2 * p)` und `return mu, var`"
+  - type: quiz
+    question: |
+      Ein Encoder misst Winkel in rad. Welche Einheit hat die **Varianz** seines Messrauschens?
+    options:
+      - text: rad²
+        correct: true
+        why: Die Varianz mittelt quadrierte Abweichungen – die Einheit wird quadriert.
+      - text: rad
+        correct: false
+        why: Das ist die Einheit der Standardabweichung $\sigma$.
+      - text: einheitenlos
+        correct: false
+        why: Einheitenlos wären z. B. Wahrscheinlichkeiten. Die Varianz trägt die quadrierte Einheit der Messgröße.
+cards:
+  - id: m10-c-var-ddof
+    concept: wk-varianz
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          x = np.array([2.0, 4.0])
+          print(np.var(x), np.var(x, ddof=1))
+        options: ["1.0 2.0", "2.0 1.0", "1.0 1.0", "1.0 1.4142135623730951"]
+        answer: "1.0 2.0"
+        explanation: Quadrierte Abweichungen 1 und 1, Summe 2. Geteilt durch N = 2 ergibt 1, durch N − 1 = 1 ergibt 2.
+      - type: predict
+        code: |
+          import numpy as np
+          x = np.array([0.0, 0.0, 3.0])
+          print(np.mean(x), np.var(x))
+        options: ["1.0 2.0", "1.0 3.0", "1.0 1.4142135623730951", "1.5 2.25"]
+        answer: "1.0 2.0"
+        explanation: Mittelwert 1, quadrierte Abweichungen 1, 1, 4 – Summe 6, geteilt durch 3 ergibt 2.
+  - id: m10-c-var-linear
+    concept: wk-varianz
+    variants:
+      - type: quiz
+        question: Es gilt $\operatorname{Var}(X) = 2$. Wie groß ist $\operatorname{Var}(3X - 1)$?
+        options:
+          - text: "18"
+            correct: true
+            why: $\operatorname{Var}(aX+b) = a^2 \operatorname{Var}(X) = 9 \cdot 2$.
+          - text: "6"
+            correct: false
+            why: Der Faktor $a$ geht quadratisch ein, nicht linear.
+          - text: "17"
+            correct: false
+            why: Eine Verschiebung um $b$ ändert die Streuung nicht.
+      - type: quiz
+        question: Ein Sensor hat $\sigma = 0.1$ m. Die Messung wird in cm umgerechnet ($\cdot 100$). Welche Varianz hat die Messung in cm²?
+        options:
+          - text: "100"
+            correct: true
+            why: "$\\sigma$ wird 10 cm, die Varianz $10^2 = 100$ cm²."
+          - text: "10"
+            correct: false
+            why: 10 cm ist die neue Standardabweichung, nicht die Varianz.
+          - text: "1"
+            correct: false
+            why: "$0.01 \\cdot 100 = 1$ vergisst, dass der Faktor 100 quadratisch eingeht."
+  - id: m10-c-erwartung-gewichtet
+    concept: wk-erwartungswert
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          werte = np.array([0.0, 10.0])
+          p = np.array([0.9, 0.1])
+          print(np.sum(werte * p), np.mean(werte))
+        options: ["1.0 5.0", "5.0 5.0", "1.0 1.0", "9.0 5.0"]
+        answer: "1.0 5.0"
+        explanation: Der Erwartungswert gewichtet mit $p$; `np.mean` der Werte behandelt beide als gleich wahrscheinlich.
+      - type: predict
+        code: |
+          import numpy as np
+          werte = np.array([1.0, 2.0, 3.0])
+          p = np.array([0.2, 0.2, 0.6])
+          print(round(np.sum(werte * p), 2))
+        options: ["2.4", "2.0", "1.2", "6.0"]
+        answer: "2.4"
+        explanation: $0.2 + 0.4 + 1.8 = 2.4$ – der wahrscheinlichste Wert 3 zieht den Erwartungswert über 2.

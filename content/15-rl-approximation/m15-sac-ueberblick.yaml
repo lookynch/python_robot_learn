@@ -1,0 +1,294 @@
+id: m15-sac-ueberblick
+title: SAC und die Landkarte der Verfahren
+minutes: 10
+goals:
+  - Das Ziel „Belohnung plus Entropie“ verstehen und die Temperatur $\alpha$ deuten
+  - Soft-Policy und Soft-Wert für diskrete Aktionen berechnen
+  - DQN, PPO und SAC nach Aktionsraum, Datenbedarf und on/off-policy einordnen
+concepts: [sac-max-entropie, ppo-clipping, dqn-replay-target]
+steps:
+  - type: text
+    body: |
+      ## Kontinuierliche Aktionen
+
+      Ein Roboterarm wählt Drehmomente in N·m – unendlich viele Aktionen. $\max_a Q(s, a)$ lässt sich nicht mehr durch Ausprobieren aller Aktionen bestimmen. **Soft Actor-Critic** (SAC, Haarnoja et al., 2018) löst das mit einem Actor, der eine Gauß-Verteilung über Aktionen ausgibt (per `tanh` auf die Drehmomentgrenzen gestaucht), und maximiert
+
+      $$J(\pi) = \sum_t \mathbb{E}\big[r_t + \alpha\, \mathcal{H}(\pi(\cdot \mid s_t))\big]$$
+
+      Die **Entropie** $\mathcal{H}$ belohnt, möglichst zufällig zu bleiben, solange es wenig kostet. $\alpha$ heißt Temperatur.
+
+      Weitere Bausteine, die du schon kennst: Replay Buffer (off-policy, wie DQN), **zwei** Q-Netze, deren Minimum gegen Überschätzung genutzt wird, und langsam nachgeführte Target-Netze. In einer späteren Version wird $\alpha$ automatisch eingestellt.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def entropy(p):
+          p = np.asarray(p, dtype=float)
+          p = p[p > 0]
+          return float(np.sum(p * np.log(1 / p)))
+
+      print(round(entropy([0.5, 0.5]), 3), round(entropy([1.0, 0.0]), 3), round(entropy([0.25] * 4), 3))
+    options: ["0.693 0.0 1.386", "1.0 0.0 2.0", "0.5 1.0 0.25", "0.693 0.693 0.693"]
+    answer: "0.693 0.0 1.386"
+    explanation: |
+      $\mathcal{H} = -\sum_a p_a \ln p_a$ (natürlicher Logarithmus): $\ln 2 \approx 0.693$ für zwei gleich wahrscheinliche Aktionen, $\ln 4 \approx 1.386$ für vier, 0 für eine sichere Entscheidung. Mit $\log_2$ hätte man 1 und 2 Bit.
+  - type: example
+    title: Spielversion – Soft-Policy für drei Aktionen
+    intro: |
+      Für diskrete Aktionen ist die beste Policy des Entropie-Ziels eine Softmax mit Temperatur: $\pi(a \mid s) \propto \exp(Q(s, a)/\alpha)$ (vgl. Softmax mit Temperatur aus Modul 10). Hier für feste Q-Werte $[1.0, 0.8, -1.0]$ und $\alpha$ von 0.01 bis 10.
+    code: |
+      import numpy as np
+      import lab
+
+      q = np.array([1.0, 0.8, -1.0])
+      log_alpha = np.linspace(-2, 1, 60)
+      probs = []
+      for alpha in 10 ** log_alpha:
+          z = q / alpha
+          p = np.exp(z - z.max())
+          probs.append(p / p.sum())
+      probs = np.array(probs)
+
+      fig = lab.Figure(title="Soft-Policy: π ∝ exp(Q/α)", xlabel="log10(α)", ylabel="Wahrscheinlichkeit")
+      for a in range(3):
+          fig.line(probs[:, a], x=log_alpha, label=f"Aktion {a}, Q = {q[a]}")
+      fig.show()
+      print("α = 0.01:", np.round(probs[0], 3))
+      print("α = 10:  ", np.round(probs[-1], 3))
+    subgoals:
+      - lines: [4, 5]
+        label: Q-Werte und Temperaturen festlegen
+      - lines: [7, 10]
+        label: Stabile Softmax mit Temperatur
+      - lines: [13, 18]
+        label: Wahrscheinlichkeiten zeichnen
+    after: |
+      Kleines $\alpha$: fast greedy – nur die beste Aktion. Großes $\alpha$: fast gleichverteilt. Dazwischen bleiben **beide** guten Aktionen (Q = 1.0 und 0.8) im Spiel, die schlechte nicht. Genau das will man bei einem Roboter: mehrere brauchbare Lösungen offenhalten, statt sich früh auf eine festzulegen.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe für diskrete Aktionen
+
+      - `soft_policy(q, alpha)`: $\pi = \operatorname{softmax}(q / \alpha)$, numerisch stabil (Maximum abziehen),
+      - `soft_value(q, alpha)`: $V = \alpha \log \sum_a \exp(q_a / \alpha)$, ebenfalls stabil: $V = \max q + \alpha \log \sum_a \exp\big((q_a - \max q)/\alpha\big)$.
+
+      Ein Test prüft die Identität $V = \sum_a \pi_a q_a + \alpha\, \mathcal{H}(\pi)$ – der Soft-Wert ist erwarteter Q-Wert plus Entropiebonus.
+    starter: |
+      import numpy as np
+
+      def soft_policy(q, alpha):
+          q = np.asarray(q, dtype=float)
+          pass
+
+      def soft_value(q, alpha):
+          q = np.asarray(q, dtype=float)
+          pass
+    solution: |
+      import numpy as np
+
+      def soft_policy(q, alpha):
+          q = np.asarray(q, dtype=float)
+          e = np.exp((q - q.max()) / alpha)
+          return e / e.sum()
+
+      def soft_value(q, alpha):
+          q = np.asarray(q, dtype=float)
+          return float(q.max() + alpha * np.log(np.sum(np.exp((q - q.max()) / alpha))))
+    tests:
+      - name: Wahrscheinlichkeiten
+        code: |
+          import numpy as np
+          p = soft_policy([0.0, np.log(3.0)], 1.0)
+          assert close(p, [0.25, 0.75]), f"softmax([0, ln 3]) sollte [0.25, 0.75] sein, ist {p}"
+          p = soft_policy([1.0, 0.0], 0.01)
+          assert p[0] > 0.999, f"Bei α = 0.01 sollte fast nur Aktion 0 gewählt werden, π = {p}"
+      - name: Soft-Wert
+        code: |
+          import numpy as np
+          v = soft_value([0.0, 0.0], 1.0)
+          assert close(v, np.log(2.0)), f"Für Q = [0, 0], α = 1 ist V = ln 2 ≈ 0.693, bekommen {v}"
+          v = soft_value([2.0, -5.0], 0.01)
+          assert close(v, 2.0, 1e-3), f"Für kleines α sollte V ≈ max Q = 2 sein, bekommen {v}"
+      - name: Identität mit Entropie
+        code: |
+          import numpy as np
+          q, alpha = np.array([1.0, 0.8, -1.0]), 0.5
+          p = soft_policy(q, alpha)
+          rhs = np.sum(p * q) + alpha * np.sum(p * np.log(1 / p))
+          assert close(soft_value(q, alpha), rhs), f"V sollte E_π[Q] + α·H(π) = {rhs:.4f} sein, ist {soft_value(q, alpha)}"
+      - name: Große Werte ohne Überlauf
+        code: |
+          import numpy as np
+          p = soft_policy([1000.0, 999.0], 0.5)
+          v = soft_value([1000.0, 999.0], 0.5)
+          assert np.all(np.isfinite(p)) and np.isfinite(v), f"Bei großen Q-Werten entstehen inf/nan: π = {p}, V = {v} – Maximum abziehen!"
+          assert close(v, 1000.0 + 0.5 * np.log(1 + np.exp(-2.0))), f"V sollte ≈ 1000.063 sein, ist {v}"
+    mutants:
+      - |
+        import numpy as np
+
+        def soft_policy(q, alpha):
+            q = np.asarray(q, dtype=float)
+            e = np.exp(q / alpha)
+            return e / e.sum()
+
+        def soft_value(q, alpha):
+            q = np.asarray(q, dtype=float)
+            return float(alpha * np.log(np.sum(np.exp(q / alpha))))
+      - |
+        import numpy as np
+
+        def soft_policy(q, alpha):
+            q = np.asarray(q, dtype=float)
+            e = np.exp(q - q.max())
+            return e / e.sum()
+
+        def soft_value(q, alpha):
+            q = np.asarray(q, dtype=float)
+            return float(q.max() + alpha * np.log(np.sum(np.exp(q - q.max()))))
+      - |
+        import numpy as np
+
+        def soft_policy(q, alpha):
+            q = np.asarray(q, dtype=float)
+            e = np.exp((q - q.max()) / alpha)
+            return e / e.sum()
+
+        def soft_value(q, alpha):
+            q = np.asarray(q, dtype=float)
+            return float(q.max())
+    hints:
+      - "Teilziel: durch α teilen, Maximum abziehen, exponentieren, normieren – und für V den Logarithmus der Summe zurückrechnen."
+      - "Abziehen von $\\max q$ ändert die Softmax nicht, verhindert aber `exp(2000)`. Bei V muss das abgezogene Maximum wieder dazu."
+      - "`e = np.exp((q - q.max()) / alpha)` und `return e / e.sum()`"
+      - "`return float(q.max() + alpha * np.log(np.sum(np.exp((q - q.max()) / alpha))))`"
+  - type: explain
+    question: |
+      Warum hilft der Entropie-Bonus beim Lernen, obwohl er nichts mit der eigentlichen Aufgabe zu tun hat?
+    options:
+      - text: Er hält die Policy breit, solange mehrere Aktionen ähnlich gut sind – das erkundet automatisch und legt sich nicht zu früh fest.
+        correct: true
+        why: Gute Alternativen behalten Wahrscheinlichkeit; schlechte Aktionen fallen trotzdem weg, weil sie Belohnung kosten.
+      - text: Er macht die Policy deterministisch und damit stabiler.
+        correct: false
+        why: Im Gegenteil – Entropie belohnt Zufälligkeit.
+      - text: Er ersetzt die Belohnung, sodass keine Belohnungsfunktion nötig ist.
+        correct: false
+        why: Die Belohnung bleibt; Entropie kommt nur als Bonus dazu.
+      - text: Er macht SAC zu einem modellbasierten Verfahren.
+        correct: false
+        why: SAC bleibt modellfrei.
+  - type: text
+    body: |
+      ## Landkarte: DQN, PPO, SAC
+
+      | | DQN | PPO | SAC |
+      |---|---|---|---|
+      | Familie | wertbasiert | Policy Gradient (Actor-Critic) | Actor-Critic, max. Entropie |
+      | Daten | off-policy, Replay | on-policy, frische Batches | off-policy, Replay |
+      | Aktionen | diskret | diskret und kontinuierlich | kontinuierlich |
+      | typisch | Atari aus Pixeln | viele parallele Simulationen | Robotik-Steuerung |
+
+      Off-policy-Verfahren nutzen alte Daten wieder und kommen deshalb meist mit **weniger Interaktionen** aus; PPO gilt als robust, braucht aber viele frische Episoden. Noch sparsamer mit echten Daten sind oft **modellbasierte** Verfahren – das ist Modul 16.
+
+      Ehrlich: Alle drei brauchen in der Praxis neuronale Netze, Autograd und oft Millionen Simulationsschritte – das ist im Browser nicht sinnvoll. Die Algorithmen-Bausteine hast du hier selbst gebaut; Modul 19 zeigt mit PyTorch und Gymnasium die Werkzeuge, mit denen man echte Implementierungen trainiert.
+  - type: quiz
+    question: |
+      Ein echter Roboterarm, Aktionen sind kontinuierliche Drehmomente, jede Minute Versuchszeit ist teuer. Welches der drei Verfahren passt am besten?
+    options:
+      - text: SAC – off-policy mit Replay Buffer und für kontinuierliche Aktionen gebaut
+        correct: true
+        why: Daten werden wiederverwendet, und der Actor gibt direkt kontinuierliche Aktionen aus.
+      - text: DQN – es ist das bekannteste Verfahren
+        correct: false
+        why: DQN braucht ein $\max$ über diskrete Aktionen; kontinuierliche Drehmomente passen nicht direkt.
+      - text: PPO – on-policy ist immer am dateneffizientesten
+        correct: false
+        why: On-policy verwirft alte Daten nach dem Update – das kostet viele Interaktionen.
+  - type: quiz
+    question: |
+      Was passiert in SAC, wenn die Temperatur $\alpha$ sehr klein wird?
+    options:
+      - text: Das Ziel nähert sich dem normalen Return; die Policy wird fast deterministisch.
+        correct: true
+        why: Der Entropie-Bonus verschwindet, $\pi \propto \exp(Q/\alpha)$ wird fast greedy.
+      - text: Die Policy wird gleichverteilt.
+        correct: false
+        why: Das passiert bei sehr **großem** $\alpha$.
+      - text: Das Lernen wird on-policy.
+        correct: false
+        why: On/off-policy hängt von der Datennutzung ab, nicht von $\alpha$.
+cards:
+  - id: m15-c-entropie
+    concept: sac-max-entropie
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          p = np.array([0.5, 0.25, 0.25])
+          print(round(float(np.sum(p * np.log2(1 / p))), 2))
+        options: ["1.5", "1.0", "0.5", "1.58"]
+        answer: "1.5"
+        explanation: "In Bit: 0.5·1 + 2·0.25·2 = 1.5."
+      - type: predict
+        code: |
+          import numpy as np
+          p = np.array([0.25, 0.25, 0.25, 0.25])
+          print(float(np.sum(p * np.log2(1 / p))))
+        options: ["2.0", "1.0", "4.0", "0.25"]
+        answer: "2.0"
+        explanation: Gleichverteilung über 4 Aktionen hat $\log_2 4 = 2$ Bit – das Maximum.
+  - id: m15-c-temperatur
+    concept: sac-max-entropie
+    variants:
+      - type: quiz
+        question: "Q-Werte $[2.0, 1.9, -3.0]$, Soft-Policy $\\pi \\propto \\exp(Q/\\alpha)$ mit mittlerem $\\alpha = 0.5$. Welche Beschreibung passt?"
+        options:
+          - text: Aktion 0 und 1 bekommen ähnlich viel Wahrscheinlichkeit, Aktion 2 fast keine.
+            correct: true
+            why: Die Differenz 0.1 ist klein gegenüber $\alpha$, die Differenz 5 groß.
+          - text: Nur Aktion 0 wird gewählt.
+            correct: false
+            why: Das gälte für sehr kleines $\alpha$.
+          - text: Alle drei Aktionen sind gleich wahrscheinlich.
+            correct: false
+            why: Das gälte für sehr großes $\alpha$.
+      - type: quiz
+        question: Wofür nutzt SAC zwei Q-Netze?
+        options:
+          - text: Das Minimum beider dämpft die Überschätzung von Q-Werten.
+            correct: true
+            why: Ein einzelnes Netz überschätzt durch Rauschen leicht; das kleinere von zwei Schätzungen ist vorsichtiger.
+          - text: Eins für diskrete, eins für kontinuierliche Aktionen.
+            correct: false
+            why: Beide bewerten dieselben kontinuierlichen Aktionen.
+          - text: Eins lernt die Belohnung, das andere die Entropie.
+            correct: false
+            why: Beide schätzen denselben Soft-Q-Wert.
+  - id: m15-c-landkarte
+    concept: ppo-clipping
+    variants:
+      - type: quiz
+        question: Welches Verfahren ist **on-policy**?
+        options:
+          - text: PPO
+            correct: true
+            why: PPO lernt aus frischen Batches der aktuellen Policy und verwirft sie danach.
+          - text: DQN
+            correct: false
+            why: DQN lernt off-policy aus dem Replay Buffer.
+          - text: SAC
+            correct: false
+            why: SAC lernt off-policy aus dem Replay Buffer.
+      - type: quiz
+        question: Warum nutzt PPO einen gesammelten Batch nur für wenige Update-Epochen und sammelt dann neu?
+        options:
+          - text: Das Verhältnis $\rho = \pi_\text{neu}/\pi_\text{alt}$ ist nur verlässlich, solange die neue Policy nahe an der alten bleibt.
+            correct: true
+            why: PPO ist on-policy; Clipping erlaubt ein paar Schritte, aber keine beliebig alten Daten.
+          - text: Weil der Replay Buffer voll ist.
+            correct: false
+            why: PPO hat keinen Replay Buffer wie DQN oder SAC.
+          - text: Weil sonst das Target-Netz veraltet.
+            correct: false
+            why: Ein Target-Netz gehört zu DQN/SAC, nicht zu PPO.

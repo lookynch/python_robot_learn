@@ -1,0 +1,315 @@
+id: m02-scope
+title: Lokal und global – wo Variablen leben
+minutes: 9
+goals:
+  - Lokale Variablen von globalen unterscheiden
+  - Erklären, warum eine Zuweisung in einer Funktion die globale Variable nicht ändert
+  - Werte über Parameter hinein- und über `return` herausgeben statt globale Variablen zu ändern
+concepts: [m02-scope]
+steps:
+  - type: text
+    body: |
+      ## Jede Funktion hat ihren eigenen Notizzettel
+
+      Variablen, die **in** einer Funktion zugewiesen werden – auch die Parameter –, sind **lokal** (local): Sie entstehen beim Aufruf und verschwinden, wenn die Funktion endet. Von außen sieht man sie nicht.
+
+      Variablen auf der obersten Ebene des Programms heißen **global**. Eine Funktion darf sie **lesen**.
+
+      Diesen Sichtbarkeitsbereich nennt man **Scope**.
+  - type: example
+    code: |
+      offset = 0.25
+
+      def kalibriere(messwert):
+          korrigiert = messwert - offset
+          return korrigiert
+
+      print(kalibriere(2.5))
+      print(offset)
+    subgoals:
+      - lines: 1
+        label: Globale Variable anlegen
+      - lines: [3, 5]
+        label: Lokal rechnen, global lesen
+      - lines: [7, 8]
+        label: Ergebnis außerhalb nutzen
+    after: |
+      `kalibriere` liest die globale Variable `offset`. `messwert` und `korrigiert` existieren nur während des Aufrufs – ein `print(korrigiert)` in Zeile 9 ergäbe einen `NameError`.
+  - type: predict
+    code: |
+      x = 5
+
+      def f():
+          x = 100
+          return x
+
+      print(f())
+      print(x)
+    options:
+      - |
+        100
+        5
+      - |
+        100
+        100
+      - |
+        5
+        5
+    answer: |
+      100
+      5
+    explanation: |
+      `x = 100` in der Funktion legt eine **neue, lokale** Variable `x` an. Sie verdeckt die globale nur innerhalb von `f`. Das globale `x` bleibt 5.
+  - type: trace
+    intro: |
+      Achte darauf, dass es zwei verschiedene Variablen namens `zaehler` gibt.
+    code: |
+      zaehler = 0
+
+      def erhoehe(zaehler):
+          zaehler = zaehler + 1
+          return zaehler
+
+      neu = erhoehe(zaehler)
+      print(zaehler, neu)
+    questions:
+      - line: 4
+        var: zaehler
+        prompt: Nach Zeile 4 – welchen Wert hat `zaehler` **in der Funktion**?
+        answer: "1"
+      - line: 8
+        var: zaehler
+        prompt: Am Ende – welchen Wert hat das globale `zaehler`?
+        answer: "0"
+    after: |
+      Der Parameter `zaehler` ist ein eigener, **lokaler Name**, der beim Aufruf den Wert 0 bekommt. `zaehler = zaehler + 1` weist nur diesem lokalen Namen einen neuen Wert zu – das globale `zaehler` bleibt unberührt. Das neue Ergebnis kommt nur über `return` heraus – und landet in `neu`.
+  - type: explain
+    question: |
+      Warum bleibt das globale `zaehler` im vorigen Programm 0?
+    options:
+      - text: Die Zuweisung in der Funktion betrifft nur die lokale Variable; das globale `zaehler` wird nie neu zugewiesen.
+        correct: true
+        why: Genau. Nur `zaehler = erhoehe(zaehler)` auf oberster Ebene würde das globale ändern.
+      - text: Python setzt globale Variablen nach jedem Funktionsaufruf zurück.
+        correct: false
+        why: Es wird nichts zurückgesetzt – das globale `zaehler` wurde schlicht nie verändert.
+      - text: "`return` macht alle Änderungen in der Funktion rückgängig."
+        correct: false
+        why: "`return` gibt einen Wert zurück; was damit passiert, entscheidet der Aufrufer."
+  - type: quiz
+    question: |
+      Was passiert beim Aufruf `treffer()`?
+    code: |
+      punkte = 0
+
+      def treffer():
+          punkte = punkte + 1
+
+      treffer()
+    options:
+      - text: "Ein `UnboundLocalError`: `punkte` gilt in der Funktion als lokal und wird gelesen, bevor es einen Wert hat."
+        correct: true
+        why: Weil `punkte` in der Funktion zugewiesen wird, behandelt Python den Namen dort durchgehend als lokal – auch beim Lesen rechts vom `=`.
+      - text: Das globale `punkte` wird auf 1 erhöht.
+        correct: false
+        why: Eine Zuweisung in einer Funktion erzeugt eine lokale Variable, sie ändert die globale nicht.
+      - text: Es passiert nichts, weil die Funktion nichts zurückgibt.
+        correct: false
+        why: Der Körper wird ausgeführt – und scheitert an `punkte + 1`.
+  - type: text
+    body: |
+      ## Das saubere Muster: hinein per Parameter, heraus per `return`
+
+      Mit dem Schlüsselwort `global punkte` könnte eine Funktion die globale Variable doch ändern. Tu das nicht: Solche Funktionen haben versteckte Nebenwirkungen, sind schwer zu testen und funktionieren nicht mehr, wenn du zwei Roboter gleichzeitig simulierst.
+
+      Besser:
+
+      ```python
+      neuer_zustand = schritt(zustand, aktion)
+      ```
+
+      Genau dieses Muster wird dich durch Simulation, Regelung und Reinforcement Learning begleiten.
+  - type: example
+    code: |
+      def schritt(position, geschw, dt):
+          return position + geschw * dt
+
+      pos = 0.0
+      for i in range(3):
+          pos = schritt(pos, 2.0, 0.5)
+      print(pos)
+    subgoals:
+      - lines: [1, 2]
+        label: Neuen Zustand aus altem berechnen
+      - lines: 4
+        label: Startzustand festlegen
+      - lines: [5, 6]
+        label: Zustand Schritt für Schritt aktualisieren
+      - lines: 7
+        label: Ergebnis ausgeben
+    after: |
+      Die Funktion kennt nur ihre Parameter. Der Zustand wird **außerhalb** gespeichert: `pos = schritt(pos, ...)`. Mit $v = 2\,\text{m/s}$ und $\Delta t = 0{,}5\,\text{s}$ kommt der Roboter pro Schritt $1\,\text{m}$ weiter.
+  - type: fill
+    fading: true
+    prompt: |
+      Der Akku hat 20 % und wird um 30 Prozentpunkte geladen. Ergänze so, dass `50` ausgegeben wird.
+    code: |
+      def lade(stand, menge):
+          stand = stand + menge
+          return ___
+
+      akku = 20
+      akku = lade(___, 30)
+      print(akku)
+    blanks:
+      - answer: stand
+        options: [stand, akku, menge]
+      - answer: akku
+        options: [akku, stand, menge]
+    expect_output: "50"
+    explanation: |
+      Zurückgegeben wird der lokale neue Stand. Beim Aufruf übergibst du den **globalen** Wert `akku` – `stand` und `menge` existieren außerhalb der Funktion nicht.
+  - type: parsons
+    fading: true
+    prompt: |
+      Simuliere vier Schritte mit Geschwindigkeit 3. Ausgabe: `12`.
+    lines:
+      - "def schritt(pos, v):"
+      - "    return pos + v"
+      - "pos = 0"
+      - "for i in range(4):"
+      - "    pos = schritt(pos, 3)"
+      - "print(pos)"
+    distractors:
+      - "schritt(pos, 3)"
+    expect_output: "12"
+    explanation: |
+      `schritt(pos, 3)` allein berechnet den neuen Wert, wirft ihn aber weg. Erst `pos = …` speichert ihn.
+  - type: exercise
+    mode: modify
+    prompt: |
+      `fahre` ändert die globale Variable `energie` mit `global`. Schreibe die Funktion um: `fahre(energie, strecke)` soll die **neue Energie zurückgeben** (Verbrauch: 2 pro Meter) und keine globale Variable ändern. Passe die Aufrufe an, sodass weiterhin `70` ausgegeben wird.
+    starter: |
+      energie = 100
+
+      def fahre(strecke):
+          global energie
+          energie = energie - 2 * strecke
+
+      fahre(10)
+      fahre(5)
+      print(energie)
+    solution: |
+      energie = 100
+
+      def fahre(energie, strecke):
+          return energie - 2 * strecke
+
+      energie = fahre(energie, 10)
+      energie = fahre(energie, 5)
+      print(energie)
+    tests:
+      - name: Rückgabe
+        code: |
+          assert fahre(100, 10) == 80, f"fahre(100, 10) sollte 80 liefern, liefert {fahre(100, 10)}"
+          assert fahre(50, 0) == 50, f"fahre(50, 0) sollte 50 liefern, liefert {fahre(50, 0)}"
+      - name: Keine Nebenwirkung
+        code: |
+          vorher = energie
+          fahre(100, 10)
+          assert energie == vorher, "fahre darf die globale Variable energie nicht verändern"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["70"], f"Erwartete Ausgabe 70, bekommen {lines()}"
+    mutants:
+      - |
+        energie = 100
+
+        def fahre(e, strecke):
+            global energie
+            energie = e - 2 * strecke
+            return energie
+
+        fahre(energie, 10)
+        fahre(energie, 5)
+        print(energie)
+      - |
+        energie = 100
+
+        def fahre(energie, strecke):
+            return energie - 2 * strecke
+
+        fahre(energie, 10)
+        fahre(energie, 5)
+        print(energie)
+    hints:
+      - "Teilziel: Zustand per Parameter hinein, neuen Zustand per `return` heraus, außerhalb speichern."
+      - Die Funktion braucht `energie` als Parameter und gibt `energie - 2 * strecke` zurück. Die Zeile `global energie` fällt weg.
+      - "Der Aufruf speichert das Ergebnis: `energie = fahre(energie, 10)`"
+  - type: quiz
+    question: |
+      Welche Aussage über lokale Variablen stimmt?
+    options:
+      - text: Sie existieren nur während eines Funktionsaufrufs und sind außerhalb nicht sichtbar.
+        correct: true
+        why: Nach dem Ende des Aufrufs sind sie weg – das Ergebnis muss per `return` hinaus.
+      - text: Sie behalten ihren Wert bis zum nächsten Aufruf der Funktion.
+        correct: false
+        why: Jeder Aufruf beginnt mit frischen lokalen Variablen.
+      - text: Eine lokale Variable mit demselben Namen wie eine globale überschreibt die globale.
+        correct: false
+        why: Sie verdeckt sie nur innerhalb der Funktion; die globale bleibt unverändert.
+cards:
+  - id: m02-c-scope-verdecken
+    concept: m02-scope
+    variants:
+      - type: predict
+        code: |
+          v = 1
+
+          def setze():
+              v = 9
+
+          setze()
+          print(v)
+        options: ["1", "9", "None"]
+        answer: "1"
+        explanation: "`v = 9` erzeugt eine lokale Variable; das globale `v` bleibt 1."
+      - type: predict
+        code: |
+          n = 3
+
+          def doppelt(n):
+              n = n * 2
+              return n
+
+          m = doppelt(n)
+          print(n, m)
+        options: ["3 6", "6 6", "3 3"]
+        answer: "3 6"
+        explanation: Der Parameter `n` ist lokal. Nur `m` bekommt den neuen Wert.
+  - id: m02-c-scope-return
+    concept: m02-scope
+    variants:
+      - type: predict
+        code: |
+          def plus_eins(x):
+              x = x + 1
+
+          a = 5
+          plus_eins(a)
+          print(a)
+        options: ["5", "6", "None"]
+        answer: "5"
+        explanation: "`x = x + 1` weist nur dem lokalen Parameter `x` einen neuen Wert zu, und die Funktion gibt nichts zurück – `a` bleibt 5."
+      - type: predict
+        code: |
+          def plus_eins(x):
+              return x + 1
+
+          a = 5
+          a = plus_eins(a)
+          print(a)
+        options: ["6", "5", "None"]
+        answer: "6"
+        explanation: Erst `a = plus_eins(a)` speichert den neuen Wert in der globalen Variablen.

@@ -1,0 +1,206 @@
+id: m10-checkpoint
+title: "Checkpoint: Wahrscheinlichkeit"
+kind: checkpoint
+minutes: 15
+goals:
+  - Verteilungen auszählen, Erwartungswert und Varianz berechnen
+  - Normalverteilt sampeln und Monte-Carlo-Schätzungen einordnen
+  - Softmax und Bayes-Regel im Code anwenden
+concepts: [wk-histogramm, wk-varianz, wk-diagonal-gauss, wk-monte-carlo, wk-mc-fehler, wk-softmax, wk-bayes, wk-entropie]
+steps:
+  - type: text
+    body: |
+      ## Checkpoint Modul 10
+
+      Gemischte Aufgaben aus dem ganzen Modul. Bestanden ist der Checkpoint mit mindestens 80 % beim ersten Versuch. Wenn du die Inhalte schon kennst, kannst du das Modul damit überspringen.
+  - type: predict
+    code: |
+      import numpy as np
+      x = np.array([3, 0, 3, 1])
+      print(np.bincount(x, minlength=5) / len(x))
+    options:
+      - "[0.25 0.25 0.   0.5  0.  ]"
+      - "[0.25 0.25 0.5 ]"
+      - "[1 1 0 2 0]"
+      - "[0.25 0.25 0.   0.5 ]"
+    answer: "[0.25 0.25 0.   0.5  0.  ]"
+    explanation: |
+      Gezählt wird für 0 bis 4 (wegen `minlength=5`): `[1 1 0 2 0]`, geteilt durch 4.
+  - type: predict
+    code: |
+      import numpy as np
+      x = np.array([1.0, 3.0])
+      print(np.var(x), np.var(x, ddof=1))
+    options: ["1.0 2.0", "2.0 1.0", "1.0 1.0", "4.0 2.0"]
+    answer: "1.0 2.0"
+    explanation: |
+      Abweichungen ±1, quadriert 1 und 1, Summe 2. Durch $N = 2$ geteilt ergibt 1, durch $N - 1 = 1$ ergibt 2.
+  - type: quiz
+    question: |
+      Ein Gelenkwinkel soll mit Rauschen der **Varianz** $0.09\ \text{rad}^2$ um $\mu = 0.5$ rad gestört werden. Welcher Aufruf stimmt?
+    options:
+      - text: "`rng.normal(0.5, 0.3)`"
+        correct: true
+        why: "`normal(loc, scale)` erwartet die Standardabweichung $\\sigma = \\sqrt{0.09} = 0.3$."
+      - text: "`rng.normal(0.5, 0.09)`"
+        correct: false
+        why: Hier wäre die Standardabweichung 0,09, die Varianz also 0,0081.
+      - text: "`0.09 * rng.standard_normal() + 0.5`"
+        correct: false
+        why: Gleicher Fehler – mit der Varianz statt mit $\sigma$ skaliert.
+      - text: "`rng.normal(0.3, 0.5)`"
+        correct: false
+        why: Mittelwert und Standardabweichung vertauscht.
+  - type: fill
+    prompt: |
+      Ziehe 500 Aktionsvektoren mit unabhängigen Komponenten, Mittelwert `mu` und Standardabweichung `sigma`.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      mu = np.array([0.5, -1.0, 2.0])
+      sigma = np.array([0.1, 1.0, 0.5])
+      A = mu ___ sigma * rng.standard_normal(___)
+    blanks:
+      - answer: "+"
+        options: ["+", "*", "/"]
+      - answer: "(500, 3)"
+        options: ["(500, 3)", "(3, 500)", "500", "(3,)"]
+    tests:
+      - name: Form
+        code: |
+          assert A.shape == (500, 3), f"A sollte Form (500, 3) haben, hat {A.shape}"
+      - name: Mittelwert und Streuung
+        code: |
+          assert close(A.mean(axis=0), mu, tol=0.15), f"Spaltenmittel sollten etwa {mu} sein, sind {np.round(A.mean(axis=0), 2)}"
+          assert close(A.std(axis=0), sigma, tol=0.15), f"Spaltenstreuung sollte etwa {sigma} sein, ist {np.round(A.std(axis=0), 2)}"
+  - type: predict
+    intro: |
+      Monte-Carlo-Schätzung von $\int_1^3 x\,dx$:
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      x = rng.uniform(1, 3, size=100000)
+      print(round(2 * np.mean(x), 1))
+    options: ["4.0", "2.0", "6.0", "8.0"]
+    answer: "4.0"
+    explanation: |
+      Der Mittelwert schätzt $E[X] = 2$, mal $(b - a) = 2$ ergibt das Integral $\int_1^3 x\,dx = (9 - 1)/2 = 4$.
+  - type: quiz
+    question: |
+      Ein Planer schätzt die erwarteten Kosten mit $N = 50$ Rollouts, Streuung der Schätzung $0.4$. Mit wie vielen Rollouts erreichst du etwa $0.1$?
+    options:
+      - text: "800"
+        correct: true
+        why: Viertel Fehler heißt $\sqrt{N}$ mal 4, also $N$ mal 16.
+      - text: "200"
+        correct: false
+        why: Das wäre richtig, wenn der Fehler mit $1/N$ fiele.
+      - text: "100"
+        correct: false
+        why: Doppelt so viele Stichproben verkleinern den Fehler nur um den Faktor $\sqrt{2} \approx 1.4$.
+  - type: parsons
+    prompt: |
+      Ordne die Zeilen zu einer Monte-Carlo-Schätzung von $\pi$ (Anteil zufälliger Punkte im Viertelkreis).
+    lines:
+      - "import numpy as np"
+      - "rng = np.random.default_rng(0)"
+      - "P = rng.uniform(0, 1, size=(100000, 2))"
+      - "innen = np.sum(P ** 2, axis=1) <= 1"
+      - "pi_schaetzung = 4 * np.mean(innen)"
+      - "print(round(pi_schaetzung, 2))"
+    distractors:
+      - "pi_schaetzung = np.mean(innen)"
+      - "innen = np.sum(P ** 2, axis=0) <= 1"
+    expect_output: "3.15"
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Planer hat Kandidaten `werte` (1D-Array) mit Kosten `kosten`. Schreibe `gewichteter_mittelwert(werte, kosten, T)`: Gewichte $w = \operatorname{softmax}(-\text{kosten}/T)$ (numerisch stabil!), Rückgabe $\sum_i w_i \cdot \text{werte}_i$.
+    starter: |
+      import numpy as np
+
+      def gewichteter_mittelwert(werte, kosten, T):
+          # dein Code
+          pass
+
+      print(gewichteter_mittelwert(np.array([0.0, 1.0]), np.array([0.0, 1.0]), 1.0))
+    solution: |
+      import numpy as np
+
+      def gewichteter_mittelwert(werte, kosten, T):
+          z = -kosten / T
+          w = np.exp(z - np.max(z))
+          w = w / np.sum(w)
+          return np.sum(w * werte)
+
+      print(gewichteter_mittelwert(np.array([0.0, 1.0]), np.array([0.0, 1.0]), 1.0))
+    tests:
+      - name: Bekannter Wert
+        code: |
+          r = gewichteter_mittelwert(np.array([0.0, 1.0]), np.array([0.0, 1.0]), 1.0)
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert close(r, 0.26894, tol=1e-4), f"Erwartet ≈ 0.269 (Gewichte softmax([0, -1])), bekommen {r}"
+      - name: Kleine Temperatur wählt den billigsten
+        code: |
+          r = gewichteter_mittelwert(np.array([5.0, -2.0, 7.0]), np.array([3.0, 1.0, 2.0]), 0.01)
+          assert close(r, -2.0, tol=1e-3), f"Bei T = 0.01 zählt fast nur der Kandidat mit den kleinsten Kosten (-2.0), bekommen {r}"
+      - name: Große Kosten ohne nan
+        code: |
+          r = gewichteter_mittelwert(np.array([1.0, 3.0]), np.array([2000.0, 2000.0]), 1.0)
+          assert np.isfinite(r), f"Bei Kosten um 2000 kommt {r} heraus – vor dem exp stabilisieren."
+          assert close(r, 2.0), f"Gleiche Kosten → gleiche Gewichte → Mittelwert 2.0, bekommen {r}"
+      - name: Große Temperatur mittelt
+        code: |
+          r = gewichteter_mittelwert(np.array([0.0, 4.0]), np.array([1.0, 0.0]), 1000.0)
+          assert close(r, 2.0, tol=0.01), f"Bei T = 1000 sind die Gewichte fast gleich, erwartet ≈ 2.0, bekommen {r}"
+    mutants:
+      - |
+        import numpy as np
+        def gewichteter_mittelwert(werte, kosten, T):
+            z = kosten / T
+            w = np.exp(z - np.max(z))
+            return np.sum(w / np.sum(w) * werte)
+      - |
+        import numpy as np
+        def gewichteter_mittelwert(werte, kosten, T):
+            w = np.exp(-kosten / T)
+            return np.sum(w / np.sum(w) * werte)
+      - |
+        import numpy as np
+        def gewichteter_mittelwert(werte, kosten, T):
+            z = -kosten / T
+            w = np.exp(z - np.max(z))
+            return np.sum(w * werte)
+      - |
+        import numpy as np
+        def gewichteter_mittelwert(werte, kosten, T):
+            return np.mean(werte)
+    hints:
+      - "Teilziel: Gewichte per Softmax aus den negativen Kosten, dann gewichtete Summe."
+      - Niedrige Kosten sollen hohes Gewicht bekommen – deshalb das Minuszeichen. Stabil wird es durch Abziehen des Maximums von `-kosten / T`.
+      - "`z = -kosten / T` und `w = np.exp(z - np.max(z))`"
+      - "`w = w / np.sum(w)` und `return np.sum(w * werte)`"
+  - type: predict
+    intro: |
+      Ein Greifer meldet „Teil gefasst“. Prior für „gefasst“: 0,8. $P(\text{Meldung} \mid \text{gefasst}) = 0.95$, $P(\text{Meldung} \mid \text{nicht gefasst}) = 0.3$.
+    code: |
+      prior = 0.8
+      p_meldung = 0.95 * prior + 0.3 * (1 - prior)
+      print(round(0.95 * prior / p_meldung, 2))
+    options: ["0.93", "0.95", "0.8", "0.76"]
+    answer: "0.93"
+    explanation: |
+      $0.76 / (0.76 + 0.06) \approx 0.93$. 0,76 ist nur der Zähler, 0,95 die Likelihood.
+  - type: quiz
+    question: |
+      Die Gewichte eines Planers haben die Entropie $\approx 0$. Was bedeutet das?
+    options:
+      - text: Praktisch das ganze Gewicht liegt auf einem einzigen Kandidaten.
+        correct: true
+        why: Entropie 0 heißt sichere Verteilung – ein Kandidat bestimmt das Ergebnis allein.
+      - text: Alle Kandidaten sind gleich gewichtet.
+        correct: false
+        why: Gleichverteilung hat die **maximale** Entropie $\ln n$.
+      - text: Die Gewichte summieren sich nicht zu 1.
+        correct: false
+        why: Die Entropie setzt eine normierte Verteilung voraus und sagt etwas über ihre Form, nicht über die Normierung.

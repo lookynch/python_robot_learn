@@ -1,0 +1,264 @@
+id: m09-pendel-regeln
+title: Pendel oben halten
+minutes: 9
+goals:
+  - Ein instabiles Gleichgewicht mit einem PD-Regler stabilisieren
+  - Die Mindest-Steifigkeit gegen die Schwerkraft abschätzen
+  - Die Wirkung einer Drehmomentgrenze erkennen
+concepts: [instabiles-gleichgewicht]
+steps:
+  - type: text
+    body: |
+      ## Balancieren statt hängen
+
+      `lab.envs.Pendulum` ist ein Stab (Masse $m = 1$ kg, Länge $l = 1$ m) mit Motor im Drehpunkt, $\theta = 0$ **oben**, positiv gegen den Uhrzeigersinn. Anders als die Punktmasse aus Modul 6 ist die Masse über den Stab verteilt (Trägheit $m l^2/3$), daher die Faktoren 3/2 und 3:
+
+      $$\ddot\theta = \frac{3g}{2l}\sin\theta + \frac{3}{m l^2}\,u, \qquad |u| \le 2\ \text{N·m}$$
+
+      Oben ist ein **instabiles** Gleichgewicht: Kleine Auslenkung → die Schwerkraft zieht weiter weg. Linearisiert ($\sin\theta \approx \theta$, $g = 10$): $\ddot\theta \approx 15\,\theta + 3u$.
+
+      Mit dem PD-Regler $u = -K_p\theta - K_d\dot\theta$ wird daraus $\ddot\theta \approx (15 - 3K_p)\,\theta - 3K_d\,\dot\theta$. Rückstellend wird das nur für $K_p > 5$ N·m/rad.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum, angle_normalize
+
+      env = Pendulum()                      # dt = 0.05 s
+      Kp, Kd = 10.0, 2.0
+      state = env.reset(theta=0.3)
+      thetas, us = [state[0]], []
+      for k in range(60):                   # 3 s
+          u = -Kp * angle_normalize(state[0]) - Kd * state[1]
+          us.append(float(np.clip(u, -env.max_torque, env.max_torque)))
+          state = env.dynamics(state, u)
+          thetas.append(state[0])
+
+      lab.pendulum(thetas, title="PD hält das Pendel oben")
+      fig = lab.Figure(title="Winkel und Moment", xlabel="Schritt (0.05 s)")
+      fig.line(thetas, label="θ (rad)")
+      fig.line(us, label="u (N·m)")
+      fig.hline(0.0)
+      fig.show()
+    subgoals:
+      - lines: [5, 8]
+        label: Umgebung und Startwerte festlegen
+      - lines: [10, 11]
+        label: PD-Moment berechnen (begrenzt)
+      - lines: [12, 13]
+        label: Simulationsschritt
+      - lines: [15, 20]
+        label: Animieren und plotten
+    after: |
+      `env.dynamics(state, u)` begrenzt $u$ intern auf $\pm 2$ N·m – wir speichern das begrenzte Moment nur für den Plot. `angle_normalize` bringt $\theta$ nach $[-\pi, \pi)$, damit $2\pi + 0.1$ als $0.1$ zählt.
+  - type: predict
+    intro: |
+      Gleicher Start, aber $K_p = 3$, $K_d = 1$.
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      env = Pendulum()
+      state = env.reset(theta=0.3)
+      for k in range(60):
+          u = -3.0 * angle_normalize(state[0]) - 1.0 * state[1]
+          state = env.dynamics(state, u)
+      print("oben" if abs(angle_normalize(state[0])) < 0.1 else "umgefallen")
+    options: ["umgefallen", "oben"]
+    answer: "umgefallen"
+    explanation: |
+      $3K_p = 9 < 15$: Die „virtuelle Feder“ ist schwächer als die Schwerkraft, die das Pendel wegzieht. Der Regler bremst den Sturz nur – egal wie groß $K_d$ ist.
+  - type: explain
+    question: |
+      Warum braucht man $K_p > 5$, während beim Gelenk ohne Schwerkraft (erste Lektion) jedes $K_p > 0$ genügte?
+    options:
+      - text: Oben wirkt die Schwerkraft wie eine **negative** Feder (Steifigkeit $-15$ in diesen Einheiten); der Regler muss sie erst überwiegen.
+        correct: true
+        why: Summe der Steifigkeiten $3K_p - 15$ muss positiv sein, sonst gibt es keine Rückstellung.
+      - text: Weil das Pendel schwerer ist als das Gelenk.
+        correct: false
+        why: Es geht nicht um die Masse an sich, sondern um das Vorzeichen der Schwerkraftwirkung um das Gleichgewicht.
+      - text: Wegen der Drehmomentgrenze.
+        correct: false
+        why: Die Bedingung $K_p > 5$ gilt auch ohne Grenze; die Grenze schränkt zusätzlich ein.
+  - type: example
+    title: Die Drehmomentgrenze
+    intro: |
+      Jetzt startet das Pendel bei $\theta_0 = 0.6$ rad – mit denselben Gains wie oben.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum, angle_normalize
+
+      env = Pendulum()
+      state = env.reset(theta=0.6)
+      thetas, us = [state[0]], []
+      for k in range(60):
+          u = -10.0 * angle_normalize(state[0]) - 2.0 * state[1]
+          us.append(float(np.clip(u, -2, 2)))
+          state = env.dynamics(state, u)
+          thetas.append(state[0])
+
+      print("Schwerkraftmoment bei 0.6 rad:", round(5 * np.sin(0.6), 2), "N·m")
+      print("Größter haltbarer Winkel:", round(float(np.arcsin(2 / 5)), 2), "rad")
+      lab.pendulum(thetas, title="Start bei 0.6 rad – Motor zu schwach")
+      fig = lab.Figure(title="Moment in der Sättigung", xlabel="Schritt (0.05 s)")
+      fig.line(us, label="u (N·m)")
+      fig.line(thetas, label="θ (rad)")
+      fig.show()
+    subgoals:
+      - lines: [5, 12]
+        label: Gleicher Regler, größerer Startwinkel
+      - lines: [14, 15]
+        label: Grenze abschätzen
+      - lines: [16, 20]
+        label: Animieren und plotten
+    after: |
+      Das Schwerkraftmoment um den Drehpunkt ist $m g \frac{l}{2}\sin\theta = 5\sin\theta$ N·m. Der Motor schafft höchstens 2 N·m, also kann er das Pendel nur bis $\sin\theta < 0.4$ (etwa 0.41 rad) überhaupt halten – praktisch, mit Schwung, noch weniger. Das Moment klebt an der Grenze (**Sättigung**), der Regler ist machtlos. Aus dem Hängen hochschwingen (swing-up) braucht deshalb eine Strategie, die Schwung aufbaut – das planen wir in Modul 11.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `pd_pendulum(state, Kp=10.0, Kd=2.0)`, die das Motormoment $u$ für `state = [theta, theta_dot]` liefert. Der Winkel soll normalisiert werden, damit z. B. $\theta = 2\pi + 0.1$ genauso behandelt wird wie $0.1$.
+    starter: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum, angle_normalize
+
+      def pd_pendulum(state, Kp=10.0, Kd=2.0):
+          theta, theta_dot = state
+          pass
+
+      env = Pendulum()
+      state = env.reset(theta=-0.3, theta_dot=0.5)
+      thetas = [state[0]]
+      for k in range(60):
+          state = env.dynamics(state, pd_pendulum(state))
+          thetas.append(state[0])
+      lab.pendulum(thetas, title="Mein PD-Regler")
+    solution: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum, angle_normalize
+
+      def pd_pendulum(state, Kp=10.0, Kd=2.0):
+          theta, theta_dot = state
+          return -Kp * angle_normalize(theta) - Kd * theta_dot
+
+      env = Pendulum()
+      state = env.reset(theta=-0.3, theta_dot=0.5)
+      thetas = [state[0]]
+      for k in range(60):
+          state = env.dynamics(state, pd_pendulum(state))
+          thetas.append(state[0])
+      lab.pendulum(thetas, title="Mein PD-Regler")
+    tests:
+      - name: Vorzeichen
+        code: |
+          u = float(pd_pendulum([0.1, 0.0]))
+          assert u < 0, f"Bei θ = 0.1 (nach links gekippt) muss das Moment zurück drücken (u < 0), bekommen u = {u:.3f}"
+          assert close(u, -1.0), f"Mit Kp = 10 sollte u = -1.0 sein, ist {u:.3f}"
+      - name: Winkel wird normalisiert
+        code: |
+          import numpy as np
+          a = float(pd_pendulum([2 * np.pi + 0.1, 0.3]))
+          b = float(pd_pendulum([0.1, 0.3]))
+          assert close(a, b), f"θ = 2π + 0.1 ist dieselbe Lage wie 0.1, aber u = {a:.3f} statt {b:.3f} (angle_normalize benutzt?)"
+      - name: Hält das Pendel oben
+        code: |
+          import numpy as np
+          from lab.envs import Pendulum, angle_normalize
+          env = Pendulum()
+          for th0, thd0 in [(0.3, 0.0), (-0.25, 0.0), (0.1, 0.8)]:
+              s = env.reset(theta=th0, theta_dot=thd0)
+              for k in range(60):
+                  s = env.dynamics(s, pd_pendulum(s))
+              assert abs(angle_normalize(s[0])) < 0.01, f"Start θ = {th0}, θ' = {thd0}: nach 3 s ist θ = {float(angle_normalize(s[0])):.3f} (erwartet ≈ 0)"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import angle_normalize
+        def pd_pendulum(state, Kp=10.0, Kd=2.0):
+            theta, theta_dot = state
+            return Kp * angle_normalize(theta) + Kd * theta_dot
+      - |
+        import numpy as np
+        from lab.envs import angle_normalize
+        def pd_pendulum(state, Kp=10.0, Kd=2.0):
+            theta, theta_dot = state
+            return -Kp * angle_normalize(theta)
+      - |
+        import numpy as np
+        def pd_pendulum(state, Kp=10.0, Kd=2.0):
+            theta, theta_dot = state
+            return -Kp * theta - Kd * theta_dot
+      - |
+        import numpy as np
+        from lab.envs import angle_normalize
+        def pd_pendulum(state, Kp=10.0, Kd=2.0):
+            theta, theta_dot = state
+            return -Kp * angle_normalize(theta) + Kd * theta_dot
+    hints:
+      - "Teilziel: PD-Moment berechnen – P auf den normalisierten Winkel, D auf die Winkelgeschwindigkeit."
+      - Sollwert ist $\theta = 0$, also Fehler $= -\theta$. Der D-Anteil bremst die Drehung.
+      - "`angle_normalize(theta)` liefert den Winkel in $[-\\pi, \\pi)$."
+      - "`return -Kp * angle_normalize(theta) - Kd * theta_dot`"
+  - type: quiz
+    question: |
+      Der Motor des Pendels liefert höchstens 2 N·m, das Schwerkraftmoment ist $5\sin\theta$ N·m. Ab welchem Winkel ist das Pendel aus der Ruhe **sicher nicht** mehr zu halten, egal welche Gains?
+    options:
+      - text: Ab etwa 0.41 rad
+        correct: true
+        why: $5\sin\theta > 2$ für $\theta > \arcsin(0.4) \approx 0.41$ rad – dort ist selbst das volle Moment zu klein.
+      - text: Ab $\pi/2$ (waagerecht)
+        correct: false
+        why: Waagerecht ist das Schwerkraftmoment maximal (5 N·m) – die Grenze ist schon viel früher erreicht.
+      - text: Es gibt keine Grenze, man muss nur $K_p$ groß genug wählen
+        correct: false
+        why: Größeres $K_p$ fordert mehr Moment, aber der Motor sättigt bei 2 N·m.
+cards:
+  - id: m09-c-pendel-kp-min
+    concept: instabiles-gleichgewicht
+    variants:
+      - type: quiz
+        question: Linearisiertes Pendel $\ddot\theta = 15\theta + 3u$ mit $u = -K_p\theta - K_d\dot\theta$. Welches $K_p$ hält es oben?
+        options:
+          - text: $K_p = 8$
+            correct: true
+            why: $3 \cdot 8 = 24 > 15$ – die Rückstellung überwiegt.
+          - text: $K_p = 4$
+            correct: false
+            why: $3 \cdot 4 = 12 < 15$ – die Schwerkraft gewinnt.
+          - text: $K_p = 5$
+            correct: false
+            why: $3 \cdot 5 = 15$ – genau an der Grenze, keine Rückstellung.
+      - type: quiz
+        question: Linearisiertes Pendel $\ddot\theta = 20\theta + 4u$. Ab welchem $K_p$ wird es rückstellend?
+        options:
+          - text: $K_p > 5$
+            correct: true
+            why: $4K_p > 20$.
+          - text: $K_p > 20$
+            correct: false
+            why: Das Moment wirkt mit Faktor 4 – es reicht $20/4$.
+          - text: $K_p > 0$
+            correct: false
+            why: Das gilt nur für ein stabiles (hängendes) Gleichgewicht.
+  - id: m09-c-saettigung
+    concept: instabiles-gleichgewicht
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          u_max, mgl2 = 2.0, 5.0
+          print(round(float(np.arcsin(u_max / mgl2)), 2))
+        options: ["0.41", "0.4", "1.57", "2.5"]
+        answer: "0.41"
+        explanation: $5\sin\theta = 2$ → $\theta = \arcsin 0.4 \approx 0.41$ rad. Darüber reicht das Motormoment nicht.
+      - type: predict
+        code: |
+          import numpy as np
+          u = np.clip(-10.0 * 0.5, -2.0, 2.0)
+          print(u)
+        options: ["-2.0", "-5.0", "2.0", "-0.5"]
+        answer: "-2.0"
+        explanation: Der Regler fordert $-5$ N·m, der Motor liefert höchstens $\pm 2$ N·m.

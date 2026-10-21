@@ -1,0 +1,226 @@
+id: m17-beobachtungen
+title: Bilder statt Zustand
+minutes: 8
+goals:
+  - Beobachtung $o$ und Zustand $s$ unterscheiden
+  - Den Arm als 16×16-Bild (NumPy-Array) rendern
+  - Weltkoordinaten in Pixel-Indizes umrechnen
+concepts: [lwm-beobachtung-bild]
+steps:
+  - type: text
+    body: |
+      ## Was ein echter Roboter sieht
+
+      In Modul 16 kannte das Modell den Zustand $s = [q_1, q_2, x, y]$. Ein Roboter mit Kamera bekommt dagegen eine **Beobachtung** $o$ (observation): ein Bild aus vielen Pixeln.
+
+      Hier: ein 16×16-Graustufenbild des Arms, also ein Array mit 256 Zahlen in $[0, 1]$. Zeile 0 ist **oben**, Spalte 0 links. Der sichtbare Ausschnitt reicht von −2,2 m bis 2,2 m in $x$ und $y$.
+
+      Wichtig: Ein **einzelnes** Bild zeigt die Stellung, aber keine Geschwindigkeit. Beim Reacher reicht das (Aktion = Geschwindigkeit), beim Pendel nicht.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def to_pixel(x, y, n=16, r=2.2):
+          col = int((x + r) / (2 * r) * n)
+          row = int((r - y) / (2 * r) * n)
+          return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+
+      def render(q, n=16):
+          img = np.zeros((n, n))
+          p1 = np.array([np.cos(q[0]), np.sin(q[0])])
+          p2 = p1 + np.array([np.cos(q[0] + q[1]), np.sin(q[0] + q[1])])
+          for t in np.linspace(0, 1, 12):
+              for x, y in [t * p1, p1 + t * (p2 - p1)]:
+                  row, col = to_pixel(x, y)
+                  img[row, col] = 1.0
+          return img
+
+      q = np.array([0.8, -1.2])
+      img = render(q)
+      print(img.shape, "Pixel an:", int(img.sum()))
+      lab.heatmap(img, title="Beobachtung: 16×16 Pixel")
+      lab.arm(q, title="Zustand: q = (0.8, -1.2) rad")
+    subgoals:
+      - lines: [4, 7]
+        label: Weltkoordinaten in Pixel umrechnen
+      - lines: [9, 17]
+        label: Punkte entlang der Glieder einzeichnen
+      - lines: [19, 23]
+        label: Bild erzeugen und mit dem Arm vergleichen
+    after: |
+      Dieselbe Stellung zweimal: oben als Bild (was der Agent sieht), unten als Gelenkwinkel (was wir in Modul 16 benutzt haben). Aus 256 Pixeln muss ein Modell die 2 relevanten Zahlen erst selbst herausfinden.
+  - type: predict
+    code: |
+      def to_pixel(x, y, n=16, r=2.2):
+          col = int((x + r) / (2 * r) * n)
+          row = int((r - y) / (2 * r) * n)
+          return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+
+      print(to_pixel(0.0, 0.0), to_pixel(2.0, 0.0), to_pixel(0.0, 2.0))
+    options:
+      - "(8, 8) (8, 15) (0, 8)"
+      - "(8, 8) (15, 8) (8, 0)"
+      - "(8, 8) (8, 15) (15, 8)"
+      - "(7, 7) (7, 14) (0, 7)"
+    answer: "(8, 8) (8, 15) (0, 8)"
+    explanation: |
+      Der Ursprung liegt in der Bildmitte (Zeile 8, Spalte 8). $x = 2$ m ist ganz rechts (Spalte 15). $y = 2$ m ist **oben** – also Zeile 0, weil Bildzeilen von oben nach unten zählen.
+  - type: explain
+    question: |
+      Das Bild hat 256 Zahlen, der Arm aber nur 2 Freiheitsgrade. Warum ist das ein Problem für ein Dynamikmodell, das direkt auf Pixeln arbeitet?
+    options:
+      - text: Es müsste 256 Ausgaben vorhersagen, von denen fast alle von denselben 2 Größen abhängen – viel Aufwand, viele Parameter, viel Raum für Fehler.
+        correct: true
+        why: Deshalb komprimiert man Beobachtungen erst in einen kleinen latenten Vektor $z$ und lernt die Dynamik dort.
+      - text: NumPy kann keine Arrays mit 256 Einträgen verarbeiten.
+        correct: false
+        why: NumPy rechnet mühelos mit Millionen Einträgen.
+      - text: Bilder enthalten keine Information über die Stellung.
+        correct: false
+        why: Doch – aus dem Bild lässt sich die Stellung ablesen. Sie steckt nur verteilt in vielen Pixeln.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `to_pixel(x, y, n=16, r=2.2)`: Wandle einen Punkt $(x, y)$ in m in `(row, col)` um. Der Bereich $[-r, r]$ wird auf $n$ Pixel aufgeteilt, `int(...)` schneidet die Nachkommastellen ab. Zeile 0 ist **oben** (größtes $y$). Punkte außerhalb des Bildes werden auf den Rand begrenzt (0 bis $n-1$).
+    starter: |
+      def to_pixel(x, y, n=16, r=2.2):
+          # dein Code
+          pass
+
+      print(to_pixel(0.0, 0.0), to_pixel(0.0, 2.0))
+    solution: |
+      def to_pixel(x, y, n=16, r=2.2):
+          col = int((x + r) / (2 * r) * n)
+          row = int((r - y) / (2 * r) * n)
+          row = min(max(row, 0), n - 1)
+          col = min(max(col, 0), n - 1)
+          return row, col
+
+      print(to_pixel(0.0, 0.0), to_pixel(0.0, 2.0))
+    tests:
+      - name: Mitte und Ränder
+        code: |
+          for (x, y), want in [((0.0, 0.0), (8, 8)), ((2.0, 0.0), (8, 15)), ((0.0, 2.0), (0, 8)), ((0.0, -2.0), (15, 8)), ((-2.0, 0.0), (8, 0))]:
+              got = to_pixel(x, y)
+              assert tuple(got) == want, f"to_pixel({x}, {y}) sollte {want} sein, ist {got}"
+      - name: Oben ist Zeile 0
+        code: |
+          assert to_pixel(1.0, 1.5)[0] < to_pixel(1.0, -1.5)[0], "Ein Punkt weiter oben (größeres y) muss eine KLEINERE Zeilennummer haben."
+      - name: Außerhalb wird begrenzt
+        code: |
+          assert tuple(to_pixel(5.0, -5.0)) == (15, 15), f"to_pixel(5, -5) sollte auf (15, 15) begrenzt werden, ist {to_pixel(5.0, -5.0)}"
+          assert tuple(to_pixel(-5.0, 5.0)) == (0, 0), f"to_pixel(-5, 5) sollte auf (0, 0) begrenzt werden, ist {to_pixel(-5.0, 5.0)}"
+      - name: Andere Bildgröße
+        code: |
+          assert tuple(to_pixel(0.0, 0.0, n=8)) == (4, 4), f"Bei n=8 sollte die Mitte (4, 4) sein, ist {to_pixel(0.0, 0.0, n=8)}"
+          assert tuple(to_pixel(1.0, 0.5, n=32, r=1.0)) == (8, 31), f"to_pixel(1.0, 0.5, n=32, r=1.0) sollte (8, 31) sein, ist {to_pixel(1.0, 0.5, n=32, r=1.0)}"
+    mutants:
+      - |
+        def to_pixel(x, y, n=16, r=2.2):
+            col = int((x + r) / (2 * r) * n)
+            row = int((y + r) / (2 * r) * n)
+            return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+      - |
+        def to_pixel(x, y, n=16, r=2.2):
+            col = int((x + r) / (2 * r) * n)
+            row = int((r - y) / (2 * r) * n)
+            return row, col
+      - |
+        def to_pixel(x, y, n=16, r=2.2):
+            col = int((x + r) / (2 * r) * n)
+            row = int((r - y) / (2 * r) * n)
+            return min(max(col, 0), n - 1), min(max(row, 0), n - 1)
+      - |
+        def to_pixel(x, y, n=16, r=2.2):
+            col = round((x + r) / (2 * r) * n)
+            row = round((r - y) / (2 * r) * n)
+            return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+    hints:
+      - "Teilziel: Koordinate auf $[0, 1]$ bringen, mit $n$ multiplizieren, abschneiden, begrenzen."
+      - Für die Spalte $(x + r) / (2r)$, für die Zeile $(r - y) / (2r)$ – so wächst die Zeile nach **unten**.
+      - |
+        ```python
+        col = int((x + r) / (2 * r) * n)
+        row = int((r - y) / (2 * r) * n)
+        ```
+      - "`return min(max(row, 0), n - 1), min(max(col, 0), n - 1)`"
+  - type: quiz
+    question: |
+      Du beobachtest ein **Pendel** als Einzelbild. Warum reicht ein Bild nicht als Zustand?
+    options:
+      - text: Das Bild zeigt den Winkel, aber nicht die Winkelgeschwindigkeit – zwei Pendel mit gleichem Winkel und verschiedener Geschwindigkeit sehen gleich aus.
+        correct: true
+        why: Man braucht mehrere Bilder hintereinander oder ein Gedächtnis (RNN) – genau dafür hat Dreamer ein rekurrentes Modell.
+      - text: Das Bild ist zu klein; mit 64×64 Pixeln wäre es ein vollständiger Zustand.
+        correct: false
+        why: Auch ein großes Einzelbild enthält keine Geschwindigkeit.
+      - text: Bilder sind immer verrauscht und deshalb unbrauchbar.
+        correct: false
+        why: Rauschen erschwert das Lernen, macht Bilder aber nicht unbrauchbar.
+  - type: quiz
+    question: |
+      Ha & Schmidhuber (2018) verwenden Farbbilder mit 64×64 Pixeln und 3 Farbkanälen. Wie viele Zahlen hat eine Beobachtung?
+    options:
+      - text: "12 288"
+        correct: true
+        why: 64 · 64 · 3 = 12 288.
+      - text: "4 096"
+        correct: false
+        why: Das wären nur 64 · 64 Graustufenwerte – die 3 Farbkanäle fehlen.
+      - text: "192"
+        correct: false
+        why: 64 · 3 zählt nur eine Zeile.
+cards:
+  - id: m17-c-pixel
+    concept: lwm-beobachtung-bild
+    variants:
+      - type: predict
+        code: |
+          def to_pixel(x, y, n=16, r=2.2):
+              col = int((x + r) / (2 * r) * n)
+              row = int((r - y) / (2 * r) * n)
+              return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+
+          print(to_pixel(-2.0, 0.0))
+        options: ["(8, 0)", "(0, 8)", "(8, 15)", "(8, -7)"]
+        answer: "(8, 0)"
+        explanation: Ganz links (Spalte 0), auf halber Höhe (Zeile 8).
+      - type: predict
+        code: |
+          def to_pixel(x, y, n=16, r=2.2):
+              col = int((x + r) / (2 * r) * n)
+              row = int((r - y) / (2 * r) * n)
+              return min(max(row, 0), n - 1), min(max(col, 0), n - 1)
+
+          print(to_pixel(0.0, -2.0))
+        options: ["(15, 8)", "(0, 8)", "(8, 15)", "(1, 8)"]
+        answer: "(15, 8)"
+        explanation: Unten im Bild = große Zeilennummer.
+  - id: m17-c-zustand-beobachtung
+    concept: lwm-beobachtung-bild
+    variants:
+      - type: quiz
+        question: Was ist der Unterschied zwischen Zustand $s$ und Beobachtung $o$?
+        options:
+          - text: "$s$ enthält alles, was die Zukunft bestimmt; $o$ ist das, was der Sensor davon zeigt – oft hochdimensional und unvollständig."
+            correct: true
+            why: Bei Bildern steckt $s$ indirekt in vielen Pixeln, manches (wie Geschwindigkeit) fehlt ganz.
+          - text: Es gibt keinen Unterschied, beide Begriffe meinen dasselbe.
+            correct: false
+            why: Nur wenn der Sensor den Zustand direkt liefert, fallen beide zusammen.
+          - text: "$o$ ist immer kleiner als $s$."
+            correct: false
+            why: Ein Bild (256 Zahlen) ist viel größer als $s$ (2–4 Zahlen).
+      - type: quiz
+        question: Welche Beobachtung reicht beim **Reacher2D** als Zustand aus?
+        options:
+          - text: Ein einzelnes Bild – der Reacher ist kinematisch, die Aktion bestimmt die Geschwindigkeit direkt.
+            correct: true
+            why: Der nächste Zustand hängt nur von Stellung und Aktion ab, und die Stellung ist im Bild sichtbar.
+          - text: Nur eine Folge von mindestens 10 Bildern.
+            correct: false
+            why: Für ein System ohne Trägheit reicht die aktuelle Stellung.
+          - text: Gar kein Bild – Bilder enthalten nie die Stellung.
+            correct: false
+            why: Die Stellung ist im Bild klar zu sehen.

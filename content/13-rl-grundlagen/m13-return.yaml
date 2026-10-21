@@ -1,0 +1,298 @@
+id: m13-return
+title: Return und Diskont
+minutes: 9
+goals:
+  - Den diskontierten Return einer Belohnungsfolge berechnen
+  - Den Diskontfaktor γ als effektiven Planungshorizont deuten
+  - Alle Returns einer Episode rückwärts in einem Durchlauf berechnen
+concepts: [mdp-return, mdp-return-rekursiv]
+steps:
+  - type: text
+    body: |
+      ## Was zählt, ist die Summe
+
+      Der Agent maximiert nicht die nächste Belohnung, sondern den **Return** – die (gewichtete) Summe aller künftigen Belohnungen ab Zeitschritt $t$:
+
+      $$G_t = r_t + \gamma\, r_{t+1} + \gamma^2 r_{t+2} + \dots = \sum_{k \ge 0} \gamma^k\, r_{t+k}$$
+
+      Der **Diskontfaktor** (discount) $\gamma \in [0, 1]$ macht spätere Belohnungen weniger wert. $\gamma = 0$: nur das Jetzt zählt. $\gamma \to 1$: weit vorausschauend.
+
+      Konvention für alle RL-Module: $r_t$ ist die Belohnung für die Aktion im Schritt $t$, also $G_t = r_t + \gamma\, G_{t+1}$.
+  - type: example
+    code: |
+      import numpy as np
+
+      rewards = [-1, -1, -1, -1, -1, 0]     # Episode aus der Gitterwelt
+      gamma = 0.9
+
+      G = 0.0
+      for k, r in enumerate(rewards):
+          G += gamma ** k * r
+      print(round(G, 4))
+
+      weights = gamma ** np.arange(len(rewards))   # [1, 0.9, 0.81, ...]
+      print(round(float(weights @ rewards), 4))
+    subgoals:
+      - lines: [3, 4]
+        label: Belohnungen und γ festlegen
+      - lines: [6, 9]
+        label: Mit Schleife aufsummieren
+      - lines: [11, 12]
+        label: Vektorisiert als Skalarprodukt
+    after: |
+      Ohne Diskont wäre der Return −5. Mit $\gamma = 0{,}9$ zählt jeder spätere Schritt weniger: $-(1 + 0{,}9 + 0{,}81 + 0{,}729 + 0{,}6561) \approx -4{,}095$.
+  - type: predict
+    code: |
+      rewards = [-1, -1, -1, 10]
+      gamma = 0.5
+      G = 0.0
+      for k, r in enumerate(rewards):
+          G += gamma ** k * r
+      print(G)
+    options: ["-0.5", "7.0", "-1.75", "1.25"]
+    answer: "-0.5"
+    explanation: |
+      $-1 - 0{,}5 - 0{,}25 + 10 \cdot 0{,}125 = -1{,}75 + 1{,}25 = -0{,}5$. Bei kleinem $\gamma$ ist die späte große Belohnung kaum noch etwas wert – 7,0 wäre der Return ohne Diskont.
+  - type: trace
+    intro: |
+      Rekursiv gilt $G_t = r_t + \gamma\, G_{t+1}$. Rückwärts über die Episode laufen spart alle Potenzen:
+    code: |
+      rewards = [1.0, 2.0, 3.0]
+      G = 0.0
+      for r in reversed(rewards):
+          G = r + 0.5 * G
+      print(G)
+    questions:
+      - line: 4
+        hit: 1
+        var: G
+        answer: "3.0"
+        prompt: Welchen Wert hat `G` nach dem ersten Durchlauf (letzte Belohnung)?
+      - line: 4
+        hit: 2
+        var: G
+        answer: "3.5"
+    after: |
+      Nach dem letzten Durchlauf ist `G` $= 1 + 0{,}5 \cdot 3{,}5 = 2{,}75 = G_0$. Nach dem Ende der Episode gibt es keine Belohnungen mehr, deshalb startet die Rekursion mit 0.
+  - type: explain
+    question: |
+      Warum verwendet man meist $\gamma < 1$, z. B. $0{,}99$?
+    options:
+      - text: Bei Aufgaben ohne festes Ende bleibt die Summe endlich, und frühere Belohnungen werden bevorzugt; der effektive Horizont ist etwa $1/(1-\gamma)$ Schritte.
+        correct: true
+        why: Bei konstanter Belohnung $r$ ist $G = r/(1-\gamma)$. Mit $\gamma = 0{,}99$ blickt der Agent grob 100 Schritte voraus.
+      - text: Damit alle Returns negativ werden.
+        correct: false
+        why: Das Vorzeichen hängt von den Belohnungen ab, nicht von $\gamma$.
+      - text: Weil Belohnungen in der Zukunft unsicher sind und $\gamma$ diese Unsicherheit exakt modelliert.
+        correct: false
+        why: Man kann $\gamma$ so deuten, aber es ist eine Modellierungsentscheidung, kein exaktes Unsicherheitsmodell.
+      - text: Weil $\gamma = 1$ mathematisch verboten ist.
+        correct: false
+        why: Bei Episoden, die sicher enden, ist $\gamma = 1$ erlaubt und üblich.
+  - type: example
+    intro: |
+      Wie schnell verblassen spätere Belohnungen? Gewicht $\gamma^k$ über die Schritte $k$:
+    code: |
+      import numpy as np
+      import lab
+
+      k = np.arange(100)
+      fig = lab.Figure(title="Gewicht späterer Belohnungen", xlabel="Schritte in der Zukunft k", ylabel="γ^k")
+      for gamma in [0.5, 0.9, 0.99]:
+          fig.line(gamma ** k, x=k, label=f"γ = {gamma}")
+          print(f"γ = {gamma}: Horizont 1/(1-γ) ≈ {1 / (1 - gamma):.0f} Schritte")
+      fig.show()
+    after: |
+      Mit $\gamma = 0{,}5$ ist eine Belohnung 10 Schritte später nur noch 0,1 % wert. Für eine Robotik-Aufgabe mit 50 Hz und 2 s Planungshorizont (100 Schritte) braucht man $\gamma \approx 0{,}99$.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `all_returns(rewards, gamma)`, die für **jeden** Zeitschritt $t$ den Return $G_t$ liefert (NumPy-Array, gleiche Länge wie `rewards`). Laufe dazu rückwärts.
+    starter: |
+      import numpy as np
+
+      def all_returns(rewards, gamma):
+          G = np.zeros(len(rewards))
+          running = 0.0
+          # rückwärts über t
+          return G
+    solution: |
+      import numpy as np
+
+      def all_returns(rewards, gamma):
+          G = np.zeros(len(rewards))
+          running = 0.0
+          for t in reversed(range(len(rewards))):
+              running = rewards[t] + gamma * running
+              G[t] = running
+          return G
+    tests:
+      - name: Kurzes Beispiel
+        code: |
+          import numpy as np
+          got = all_returns([1.0, 2.0, 3.0], 0.5)
+          assert close(got, [2.75, 3.5, 3.0]), f"Erwartet [2.75, 3.5, 3.0], bekommen {got}"
+      - name: Gitterwelt-Episode mit γ = 1
+        code: |
+          import numpy as np
+          got = all_returns([-1, -1, -1, 0], 1.0)
+          assert close(got, [-3, -2, -1, 0]), f"Erwartet [-3, -2, -1, 0], bekommen {got}"
+      - name: Vergleich mit direkter Summe
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          r = rng.normal(size=12)
+          ref = [sum(0.9 ** k * r[t + k] for k in range(12 - t)) for t in range(12)]
+          got = all_returns(list(r), 0.9)
+          assert close(got, ref), f"G_0 erwartet {ref[0]:.4f}, bekommen {got[0]:.4f}"
+    mutants:
+      - |
+        import numpy as np
+        def all_returns(rewards, gamma):
+            G = np.zeros(len(rewards))
+            running = 0.0
+            for t in range(len(rewards)):
+                running = rewards[t] + gamma * running
+                G[t] = running
+            return G
+      - |
+        import numpy as np
+        def all_returns(rewards, gamma):
+            G = np.zeros(len(rewards))
+            running = 0.0
+            for t in reversed(range(len(rewards))):
+                running = rewards[t] + running
+                G[t] = running
+            return G
+      - |
+        import numpy as np
+        def all_returns(rewards, gamma):
+            G = np.zeros(len(rewards))
+            running = 0.0
+            for t in reversed(range(len(rewards))):
+                G[t] = running
+                running = rewards[t] + gamma * running
+            return G
+      - |
+        import numpy as np
+        def all_returns(rewards, gamma):
+            G = np.zeros(len(rewards))
+            running = 0.0
+            for t in reversed(range(len(rewards))):
+                running = gamma * (rewards[t] + running)
+                G[t] = running
+            return G
+    hints:
+      - "Teilziel: vom letzten Zeitschritt zum ersten laufen und den laufenden Return mitführen."
+      - "Rekursion $G_t = r_t + \\gamma G_{t+1}$; nach dem Ende ist $G = 0$."
+      - "`for t in reversed(range(len(rewards))):`"
+      - |
+        ```python
+        running = rewards[t] + gamma * running
+        G[t] = running
+        ```
+    explanation: |
+      Diese Funktion brauchst du in Modul 14 für Monte-Carlo-Methoden: Dort werden Werte aus den Returns echter Episoden geschätzt.
+  - type: quiz
+    question: |
+      Gitterwelt mit −1 pro Schritt und 0 beim Betreten des Ziels, $\gamma = 1$. Der Agent braucht 6 Schritte bis ins Ziel. Wie groß ist $G_0$?
+    options:
+      - text: "−5"
+        correct: true
+        why: Fünf Schritte kosten −1, der sechste (ins Ziel) bringt 0.
+      - text: "−6"
+        correct: false
+        why: Der letzte Schritt ins Ziel kostet hier nichts (`goal_reward = 0`).
+      - text: "0"
+        correct: false
+        why: Nur der letzte Schritt bringt 0, die anderen kosten.
+      - text: "−4,1"
+        correct: false
+        why: Das wäre der Wert mit $\gamma = 0{,}9$.
+cards:
+  - id: m13-c-return-rechnen
+    concept: mdp-return
+    variants:
+      - type: predict
+        code: |
+          gamma = 0.5
+          rewards = [2, 2, 2]
+          print(sum(gamma ** k * r for k, r in enumerate(rewards)))
+        options: ["3.5", "6", "2.0", "3.0"]
+        answer: "3.5"
+        explanation: "$2 + 1 + 0{,}5 = 3{,}5$."
+      - type: predict
+        code: |
+          gamma = 0.9
+          rewards = [0, 0, 10]
+          print(round(sum(gamma ** k * r for k, r in enumerate(rewards)), 2))
+        options: ["8.1", "10", "9.0", "7.29"]
+        answer: "8.1"
+        explanation: "Die 10 kommt im Schritt $k = 2$, also $0{,}9^2 \\cdot 10 = 8{,}1$."
+      - type: predict
+        code: |
+          gamma = 0.0
+          rewards = [3, 5, 7]
+          print(sum(gamma ** k * r for k, r in enumerate(rewards)))
+        options: ["3.0", "15", "0.0", "7.0"]
+        answer: "3.0"
+        explanation: "Mit $\\gamma = 0$ zählt nur die erste Belohnung ($0^0 = 1$ in Python)."
+  - id: m13-c-return-rekursion
+    concept: mdp-return-rekursiv
+    variants:
+      - type: quiz
+        question: |
+          $r_3 = 4$, $G_4 = 10$, $\gamma = 0{,}5$. Wie groß ist $G_3$?
+        options:
+          - text: "9"
+            correct: true
+            why: "$G_3 = r_3 + \\gamma G_4 = 4 + 5$."
+          - text: "7"
+            correct: false
+            why: "Das wäre $0{,}5 \\cdot (4 + 10)$ – $\\gamma$ wirkt nur auf $G_4$."
+          - text: "14"
+            correct: false
+            why: Der Diskont fehlt.
+      - type: quiz
+        question: |
+          Warum berechnet man alle $G_t$ einer Episode rückwärts?
+        options:
+          - text: Weil $G_t$ von $G_{t+1}$ abhängt – rückwärts reicht ein Durchlauf.
+            correct: true
+            why: Vorwärts müsste man für jedes $t$ die ganze restliche Summe neu bilden.
+          - text: Weil die letzten Belohnungen am wichtigsten sind.
+            correct: false
+            why: Mit $\gamma < 1$ zählen sie für $G_0$ sogar am wenigsten.
+          - text: Weil Python Listen nur rückwärts effizient durchlaufen kann.
+            correct: false
+            why: Die Richtung kommt aus der Rekursion, nicht aus Python.
+  - id: m13-c-horizont
+    concept: mdp-return
+    variants:
+      - type: quiz
+        question: |
+          Konstante Belohnung −1 pro Schritt, unendlich lang, $\gamma = 0{,}9$. Wie groß ist der Return?
+        options:
+          - text: "−10"
+            correct: true
+            why: "$-1/(1 - 0{,}9) = -10$ (geometrische Reihe)."
+          - text: "−∞"
+            correct: false
+            why: Mit $\gamma < 1$ konvergiert die Summe.
+          - text: "−0,9"
+            correct: false
+            why: Das ist nur der zweite Summand.
+      - type: quiz
+        question: |
+          Welcher effektive Horizont gehört zu $\gamma = 0{,}98$?
+        options:
+          - text: Etwa 50 Schritte.
+            correct: true
+            why: "$1/(1 - 0{,}98) = 50$."
+          - text: Etwa 98 Schritte.
+            correct: false
+            why: Der Horizont ist $1/(1-\gamma)$, nicht $100\gamma$.
+          - text: Etwa 2 Schritte.
+            correct: false
+            why: Das wäre $1/(1-\gamma)$ für $\gamma = 0{,}5$.

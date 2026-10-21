@@ -1,0 +1,278 @@
+id: m04-zufall
+title: Zufallszahlen mit Seed
+minutes: 9
+goals:
+  - Mit `np.random.default_rng(seed)` einen Zufallsgenerator anlegen
+  - Mit `uniform`, `normal` und `integers` Zufallsarrays erzeugen
+  - Verstehen, warum ein fester Seed Ergebnisse reproduzierbar macht
+concepts: [np-zufall]
+steps:
+  - type: text
+    body: |
+      ## Zufall – aber reproduzierbar
+
+      Zufall brauchst du ständig: Sensorrauschen simulieren, zufällige Aktionen ausprobieren (Exploration im Reinforcement Learning), Startzustände variieren.
+
+      In NumPy erzeugst du dafür einen **Zufallsgenerator**:
+
+      ```python
+      rng = np.random.default_rng(0)
+      ```
+
+      Die Zahl ist der **Seed** (Startwert). Gleicher Seed → exakt dieselbe Folge von Zufallszahlen. So kannst du ein Experiment wiederholen, einen Fehler nachstellen oder zwei Verfahren unter gleichen Bedingungen vergleichen.
+
+      Lass den Generator nicht bei jeder Zahl neu erzeugen – leg ihn **einmal** an und hol dir dann alle Zahlen von ihm.
+  - type: example
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      print(rng.uniform(-1, 1, size=3))
+      print(rng.normal(0.0, 0.1, size=3))
+      print(rng.integers(0, 4, size=5))
+    subgoals:
+      - lines: [1, 2]
+        label: Generator mit Seed anlegen
+      - lines: [3, 5]
+        label: Zufallsarrays verschiedener Verteilungen ziehen
+    after: |
+      | Methode | Bedeutung |
+      |---|---|
+      | `uniform(low, high, size)` | gleichverteilt in $[\text{low}, \text{high})$ |
+      | `normal(mittel, std, size)` | normalverteilt mit Mittelwert und **Standardabweichung** |
+      | `integers(low, high, size)` | ganze Zahlen von `low` bis `high - 1` (wie `range`) |
+
+      `size` darf auch ein Tupel sein, z. B. `size=(100, 2)` für 100 zufällige Punkte.
+  - type: explain
+    question: |
+      Warum gibt man in Experimenten einen festen Seed an?
+    options:
+      - text: Damit derselbe Code bei jedem Lauf dieselben Zufallszahlen liefert und Ergebnisse vergleichbar und nachprüfbar sind.
+        correct: true
+        why: Reproduzierbarkeit ist der Zweck. Die Zahlen sind trotzdem statistisch „zufällig“ verteilt.
+      - text: Ohne Seed gibt NumPy einen Fehler aus.
+        correct: false
+        why: "`np.random.default_rng()` ohne Seed funktioniert – dann ist die Folge bei jedem Lauf anders."
+      - text: Mit Seed werden die Zahlen zufälliger.
+        correct: false
+        why: Der Seed ändert nichts an der Qualität des Zufalls, nur daran, welche Folge du bekommst.
+  - type: predict
+    code: |
+      import numpy as np
+      rng1 = np.random.default_rng(42)
+      rng2 = np.random.default_rng(42)
+      a = rng1.integers(0, 100, size=3)
+      b = rng2.integers(0, 100, size=3)
+      c = rng1.integers(0, 100, size=3)
+      print(np.array_equal(a, b), np.array_equal(a, c))
+    options: ["True False", "True True", "False False", "False True"]
+    answer: "True False"
+    explanation: |
+      `a` und `b` sind die jeweils **ersten** drei Zahlen zweier Generatoren mit gleichem Seed – identisch. `c` sind die **nächsten** drei Zahlen von `rng1` – die Folge geht weiter, also andere Werte. `np.array_equal` prüft, ob zwei Arrays komplett gleich sind.
+  - type: predict
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(7)
+      z = rng.integers(0, 2, size=1000)
+      print(z.min(), z.max())
+    options: ["0 1", "0 2", "1 2", "0 1000"]
+    answer: "0 1"
+    explanation: |
+      Die Obergrenze von `integers` ist **ausgeschlossen** – wie bei `range`. `integers(0, 2)` liefert nur 0 und 1, eine Münze.
+  - type: text
+    body: |
+      ## Rauschen auf Messwerte
+
+      Ein Sensor misst nie exakt. Ein einfaches Modell: Messwert = wahrer Wert + normalverteiltes Rauschen.
+
+      ```python
+      messung = wahr + rng.normal(0.0, sigma, size=wahr.shape)
+      ```
+
+      `size=wahr.shape` sorgt dafür, dass jedes Element sein **eigenes** Rauschen bekommt. Ob das Modell passt, prüfst du mit vielen Stichproben: Ihr Mittelwert und ihre Standardabweichung müssen nahe an den Parametern liegen.
+  - type: example
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(1)
+      x = rng.normal(2.0, 0.5, size=10_000)
+      print(round(x.mean(), 2), round(x.std(), 2))
+    subgoals:
+      - lines: [1, 3]
+        label: Viele Stichproben ziehen
+      - lines: 4
+        label: Mittelwert und Streuung prüfen
+    after: |
+      Bei 10 000 Stichproben liegen Mittelwert und Standardabweichung schon sehr nahe an 2.0 und 0.5 – aber nicht exakt. Wie schnell sich solche Schätzungen verbessern, ist Thema in Modul 10.
+  - type: fill
+    fading: true
+    prompt: |
+      Füge jedem der drei Messwerte eigenes normalverteiltes Rauschen (Mittelwert 0, Standardabweichung 0.01) hinzu.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      wahr = np.array([1.0, 2.0, 3.0])
+      messung = wahr + rng.___(0.0, 0.01, size=wahr.___)
+      print(np.round(messung, 3))
+    blanks:
+      - answer: normal
+        options: [normal, uniform, integers]
+      - answer: shape
+        options: [shape, ndim, dtype]
+    tests:
+      - name: Normalverteiltes Rauschen pro Element
+        code: |
+          import numpy as np
+          erwartet = np.array([1.0, 2.0, 3.0]) + np.random.default_rng(0).normal(0.0, 0.01, size=3)
+          assert close(messung, erwartet), f"Erwartet {np.round(erwartet, 3)}, bekommen {np.round(messung, 3)}"
+  - type: parsons
+    fading: true
+    prompt: |
+      Ziehe 1000 zufällige Aktionen aus `{0, 1, 2, 3}` und prüfe, ob Aktion 3 in etwa einem Viertel der Fälle vorkommt. Achtung: überzählige Zeilen.
+    lines:
+      - "import numpy as np"
+      - "rng = np.random.default_rng(3)"
+      - "aktionen = rng.integers(0, 4, size=1000)"
+      - "anteil = np.mean(aktionen == 3)"
+      - "print(anteil > 0.2, anteil < 0.3)"
+    distractors:
+      - "aktionen = rng.integers(0, 3, size=1000)"
+      - "aktionen = rng.integers(1, 4, size=1000)"
+    expect_output: "True True"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `zufalls_aktionen(n, seed)`, die `n` gleichverteilte Drehmomente zwischen −2 und 2 N·m als Array zurückgibt. Gleicher `seed` muss dieselben Werte liefern.
+    starter: |
+      import numpy as np
+
+      def zufalls_aktionen(n, seed):
+          # Generator anlegen, dann n Werte ziehen
+          pass
+    solution: |
+      import numpy as np
+
+      def zufalls_aktionen(n, seed):
+          rng = np.random.default_rng(seed)
+          return rng.uniform(-2.0, 2.0, size=n)
+    tests:
+      - name: Anzahl
+        code: |
+          a = zufalls_aktionen(50, 0)
+          assert a.shape == (50,), f"Erwartet 50 Werte (Form (50,)), bekommen Form {a.shape}"
+      - name: Wertebereich
+        code: |
+          a = zufalls_aktionen(2000, 1)
+          assert a.min() >= -2 and a.max() <= 2, f"Alle Werte sollten in [-2, 2] liegen, gefunden {a.min():.2f} … {a.max():.2f}"
+          assert a.min() < -1.8 and a.max() > 1.8, f"Die Werte sollten den ganzen Bereich -2 … 2 abdecken, gefunden {a.min():.2f} … {a.max():.2f}"
+      - name: Reproduzierbar
+        code: |
+          import numpy as np
+          assert np.array_equal(zufalls_aktionen(5, 7), zufalls_aktionen(5, 7)), "Gleicher Seed sollte gleiche Werte liefern."
+          assert not np.array_equal(zufalls_aktionen(5, 7), zufalls_aktionen(5, 8)), "Verschiedene Seeds sollten verschiedene Werte liefern."
+    mutants:
+      - |
+        import numpy as np
+
+        def zufalls_aktionen(n, seed):
+            rng = np.random.default_rng()
+            return rng.uniform(-2.0, 2.0, size=n)
+      - |
+        import numpy as np
+
+        def zufalls_aktionen(n, seed):
+            rng = np.random.default_rng(seed)
+            return rng.uniform(0.0, 2.0, size=n)
+      - |
+        import numpy as np
+
+        def zufalls_aktionen(n, seed):
+            rng = np.random.default_rng(seed)
+            return rng.normal(0.0, 2.0, size=n)
+    hints:
+      - "Teilziel: Generator mit dem übergebenen Seed anlegen und `n` Werte ziehen."
+      - "Gleichverteilt heißt `uniform(low, high, size=...)`."
+      - "`rng = np.random.default_rng(seed)`"
+      - "`return rng.uniform(-2.0, 2.0, size=n)`"
+  - type: quiz
+    question: |
+      Welcher Aufruf simuliert einen Würfel (Augenzahlen 1 bis 6)?
+    options:
+      - text: "`rng.integers(1, 7)`"
+        correct: true
+        why: Obergrenze ausgeschlossen – also 1 bis 6.
+      - text: "`rng.integers(1, 6)`"
+        correct: false
+        why: Damit kommt die 6 nie vor (nur 1 bis 5).
+      - text: "`rng.uniform(1, 6)`"
+        correct: false
+        why: Das liefert Kommazahlen wie 3.72, keine Augenzahlen.
+cards:
+  - id: m04-c-seed
+    concept: np-zufall
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.random.default_rng(5).normal(size=4)
+          b = np.random.default_rng(5).normal(size=4)
+          print(np.array_equal(a, b))
+        options: ["True", "False"]
+        answer: "True"
+        explanation: Zwei neue Generatoren mit gleichem Seed liefern dieselbe Folge.
+      - type: predict
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(5)
+          a = rng.normal(size=4)
+          b = rng.normal(size=4)
+          print(np.array_equal(a, b))
+        options: ["False", "True"]
+        answer: "False"
+        explanation: Derselbe Generator liefert beim zweiten Aufruf die **nächsten** Zahlen der Folge.
+  - id: m04-c-integers-grenze
+    concept: np-zufall
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          z = np.random.default_rng(0).integers(0, 3, size=500)
+          print(z.max())
+        options: ["2", "3", "500", "1"]
+        answer: "2"
+        explanation: Obergrenze ausgeschlossen – `integers(0, 3)` liefert 0, 1, 2.
+      - type: predict
+        code: |
+          import numpy as np
+          z = np.random.default_rng(1).integers(5, 8, size=500)
+          print(z.min(), z.max())
+        options: ["5 7", "5 8", "6 8", "0 7"]
+        answer: "5 7"
+        explanation: Von `low` einschließlich bis `high` ausschließlich.
+  - id: m04-c-normal-parameter
+    concept: np-zufall
+    variants:
+      - type: quiz
+        question: |
+          `rng.normal(5.0, 2.0, size=10000)` – welche Aussage stimmt?
+        options:
+          - text: Mittelwert etwa 5, Standardabweichung etwa 2.
+            correct: true
+            why: Die Parameter sind Mittelwert und Standardabweichung.
+          - text: Mittelwert etwa 5, Varianz etwa 2.
+            correct: false
+            why: Der zweite Parameter ist die Standardabweichung; die Varianz wäre 4.
+          - text: Alle Werte liegen zwischen 5 und 2.
+            correct: false
+            why: Das klingt nach `uniform`. Normalverteilte Werte haben keine festen Grenzen.
+      - type: quiz
+        question: |
+          Wie erzeugst du 100 zufällige 2D-Punkte, gleichverteilt im Quadrat $[-1, 1)^2$?
+        options:
+          - text: "`rng.uniform(-1, 1, size=(100, 2))`"
+            correct: true
+            why: Form `(100, 2)` – eine Zeile pro Punkt, x und y je gleichverteilt.
+          - text: "`rng.uniform(-1, 1, size=100)`"
+            correct: false
+            why: Das sind nur 100 Zahlen, keine 100 Punkte mit je zwei Koordinaten.
+          - text: "`rng.normal(-1, 1, size=(100, 2))`"
+            correct: false
+            why: Normalverteilt mit Mittelwert −1 – weder gleichverteilt noch auf das Quadrat begrenzt.

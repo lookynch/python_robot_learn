@@ -1,0 +1,359 @@
+id: m03-checkpoint
+title: "Checkpoint: Objekte & Code-Organisation"
+kind: checkpoint
+minutes: 15
+goals:
+  - Klassen mit Attributen und Methoden lesen und schreiben
+  - Komposition, Dataclasses und Typhinweise anwenden
+  - Code mit Tests absichern und Fehler systematisch finden
+concepts:
+  - m03-klasse-objekt
+  - m03-methode-self
+  - m03-komposition
+  - m03-dataclass
+  - m03-type-hints
+  - m03-tests-assert
+  - m03-randfaelle
+  - m03-debugging
+steps:
+  - type: predict
+    code: |
+      class Tank:
+          def __init__(self, level):
+              self.level = level
+
+          def drain(self, amount):
+              self.level = self.level - amount
+              return self.level
+
+      a = Tank(10)
+      b = Tank(10)
+      a.drain(3)
+      print(a.drain(2), b.level)
+    options: ["5 10", "8 10", "5 5", "7 10"]
+    answer: "5 10"
+    explanation: |
+      `a` wird zweimal geleert ($10 - 3 - 2 = 5$), `b` ist ein eigenes Objekt und bleibt bei 10.
+  - type: quiz
+    question: |
+      Was passiert in der letzten Zeile?
+    code: |
+      class Joint:
+          def __init__(self, angle):
+              angle = angle
+
+      j = Joint(0.5)
+      print(j.angle)
+    options:
+      - text: "Ein `AttributeError` – das Attribut wurde nie angelegt."
+        correct: true
+        why: "`angle = angle` weist nur den lokalen Parameter sich selbst zu. Richtig wäre `self.angle = angle`."
+      - text: "Es wird `0.5` ausgegeben."
+        correct: false
+        why: Ohne `self.` landet der Wert nicht im Objekt.
+      - text: "Es wird `None` ausgegeben."
+        correct: false
+        why: Python legt fehlende Attribute nicht automatisch mit `None` an.
+  - type: fill
+    prompt: |
+      Setze die beiden Felder so ein, dass genau `Motor(name='greifer', max_speed=0.5, on=False)` ausgegeben wird.
+    code: |
+      from dataclasses import dataclass
+
+      @dataclass
+      class Motor:
+          name: str
+          ___
+          ___
+
+      print(Motor("greifer", 0.5))
+    blanks:
+      - answer: "max_speed: float"
+        options: ["max_speed: float", "on: bool = False", "on: bool"]
+      - answer: "on: bool = False"
+        options: ["on: bool = False", "on: bool", "max_speed: float"]
+    expect_output: "Motor(name='greifer', max_speed=0.5, on=False)"
+    explanation: |
+      Die Felder bestimmen Reihenfolge und Namen in `__init__` und `__repr__`. `on` braucht einen Standardwert, weil nur zwei Argumente übergeben werden – und Felder mit Standardwert stehen hinten.
+  - type: predict
+    code: |
+      def scale(x: float, k: int = 2) -> float:
+          return x * k
+
+      print(scale("ha"))
+      print(scale(3, 1))
+    options:
+      - |
+        haha
+        3
+      - |
+        TypeError
+        3.0
+      - |
+        haha
+        3.0
+      - |
+        TypeError
+        3
+    answer: |
+      haha
+      3
+    explanation: |
+      Typhinweise werden zur Laufzeit weder geprüft noch umgewandelt: `"ha" * 2` verkettet den String, und `3 * 1` bleibt die ganze Zahl `3` – obwohl `-> float` dransteht.
+  - type: parsons
+    prompt: |
+      Baue einen Roboter, der seine Gelenke enthält und deren Winkel summiert. Ausgabe: `0.75`.
+    lines:
+      - "class Joint:"
+      - "    def __init__(self, angle):"
+      - "        self.angle = angle"
+      - "class Robot:"
+      - "    def __init__(self, joints):"
+      - "        self.joints = joints"
+      - "    def total(self):"
+      - "        return sum([j.angle for j in self.joints])"
+      - "arm = Robot([Joint(0.5), Joint(0.25)])"
+      - "print(arm.total())"
+    distractors:
+      - "        joints = joints"
+      - "        return sum(self.joints)"
+    expect_output: "0.75"
+  - type: predict
+    code: |
+      import math
+
+      def test_cos():
+          assert abs(math.cos(math.pi / 2)) < 1e-9, "cos(pi/2) ~ 0"
+          assert math.cos(math.pi / 2) == 0.0, "cos(pi/2) == 0"
+          print("alles ok")
+
+      try:
+          test_cos()
+      except AssertionError as e:
+          print("fehlgeschlagen:", e)
+    options:
+      - "fehlgeschlagen: cos(pi/2) == 0"
+      - "alles ok"
+      - "fehlgeschlagen: cos(pi/2) ~ 0"
+      - |
+        fehlgeschlagen: cos(pi/2) == 0
+        alles ok
+    answer: "fehlgeschlagen: cos(pi/2) == 0"
+    explanation: |
+      `math.cos(math.pi / 2)` ist etwa $6 \cdot 10^{-17}$: Der Vergleich mit Toleranz besteht, der exakte Vergleich nicht. Nach dem fehlgeschlagenen `assert` wird `alles ok` nicht mehr erreicht.
+  - type: quiz
+    question: |
+      `count_over([2, 5, 8], 4)` soll `2` liefern, liefert aber `1`. Welche Zeile ist die wahrscheinlichste Ursache?
+    code: |
+      def count_over(values, limit):
+          n = 0
+          for i in range(len(values) - 1):
+              if values[i] > limit:
+                  n = n + 1
+          return n
+    options:
+      - text: "`for i in range(len(values) - 1):` – der letzte Wert wird nie geprüft."
+        correct: true
+        why: "`range(2)` liefert nur die Indizes 0 und 1; die 8 an Index 2 fehlt. Klassischer Off-by-one."
+      - text: "`n = 0` – der Zähler sollte bei 1 beginnen."
+        correct: false
+        why: Dann wäre das Ergebnis für eine Liste ohne große Werte falsch (1 statt 0).
+      - text: "`if values[i] > limit:` – es müsste `>=` heißen."
+        correct: false
+        why: Kein Wert ist genau 4; `>=` änderte hier nichts.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe eine Dataclass `Joint` mit den Feldern `name: str`, `angle: float = 0.0` und `limit: float = 1.5` sowie einer Methode `move_by(self, delta: float) -> None`:
+
+      - Liegt der neue Winkel `angle + delta` betragsmäßig über `limit`, löst sie einen `ValueError` aus und **lässt `angle` unverändert**.
+      - Sonst setzt sie `angle` auf den neuen Wert.
+    starter: |
+      from dataclasses import dataclass
+
+      # dein Code
+    solution: |
+      from dataclasses import dataclass
+
+      @dataclass
+      class Joint:
+          name: str
+          angle: float = 0.0
+          limit: float = 1.5
+
+          def move_by(self, delta: float) -> None:
+              new = self.angle + delta
+              if abs(new) > self.limit:
+                  raise ValueError(f"{self.name}: {new} rad überschreitet ±{self.limit} rad")
+              self.angle = new
+    tests:
+      - name: Dataclass
+        code: |
+          j = Joint("hand")
+          assert repr(j) == "Joint(name='hand', angle=0.0, limit=1.5)", f"Erwartet Joint(name='hand', angle=0.0, limit=1.5), bekommen {j!r}"
+      - name: Bewegen
+        code: |
+          j = Joint("hand")
+          j.move_by(0.5)
+          j.move_by(0.25)
+          assert close(j.angle, 0.75), f"Nach move_by(0.5) und move_by(0.25) sollte angle 0.75 sein, ist {j.angle}"
+          j.move_by(-2.0)
+          assert close(j.angle, -1.25), f"Nach move_by(-2.0) sollte angle -1.25 sein, ist {j.angle}"
+      - name: Grenze überschritten
+        code: |
+          j = Joint("schulter", 1.0, 1.2)
+          try:
+              j.move_by(0.5)
+              assert False, "move_by(0.5) bei angle 1.0 und limit 1.2 sollte einen ValueError auslösen"
+          except ValueError:
+              pass
+          assert j.angle == 1.0, f"Nach dem Fehler sollte angle unverändert 1.0 sein, ist {j.angle}"
+      - name: Negative Grenze und genau am Limit
+        code: |
+          j = Joint("ellbogen", 0.0, 1.0)
+          j.move_by(-1.0)
+          assert j.angle == -1.0, "Genau am Limit ist erlaubt"
+          try:
+              j.move_by(-0.1)
+              assert False, "Unter -limit sollte ein ValueError entstehen"
+          except ValueError:
+              pass
+    mutants:
+      - |
+        from dataclasses import dataclass
+
+        @dataclass
+        class Joint:
+            name: str
+            angle: float = 0.0
+            limit: float = 1.5
+
+            def move_by(self, delta: float) -> None:
+                self.angle = self.angle + delta
+                if abs(self.angle) > self.limit:
+                    raise ValueError("Grenze überschritten")
+      - |
+        from dataclasses import dataclass
+
+        @dataclass
+        class Joint:
+            name: str
+            angle: float = 0.0
+            limit: float = 1.5
+
+            def move_by(self, delta: float) -> None:
+                new = self.angle + delta
+                if new > self.limit:
+                    raise ValueError("Grenze überschritten")
+                self.angle = new
+      - |
+        from dataclasses import dataclass
+
+        @dataclass
+        class Joint:
+            name: str
+            angle: float = 0.0
+            limit: float = 1.5
+
+            def move_by(self, delta: float) -> None:
+                new = self.angle + delta
+                if abs(new) > self.limit:
+                    new = self.limit
+                self.angle = new
+      - |
+        class Joint:
+            def __init__(self, name, angle=0.0, limit=1.5):
+                self.name = name
+                self.angle = angle
+                self.limit = limit
+
+            def move_by(self, delta):
+                new = self.angle + delta
+                if abs(new) > self.limit:
+                    raise ValueError("Grenze überschritten")
+                self.angle = new
+    hints:
+      - "Teilziel: Dataclass mit drei Feldern, dann in `move_by` erst den neuen Winkel berechnen, prüfen und nur bei Erfolg speichern."
+      - Berechne `new = self.angle + delta` in einer lokalen Variable – so bleibt `self.angle` unverändert, falls du abbrichst.
+      - |
+        ```python
+        def move_by(self, delta: float) -> None:
+            new = self.angle + delta
+            if abs(new) > self.limit:
+                raise ValueError("...")
+            self.angle = new
+        ```
+  - type: exercise
+    mode: modify
+    prompt: |
+      `max_abs_angle` soll den größten **Betrag** aller Gelenkwinkel liefern. Für `[0.2, -1.4, 0.9]` kommt aber `0.9` heraus. Finde die Ursache und behebe sie.
+    starter: |
+      class Robot:
+          def __init__(self, angles):
+              self.angles = angles
+
+          def max_abs_angle(self):
+              best = 0.0
+              for q in self.angles:
+                  if q > best:
+                      best = q
+              return best
+
+      print(Robot([0.2, -1.4, 0.9]).max_abs_angle())
+    solution: |
+      class Robot:
+          def __init__(self, angles):
+              self.angles = angles
+
+          def max_abs_angle(self):
+              best = 0.0
+              for q in self.angles:
+                  if abs(q) > best:
+                      best = abs(q)
+              return best
+
+      print(Robot([0.2, -1.4, 0.9]).max_abs_angle())
+    tests:
+      - name: Negativer Winkel ist der größte
+        code: |
+          r = Robot([0.2, -1.4, 0.9]).max_abs_angle()
+          assert r == 1.4, f"Erwartet 1.4, bekommen {r}"
+      - name: Nur negative Winkel
+        code: |
+          r = Robot([-0.5, -0.3]).max_abs_angle()
+          assert r == 0.5, f"Erwartet 0.5 (Betrag), bekommen {r}"
+      - name: Positive Winkel
+        code: |
+          r = Robot([0.1, 0.7, 0.3]).max_abs_angle()
+          assert r == 0.7, f"Erwartet 0.7, bekommen {r}"
+    mutants:
+      - |
+        class Robot:
+            def __init__(self, angles):
+                self.angles = angles
+
+            def max_abs_angle(self):
+                best = 0.0
+                for q in self.angles:
+                    if abs(q) > best:
+                        best = q
+                return best
+
+        print(Robot([0.2, -1.4, 0.9]).max_abs_angle())
+      - |
+        class Robot:
+            def __init__(self, angles):
+                self.angles = angles
+
+            def max_abs_angle(self):
+                best = self.angles[0]
+                for q in self.angles:
+                    if q > best:
+                        best = q
+                return abs(best)
+
+        print(Robot([0.2, -1.4, 0.9]).max_abs_angle())
+    hints:
+      - "Teilziel: Hypothese – warum gewinnt -1.4 den Vergleich nie, obwohl sein Betrag am größten ist?"
+      - Verglichen und gespeichert werden muss der **Betrag** `abs(q)`, nicht `q`.
+      - "`if abs(q) > best:` dann `best = abs(q)`"

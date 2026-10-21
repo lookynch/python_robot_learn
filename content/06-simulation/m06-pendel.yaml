@@ -1,0 +1,311 @@
+id: m06-pendel
+title: Pendel simulieren
+minutes: 10
+goals:
+  - Die Pendelgleichung mit der Konvention $\theta = 0$ oben aufstellen
+  - Eine `step`-Funktion für das Pendel mit Drehmoment schreiben
+  - Die Simulation mit `lab.pendulum` animieren und über die Energie prüfen
+concepts: [pendel-ode, step-funktion, energiedrift]
+steps:
+  - type: text
+    body: |
+      ## Pendel mit Motor
+
+      Punktmasse $m$ (kg) an einer masselosen Stange der Länge $l$ (m), im Drehpunkt ein Motor mit Drehmoment $u$ (N·m).
+
+      **Konvention im ganzen Kurs:** $\theta = 0$ zeigt **nach oben**, positiv gegen den Uhrzeigersinn. Die Masse sitzt bei $x = -l\sin\theta$, $y = l\cos\theta$. Unten hängen heißt $\theta = \pi$.
+
+      Drallsatz um den Drehpunkt:
+
+      $$
+      m l^2\, \ddot\theta = m g l \sin\theta + u
+      \quad\Rightarrow\quad
+      \ddot\theta = \frac{g}{l}\sin\theta + \frac{u}{m l^2}
+      $$
+
+      Das Pluszeichen ist kein Tippfehler: Weicht das Pendel oben ein wenig ab ($\theta > 0$ klein), beschleunigt die Schwerkraft es **weiter weg** – oben ist instabil. Zustand: $[\theta, \dot\theta]$.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      g, l, m = 9.81, 1.0, 1.0     # m/s², m, kg
+
+      def step(state, u, dt):
+          theta, omega = state
+          alpha = g / l * np.sin(theta) + u / (m * l**2)
+          omega = omega + dt * alpha
+          theta = theta + dt * omega
+          return np.array([theta, omega])
+
+      dt = 0.02
+      state = np.array([2.5, 0.0])    # 0,64 rad neben der unteren Ruhelage
+      thetas = [state[0]]
+      for k in range(200):
+          state = step(state, 0.0, dt)
+          thetas.append(state[0])
+
+      print(f"theta zwischen {min(thetas):.2f} und {max(thetas):.2f} rad")
+      lab.pendulum(thetas, length=l, title="Pendel ohne Motor, 4 s", fps=50)
+    subgoals:
+      - lines: [6, 11]
+        label: Physik in step kapseln
+      - lines: [13, 18]
+        label: Simulationsschleife
+      - lines: [20, 21]
+        label: Ergebnis prüfen und animieren
+    after: |
+      Das Pendel schwingt symmetrisch um $\pi \approx 3{,}14$: von 2,50 bis 3,78 rad ($= 2\pi - 2{,}5$). Mit `fps=50` und `dt = 0.02` läuft die Animation in Echtzeit. Die gestrichelte Linie in der Animation markiert $\theta = 0$ (oben).
+  - type: predict
+    code: |
+      import numpy as np
+
+      g, l, m = 9.81, 1.0, 1.0
+
+      def accel(theta, u=0.0):
+          return g / l * np.sin(theta) + u / (m * l**2)
+
+      print(round(accel(np.pi / 2), 2), round(accel(np.pi), 2))
+    question: Welche Winkelbeschleunigungen (rad/s²) gibt das Programm aus?
+    options: ["9.81 0.0", "0.0 9.81", "-9.81 0.0", "9.81 -9.81"]
+    answer: "9.81 0.0"
+    explanation: |
+      Bei $\theta = \pi/2$ liegt die Stange waagrecht **links** ($x = -l$); die Schwerkraft dreht sie mit $g/l$ weiter in positive Richtung nach unten. Bei $\theta = \pi$ hängt sie senkrecht – kein Drehmoment, Ruhelage. (`np.sin(np.pi)` ist nur fast 0, nach dem Runden 0.0.)
+  - type: explain
+    question: |
+      $\theta = 0$ und $\theta = \pi$ sind beide Ruhelagen ($\ddot\theta = 0$). Warum fällt das Pendel bei `state = [1e-6, 0.0]` trotzdem um, bei `[np.pi + 1e-6, 0.0]` aber nicht?
+    options:
+      - text: Oben ist $\sin\theta \approx \theta$, die Abweichung wird verstärkt; unten ist $\sin\theta \approx -(\theta - \pi)$, die Abweichung wird zurückgetrieben.
+        correct: true
+        why: Linearisiert ist oben $\ddot\theta \approx (g/l)\,\theta$ (exponentielles Wachstum), unten $\ddot\theta \approx -(g/l)(\theta-\pi)$ (Schwingung). Deshalb braucht man in Modul 9 einen Regler, um das Pendel oben zu halten.
+      - text: Wegen Rundungsfehlern, die nur oben auftreten.
+        correct: false
+        why: Die Störung von $10^{-6}$ ist gewollt. Entscheidend ist, ob die Dynamik sie verstärkt oder dämpft.
+      - text: Weil das Euler-Verfahren oben Energie hinzufügt.
+        correct: false
+        why: Auch die exakte Lösung kippt oben – das ist Physik, kein Verfahrensfehler.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die `step`-Funktion des Pendels (semi-impliziter Euler). Nach 5 Schritten mit `dt = 0.05` ab $\theta = 2$ rad soll `2.3255 2.1248` herauskommen.
+    code: |
+      import numpy as np
+
+      g, l, m = 9.81, 1.0, 1.0
+
+      def step(state, u, dt):
+          theta, omega = state
+          alpha = g / l * np.___(theta) + u / (m * l**2)
+          omega = omega + dt * alpha
+          theta = theta + dt * ___
+          return np.array([theta, omega])
+
+      s = np.array([2.0, 0.0])
+      for k in range(5):
+          s = step(s, 0.0, 0.05)
+      print(round(s[0], 4), round(s[1], 4))
+    blanks:
+      - answer: sin
+        options: [sin, cos, tan]
+      - answer: omega
+        options: [omega, alpha, theta]
+    expect_output: "2.3255 2.1248"
+    explanation: |
+      Das Drehmoment der Schwerkraft ist proportional zu $\sin\theta$ (Hebelarm $l\sin\theta$). Die Ableitung des Winkels ist die Winkelgeschwindigkeit – und zwar die **neue**, schon aktualisierte.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0)`: ein semi-impliziter Euler-Schritt für das Pendel mit Drehmoment `u` (N·m), Konvention $\theta = 0$ oben. Gib ein neues Array `[theta, omega]` zurück.
+    starter: |
+      import numpy as np
+
+      def pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0):
+          theta, omega = state
+          # alpha berechnen, dann omega, dann theta
+          return np.array([theta, omega])
+    solution: |
+      import numpy as np
+
+      def pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0):
+          theta, omega = state
+          alpha = g / l * np.sin(theta) + u / (m * l**2)
+          omega = omega + dt * alpha
+          theta = theta + dt * omega
+          return np.array([theta, omega])
+    tests:
+      - name: Ruhelage oben
+        code: |
+          s = pendulum_step(np.array([0.0, 0.0]), 0.0, 0.01)
+          assert close(s, [0.0, 0.0]), f"Bei theta = 0, u = 0 darf sich nichts ändern, bekommen {s}"
+      - name: Oben kippt es weg
+        code: |
+          s = pendulum_step(np.array([0.1, 0.0]), 0.0, 0.01)
+          assert s[1] > 0, f"Bei theta = 0.1 (knapp neben oben) muss omega positiv werden, ist {s[1]:.4f} – Konvention theta = 0 oben?"
+      - name: Drehmoment, Länge und Masse
+        code: |
+          th, om, u, dt, l, m = 1.0, 0.5, 0.3, 0.05, 0.5, 2.0
+          alpha = 9.81 / l * np.sin(th) + u / (m * l**2)
+          om2 = om + dt * alpha
+          expected = [th + dt * om2, om2]
+          s = pendulum_step(np.array([th, om]), u, dt, l=l, m=m)
+          assert close(s, expected), f"Erwartet {np.round(expected, 4)}, bekommen {np.round(s, 4)}"
+      - name: Eingabe bleibt unverändert
+        code: |
+          s0 = np.array([2.0, 1.0])
+          pendulum_step(s0, 1.0, 0.1)
+          assert s0[0] == 2.0 and s0[1] == 1.0, f"Der übergebene Zustand wurde verändert: {s0}"
+    mutants:
+      - |
+        import numpy as np
+
+        def pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0):
+            theta, omega = state
+            alpha = -g / l * np.sin(theta) + u / (m * l**2)
+            omega = omega + dt * alpha
+            theta = theta + dt * omega
+            return np.array([theta, omega])
+      - |
+        import numpy as np
+
+        def pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0):
+            theta, omega = state
+            alpha = g / l * np.sin(theta) + u / m
+            omega = omega + dt * alpha
+            theta = theta + dt * omega
+            return np.array([theta, omega])
+      - |
+        import numpy as np
+
+        def pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0):
+            theta, omega = state
+            alpha = g / l * np.sin(theta) + u / (m * l**2)
+            theta = theta + dt * omega
+            omega = omega + dt * alpha
+            return np.array([theta, omega])
+      - |
+        import numpy as np
+
+        def pendulum_step(state, u, dt, g=9.81, l=1.0, m=1.0):
+            theta, omega = state
+            alpha = g / l * np.cos(theta) + u / (m * l**2)
+            omega = omega + dt * alpha
+            theta = theta + dt * omega
+            return np.array([theta, omega])
+    hints:
+      - "Teilziel: Physik in step kapseln – erst `alpha`, dann `omega`, dann `theta`."
+      - "$\\ddot\\theta = \\frac{g}{l}\\sin\\theta + \\frac{u}{m l^2}$ – mit **Plus**, weil $\\theta = 0$ oben ist."
+      - |
+        ```python
+        alpha = g / l * np.sin(theta) + u / (m * l**2)
+        omega = ...
+        theta = ...
+        ```
+    explanation: |
+      Der häufigste Fehler ist das Minuszeichen aus Lehrbüchern, in denen $\theta = 0$ **unten** ist. Der Test „Oben kippt es weg“ fängt genau das ab. `lab.envs.Pendulum` (ab Modul 9) nutzt dieselbe Konvention, modelliert aber eine **Stange** mit verteilter Masse (Trägheitsmoment $\tfrac13 m l^2$): dort steht $\ddot\theta = \frac{3g}{2l}\sin\theta + \frac{3u}{m l^2}$, und standardmäßig ist $g = 10$.
+  - type: example
+    intro: |
+      Prüfstein für jede Pendelsimulation ist die Energie $E = \tfrac12 m l^2 \dot\theta^2 + m g l \cos\theta$ (Höhe $y = l\cos\theta$). Wir simulieren 10 s explizit und semi-implizit.
+    code: |
+      import numpy as np
+      import lab
+
+      g, l, m, dt = 9.81, 1.0, 1.0, 0.02
+
+      def energy(s):
+          return 0.5 * m * l**2 * s[1]**2 + m * g * l * np.cos(s[0])
+
+      semi = np.array([2.5, 0.0])
+      expl = np.array([2.5, 0.0])
+      E_semi, E_expl = [energy(semi)], [energy(expl)]
+      for k in range(500):
+          th, om = semi
+          om = om + dt * g / l * np.sin(th)
+          semi = np.array([th + dt * om, om])
+          th, om = expl
+          expl = np.array([th + dt * om, om + dt * g / l * np.sin(th)])
+          E_semi.append(energy(semi))
+          E_expl.append(energy(expl))
+
+      print(f"E am Anfang {E_semi[0]:.2f} J, nach 10 s: semi {E_semi[-1]:.2f} J, explizit {E_expl[-1]:.2f} J")
+      ts = np.arange(501) * dt
+      fig = lab.Figure(title="Pendelenergie", xlabel="t [s]", ylabel="E [J]")
+      fig.line(E_semi, x=ts, label="semi-implizit")
+      fig.line(E_expl, x=ts, label="explizit")
+      fig.hline(m * g * l, label="reicht bis ganz oben")
+      fig.show()
+    subgoals:
+      - lines: [6, 7]
+        label: Energie als Kontrollgröße definieren
+      - lines: [9, 19]
+        label: Beide Verfahren parallel simulieren
+      - lines: [21, 26]
+        label: Energien vergleichen
+    after: |
+      Explizit steigt die Energie von $-7{,}86$ J auf etwa $0$ J – das Pendel schwingt nach 10 s schon bis zur Waagrechten, obwohl kein Motor arbeitet. Semi-implizit bleibt sie in einem schmalen Band. Für Regelung und Planen heißt das: Ein Simulator mit Energiedrift belohnt Regler, die in Wirklichkeit nicht funktionieren.
+  - type: quiz
+    question: |
+      Wo befindet sich die Masse bei $\theta = -\pi/2$ (Konvention des Kurses, $l = 1$ m)?
+    options:
+      - text: waagrecht **rechts** vom Drehpunkt, bei $(1, 0)$
+        correct: true
+        why: $x = -l\sin(-\pi/2) = 1$, $y = l\cos(-\pi/2) = 0$. Negativ heißt im Uhrzeigersinn von oben aus.
+      - text: waagrecht **links**, bei $(-1, 0)$
+        correct: false
+        why: Das ist $\theta = +\pi/2$ (gegen den Uhrzeigersinn von oben).
+      - text: unten, bei $(0, -1)$
+        correct: false
+        why: Unten ist $\theta = \pm\pi$.
+      - text: oben, bei $(0, 1)$
+        correct: false
+        why: Oben ist $\theta = 0$.
+cards:
+  - id: m06-c-pendel-lage
+    concept: pendel-ode
+    variants:
+      - type: quiz
+        question: Welcher Winkel beschreibt das **herabhängende** Pendel (Konvention des Kurses)?
+        options:
+          - text: $\theta = \pi$
+            correct: true
+            why: $\theta = 0$ ist oben, eine halbe Umdrehung weiter ist unten.
+          - text: $\theta = 0$
+            correct: false
+            why: In diesem Kurs ist $\theta = 0$ **oben** (wie in Gymnasium und `lab.envs.Pendulum`).
+          - text: $\theta = \pi/2$
+            correct: false
+            why: Das ist waagrecht links.
+      - type: quiz
+        question: "$\\theta = 0{,}2$ rad, $\\dot\\theta = 0$, $u = 0$. In welche Richtung beschleunigt das Pendel?"
+        options:
+          - text: positiv – weiter weg von oben
+            correct: true
+            why: $\ddot\theta = (g/l)\sin 0{,}2 > 0$. Oben ist instabil.
+          - text: negativ – zurück nach oben
+            correct: false
+            why: Das wäre die Gleichung mit $\theta = 0$ **unten**. Oben zieht die Schwerkraft weg.
+          - text: gar nicht, es ist in Ruhe
+            correct: false
+            why: Ruhe ($\dot\theta = 0$) heißt nicht, dass keine Beschleunigung wirkt.
+  - id: m06-c-pendel-beschleunigung
+    concept: pendel-ode
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+
+          g, l, m = 9.81, 2.0, 1.0
+          alpha = g / l * np.sin(np.pi / 2) + 1.0 / (m * l**2)
+          print(round(alpha, 3))
+        options: ["5.155", "4.905", "10.81", "5.405"]
+        answer: "5.155"
+        explanation: "$9{,}81/2 \\cdot 1 + 1/(1 \\cdot 4) = 4{,}905 + 0{,}25 = 5{,}155$ rad/s²."
+      - type: predict
+        code: |
+          import numpy as np
+
+          g, l, m = 10.0, 1.0, 0.5
+          alpha = g / l * np.sin(0.0) + 2.0 / (m * l**2)
+          print(round(alpha, 3))
+        options: ["4.0", "1.0", "14.0", "0.0"]
+        answer: "4.0"
+        explanation: "Oben ($\\theta = 0$) wirkt keine Schwerkraft-Drehung; der Motor liefert $2/(0{,}5 \\cdot 1) = 4$ rad/s²."

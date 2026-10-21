@@ -1,0 +1,278 @@
+id: m17-dreamer
+title: "Dreamer: Lernen in der Vorstellung"
+minutes: 10
+goals:
+  - Den Aufbau eines RSSM (deterministisches Gedächtnis + stochastischer Zustand) beschreiben
+  - Erklären, wie Dreamer Actor und Critic nur in vorgestellten Trajektorien trainiert
+  - λ-Returns für eine vorgestellte Trajektorie berechnen
+concepts: [lwm-rssm, lwm-imagination]
+steps:
+  - type: text
+    body: |
+      ## Das RSSM
+
+      Dreamer (Hafner et al. 2020, „Dream to Control“) nutzt das **Recurrent State-Space Model** aus PlaNet (Hafner et al. 2019). Sein latenter Zustand hat zwei Teile:
+
+      - $h_t$ – **deterministisch**, ein RNN (GRU): $h_t = f(h_{t-1}, z_{t-1}, a_{t-1})$. Das Gedächtnis – damit sind auch Geschwindigkeiten aus mehreren Bildern erfassbar.
+      - $z_t$ – **stochastisch**, eine Verteilung:
+        - **Prior** $p(z_t \mid h_t)$: Vorhersage ohne Bild – zum Vorstellen.
+        - **Posterior** $q(z_t \mid h_t, o_t)$: mit dem aktuellen Bild – beim echten Beobachten.
+
+      Trainiert wird auf echten Daten mit Bildrekonstruktion, Belohnungsvorhersage und einem KL-Term, der Prior und Posterior zusammenbringt: Das Modell soll ohne Bild vorhersagen können, was es mit Bild sehen würde.
+  - type: text
+    body: |
+      ## Lernen in der Vorstellung
+
+      1. Startzustände: Posterior-Zustände aus echten, gespeicherten Episoden.
+      2. **Vorstellen**: Vom Start aus wählt der Actor Aktionen, der Prior liefert die nächsten Zustände, ein Kopf sagt die Belohnung vorher – $H = 15$ Schritte, für viele Starts parallel.
+      3. **Critic** $v(s)$ schätzt den Wert am Ende und dazwischen; daraus entstehen **λ-Returns** (λ = 0,95).
+      4. Der **Actor** wird so verändert, dass die λ-Returns steigen; der Critic lernt, sie vorherzusagen.
+
+      Kein Schritt davon braucht die echte Umgebung. Nachfolger: DreamerV2 (2021, diskrete latente Zustände, Atari) und **DreamerV3** (Hafner et al., Preprint 2023, [Nature 2025](https://www.nature.com/articles/s41586-025-08744-2)) – ein fester Satz Hyperparameter für über 150 sehr verschiedene Aufgaben; nach Angabe der Autoren das erste Verfahren, das in Minecraft ohne menschliche Daten Diamanten sammelte.
+  - type: explain
+    question: |
+      Warum hat der RSSM-Zustand einen deterministischen **und** einen stochastischen Teil?
+    options:
+      - text: Der deterministische Teil trägt Information zuverlässig über viele Schritte; der stochastische Teil kann Unsicherheit und mehrere mögliche Zukünfte abbilden.
+        correct: true
+        why: Nur stochastisch vergisst das Modell leicht; nur deterministisch kann es keine echten Verzweigungen der Zukunft darstellen.
+      - text: Der stochastische Teil ist nur Rauschen zur Regularisierung und wird beim Vorstellen abgeschaltet.
+        correct: false
+        why: Beim Vorstellen wird gerade aus dem Prior $p(z_t \mid h_t)$ gezogen.
+      - text: Damit man das Modell ohne Gradienten trainieren kann.
+        correct: false
+        why: Das RSSM wird mit Gradientenabstieg trainiert.
+  - type: example
+    intro: |
+      Mini-Vorstellung als Spielversion: Statt eines gelernten RSSM nehmen wir die Pendeldynamik als „perfektes Modell“ und einen groben, von Hand gebauten Critic. Wir stellen uns 1000 Trajektorien à 15 Schritte vor – für zwei Policies – und vergleichen ihre mittleren λ-Returns.
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      model = Pendulum()
+
+      def critic(S):
+          return -10 * (angle_normalize(S[..., 0]) ** 2 + 0.1 * S[..., 1] ** 2)
+
+      def lambda_returns(r, v, gamma, lam):
+          G = np.zeros_like(r)
+          nxt = v[-1]
+          for t in reversed(range(len(r))):
+              nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+              G[t] = nxt
+          return G
+
+      def imagine(gains, S0, H=15):
+          S, states, rewards = S0, [S0], []
+          for t in range(H):
+              u = -gains[0] * angle_normalize(S[:, 0]) - gains[1] * S[:, 1]
+              rewards.append(-model.cost(S, u))
+              S = model.dynamics(S, u)
+              states.append(S)
+          return lambda_returns(np.array(rewards), critic(np.array(states)), 0.9, 0.95)
+
+      rng = np.random.default_rng(0)
+      S0 = np.stack([rng.uniform(-0.5, 0.5, 1000), rng.uniform(-1, 1, 1000)], axis=1)
+      for gains in [(0, 0), (10, 2)]:
+          G = imagine(gains, S0)
+          print(f"Policy {gains}: mittlerer λ-Return {G[0].mean():.2f}")
+    subgoals:
+      - lines: [6, 7]
+        label: Critic schätzt den Wert eines Zustands
+      - lines: [9, 15]
+        label: λ-Returns rückwärts berechnen
+      - lines: [17, 24]
+        label: Trajektorien im Modell vorstellen
+      - lines: [26, 30]
+        label: Policies nur in der Vorstellung vergleichen
+    after: |
+      Der PD-artige Controller hat einen viel besseren λ-Return als „nichts tun“ – herausgefunden mit 15 000 vorgestellten Schritten und **null** echten. Dreamer macht dasselbe mit einem gelernten Modell und verbessert den Actor per Gradient auf genau dieser Größe.
+  - type: predict
+    intro: |
+      Zwei vorgestellte Schritte mit Belohnungen $r = [1, 1]$ und Critic-Werten $v = [0, 2, 4]$ für $s_0, s_1, s_2$. Es gilt $G_2 = v_2$ und rückwärts $G_t = r_t + \gamma\big((1-\lambda)\, v_{t+1} + \lambda\, G_{t+1}\big)$.
+    code: |
+      gamma, lam = 1.0, 0.5
+      r = [1.0, 1.0]
+      v = [0.0, 2.0, 4.0]
+      G = [0.0, 0.0]
+      nxt = v[2]
+      for t in [1, 0]:
+          nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+          G[t] = nxt
+      print(G)
+    options: ["[4.5, 5.0]", "[6.0, 5.0]", "[3.0, 5.0]", "[2.0, 1.0]"]
+    answer: "[4.5, 5.0]"
+    explanation: |
+      $G_1 = 1 + 0{,}5 \cdot 4 + 0{,}5 \cdot 4 = 5$, dann $G_0 = 1 + 0{,}5 \cdot 2 + 0{,}5 \cdot 5 = 4{,}5$. Mit λ = 1 wäre $G_0 = 6$ (Belohnungen bis zum Ende plus $v_2$), mit λ = 0 wäre $G_0 = 3$ (ein Schritt plus $v_1$).
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `lambda_returns(r, v, gamma, lam)` für eine vorgestellte Trajektorie: `r` hat Länge $H$, `v` hat Länge $H + 1$ (Critic-Werte von $s_0$ bis $s_H$). Starte mit $G_H = v_H$ und rechne **rückwärts**
+
+      $$G_t = r_t + \gamma\big((1-\lambda)\, v_{t+1} + \lambda\, G_{t+1}\big)$$
+
+      Gib die $H$ Werte $G_0, \dots, G_{H-1}$ als NumPy-Array zurück.
+    starter: |
+      import numpy as np
+
+      def lambda_returns(r, v, gamma, lam):
+          G = np.zeros(len(r))
+          # dein Code
+          return G
+
+      print(lambda_returns(np.array([1.0, 1.0]), np.array([0.0, 2.0, 4.0]), 1.0, 0.5))
+    solution: |
+      import numpy as np
+
+      def lambda_returns(r, v, gamma, lam):
+          G = np.zeros(len(r))
+          nxt = v[-1]
+          for t in reversed(range(len(r))):
+              nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+              G[t] = nxt
+          return G
+
+      print(lambda_returns(np.array([1.0, 1.0]), np.array([0.0, 2.0, 4.0]), 1.0, 0.5))
+    tests:
+      - name: Kleines Beispiel
+        code: |
+          got = lambda_returns(np.array([1.0, 1.0]), np.array([0.0, 2.0, 4.0]), 1.0, 0.5)
+          assert close(got, [4.5, 5.0]), f"Erwartet [4.5, 5.0], bekommen {got}"
+      - name: λ = 0 ist der Ein-Schritt-TD-Zielwert
+        code: |
+          r = np.array([0.5, -1.0, 2.0])
+          v = np.array([1.0, 3.0, -2.0, 0.5])
+          got = lambda_returns(r, v, 0.9, 0.0)
+          assert close(got, r + 0.9 * v[1:]), f"Bei λ = 0 sollte G_t = r_t + γ v_(t+1) sein: erwartet {r + 0.9 * v[1:]}, bekommen {got}"
+      - name: λ = 1 ist der Monte-Carlo-Return mit Wert am Ende
+        code: |
+          r = np.array([1.0, 2.0, 3.0])
+          v = np.array([9.0, 9.0, 9.0, 10.0])
+          got = lambda_returns(r, v, 0.5, 1.0)
+          want = np.array([1 + 0.5 * 2 + 0.25 * 3 + 0.125 * 10, 2 + 0.5 * 3 + 0.25 * 10, 3 + 0.5 * 10])
+          assert close(got, want), f"Bei λ = 1: erwartet {want}, bekommen {got}"
+      - name: Zufällige Trajektorie
+        code: |
+          rr = np.random.default_rng(3)
+          r, v = rr.normal(size=15), rr.normal(size=16)
+          want, nxt = np.zeros(15), v[-1]
+          for t in range(14, -1, -1):
+              nxt = r[t] + 0.99 * (0.05 * v[t + 1] + 0.95 * nxt)
+              want[t] = nxt
+          got = lambda_returns(r, v, 0.99, 0.95)
+          assert np.shape(got) == (15,) and close(got, want), "Für H = 15, γ = 0.99, λ = 0.95 weichen die Werte ab."
+    mutants:
+      - |
+        import numpy as np
+        def lambda_returns(r, v, gamma, lam):
+            G = np.zeros(len(r))
+            nxt = v[-1]
+            for t in reversed(range(len(r))):
+                nxt = r[t] + gamma * (v[t + 1] + lam * nxt)
+                G[t] = nxt
+            return G
+      - |
+        import numpy as np
+        def lambda_returns(r, v, gamma, lam):
+            G = np.zeros(len(r))
+            nxt = v[-1]
+            for t in reversed(range(len(r))):
+                nxt = r[t] + gamma * ((1 - lam) * v[t] + lam * nxt)
+                G[t] = nxt
+            return G
+      - |
+        import numpy as np
+        def lambda_returns(r, v, gamma, lam):
+            G = np.zeros(len(r))
+            nxt = 0.0
+            for t in reversed(range(len(r))):
+                nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+                G[t] = nxt
+            return G
+      - |
+        import numpy as np
+        def lambda_returns(r, v, gamma, lam):
+            G = np.zeros(len(r))
+            nxt = v[-1]
+            for t in range(len(r)):
+                nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+                G[t] = nxt
+            return G
+    hints:
+      - "Teilziel: Beim letzten Wert $v_H$ beginnen und Schritt für Schritt nach vorne zurückrechnen."
+      - "`reversed(range(H))` läuft von $H-1$ bis 0. Merke dir den zuletzt berechneten Wert $G_{t+1}$ in einer Variablen."
+      - |
+        ```python
+        nxt = v[-1]
+        for t in reversed(range(len(r))):
+            ...
+        ```
+      - |
+        ```python
+            nxt = r[t] + gamma * ((1 - lam) * v[t + 1] + lam * nxt)
+            G[t] = nxt
+        ```
+  - type: quiz
+    question: |
+      Welche Teile von Dreamer werden mit **echten** Daten trainiert, welche nur in der Vorstellung?
+    options:
+      - text: Das World Model (RSSM, Decoder, Belohnungskopf) auf echten Episoden; Actor und Critic nur auf vorgestellten Trajektorien.
+        correct: true
+        why: Echte Interaktionen dienen dem Modell; das Verhalten wird im Modell gelernt.
+      - text: Alles wird nur in der Vorstellung trainiert.
+        correct: false
+        why: Ohne echte Daten gäbe es kein Modell, in dem man sich etwas vorstellen könnte.
+      - text: Der Actor auf echten Daten, das Modell in der Vorstellung.
+        correct: false
+        why: Umgekehrt – das Modell muss die Realität lernen, der Actor nutzt das Modell.
+cards:
+  - id: m17-c-rssm
+    concept: lwm-rssm
+    variants:
+      - type: quiz
+        question: Wofür benutzt Dreamer den **Prior** $p(z_t \mid h_t)$?
+        options:
+          - text: Zum Vorstellen – er sagt den nächsten Zustand ohne Bild voraus.
+            correct: true
+            why: In der Vorstellung gibt es keine Bilder, also nur den Prior.
+          - text: Zum Rekonstruieren des Bildes.
+            correct: false
+            why: Das macht der Decoder aus $(h_t, z_t)$.
+          - text: Zum Wählen der Aktion.
+            correct: false
+            why: Das ist die Aufgabe des Actors.
+      - type: quiz
+        question: Was enthält der deterministische Teil $h_t$ des RSSM?
+        options:
+          - text: Ein Gedächtnis aus früheren Zuständen und Aktionen (RNN-Zustand).
+            correct: true
+            why: So kann das Modell z. B. Geschwindigkeiten aus mehreren Bildern erschließen.
+          - text: Das aktuelle Bild in voller Auflösung.
+            correct: false
+            why: Bilder werden nie vollständig im latenten Zustand gespeichert.
+          - text: Den Return der Episode.
+            correct: false
+            why: Den schätzt der Critic.
+  - id: m17-c-lambda
+    concept: lwm-imagination
+    variants:
+      - type: quiz
+        question: Was ergibt der λ-Return bei $\lambda = 0$?
+        options:
+          - text: Den Ein-Schritt-Zielwert $r_t + \gamma\, v(s_{t+1})$.
+            correct: true
+            why: Wie beim TD(0)-Update aus Modul 14.
+          - text: Die Summe aller Belohnungen bis zum Horizont plus Endwert.
+            correct: false
+            why: Das ist der Fall $\lambda = 1$.
+          - text: Immer 0.
+            correct: false
+            why: λ gewichtet nur zwischen kurzem und langem Ausblick.
+      - type: predict
+        code: |
+          gamma, lam = 1.0, 0.0
+          r, v = [2.0], [0.0, 3.0]
+          print(r[0] + gamma * ((1 - lam) * v[1] + lam * v[1]))
+        options: ["5.0", "2.0", "3.0", "0.0"]
+        answer: "5.0"
+        explanation: Mit einem Schritt ist $G_0 = r_0 + \gamma v_1 = 2 + 3$ – unabhängig von λ, weil $G_1 = v_1$.

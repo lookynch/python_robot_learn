@@ -1,0 +1,271 @@
+id: m04-vektorisierung
+title: Vektorisieren statt Schleifen
+minutes: 10
+goals:
+  - Eine Schleife über Elemente durch einen Array-Ausdruck ersetzen
+  - Laufzeiten mit `time.perf_counter` messen und vergleichen
+  - Bedingungen in Schleifen mit `np.where` vektorisieren
+concepts: [np-vektorisierung]
+steps:
+  - type: text
+    body: |
+      ## Warum ohne Schleife?
+
+      Später wirst du Tausende Bewegungen eines Arms gleichzeitig durchrechnen, um die beste zu finden. Eine Python-Schleife verarbeitet Element für Element – und jeder Durchlauf kostet Verwaltungsaufwand.
+
+      Ein Array-Ausdruck wie `x ** 2 + 1` beschreibt dagegen die Rechnung für **alle** Elemente. NumPy führt die Schleife intern in kompiliertem Code aus. Das nennt man **Vektorisierung**.
+
+      Messen kannst du das mit `time.perf_counter()`: Zeitstempel vorher und nachher, Differenz in Sekunden.
+  - type: example
+    code: |
+      import time
+      import numpy as np
+      x = np.linspace(0, 10, 100_000)
+
+      start = time.perf_counter()
+      y_schleife = np.zeros(len(x))
+      for i in range(len(x)):
+          y_schleife[i] = x[i] ** 2 + 1
+      t_schleife = time.perf_counter() - start
+
+      start = time.perf_counter()
+      y_vektor = x ** 2 + 1
+      t_vektor = time.perf_counter() - start
+
+      print(f"Schleife:     {t_schleife * 1000:.2f} ms")
+      print(f"Vektorisiert: {t_vektor * 1000:.3f} ms")
+      print("gleiches Ergebnis:", np.allclose(y_schleife, y_vektor))
+    subgoals:
+      - lines: [1, 3]
+        label: Eingabedaten erzeugen
+      - lines: [5, 9]
+        label: Schleifenversion messen
+      - lines: [11, 13]
+        label: Vektorisierte Version messen
+      - lines: [15, 17]
+        label: Zeiten und Ergebnis vergleichen
+    after: |
+      Die vektorisierte Version ist um ein Vielfaches schneller – oft 10- bis 100-mal (die genauen Zahlen schwanken von Lauf zu Lauf und von Gerät zu Gerät). Führe den Code ruhig mehrmals aus. `np.allclose(a, b)` prüft, ob zwei Arrays bis auf winzige Rundungsfehler gleich sind – mit `==` vergleicht man Kommazahlen nicht.
+  - type: explain
+    question: |
+      Warum ist `x ** 2 + 1` so viel schneller als die Schleife?
+    options:
+      - text: Die Schleife über die Elemente läuft in NumPys kompiliertem Code, ohne dass Python jedes Element einzeln anfassen muss.
+        correct: true
+        why: Genau. Gerechnet wird gleich viel – aber ohne den Python-Aufwand pro Element.
+      - text: NumPy rechnet weniger genau und spart dadurch Zeit.
+        correct: false
+        why: Beide Varianten liefern dasselbe Ergebnis (`np.allclose` ist `True`).
+      - text: NumPy merkt sich Ergebnisse vom letzten Lauf.
+        correct: false
+        why: Es wird nichts zwischengespeichert; jeder Lauf rechnet neu.
+  - type: trace
+    intro: |
+      So arbeitet eine Akkumulator-Schleife – und daneben die vektorisierte Variante in einer Zeile.
+    code: |
+      import numpy as np
+      werte = [1.0, 2.0, 3.0]
+      summe = 0.0
+      for w in werte:
+          summe = summe + w * w
+      print(summe)
+      print(np.sum(np.array(werte) ** 2))
+    questions:
+      - line: 5
+        hit: 2
+        var: summe
+        answer: "5.0"
+        prompt: Welchen Wert hat `summe` nach dem zweiten Durchlauf?
+    after: |
+      Die Schleife braucht drei Zeilen und einen Zwischenwert. `np.sum(a ** 2)` drückt dieselbe Rechnung direkt aus – die Formel $\sum_i w_i^2$ steht fast wörtlich im Code.
+  - type: text
+    body: |
+      ## Bedingungen ohne `if`
+
+      Steht in der Schleife ein `if`, nimm `np.where`:
+
+      ```python
+      np.where(bedingung, wert_wenn_wahr, wert_sonst)
+      ```
+
+      Das wählt **pro Element** einen von zwei Werten. Beispiel Totzone eines Motors: Steuersignale mit Betrag unter 0.1 werden ignoriert (auf 0 gesetzt), alle anderen bleiben.
+
+      Ein `if` mit einem Array funktioniert dagegen nicht: `if u < 0.1:` weiß nicht, ob „alle“ oder „irgendeins“ gemeint ist, und bricht mit einem `ValueError` ab.
+  - type: predict
+    code: |
+      import numpy as np
+      u = np.array([0.05, -0.3, 0.8, -0.02])
+      print(np.where(np.abs(u) < 0.1, 0.0, u))
+    options:
+      - "[ 0.  -0.3  0.8  0. ]"
+      - "[ 0.05  0.    0.   -0.02]"
+      - "[-0.3  0.8]"
+      - "[ True False False  True]"
+    answer: "[ 0.  -0.3  0.8  0. ]"
+    explanation: |
+      Wo die Bedingung wahr ist (0.05 und -0.02), kommt `0.0`, sonst der Wert aus `u`. Die Länge bleibt gleich – anders als bei `u[maske]`, das nur auswählt.
+  - type: fill
+    fading: true
+    prompt: |
+      Vektorisiere diese Schleife:
+
+      ```python
+      for i in range(len(v)):
+          if v[i] > 0:
+              out[i] = 2 * v[i]
+          else:
+              out[i] = 0.0
+      ```
+    code: |
+      import numpy as np
+      v = np.array([1.5, -2.0, 0.5])
+      out = np.where(v ___ 0, ___, 0.0)
+      print(out)
+    blanks:
+      - answer: ">"
+        options: [">", "<", "=="]
+      - answer: "2 * v"
+        options: ["2 * v", "2 * v[i]", "v"]
+    expect_output: "[3. 0. 1.]"
+    explanation: |
+      Im vektorisierten Ausdruck gibt es kein `i` mehr – `2 * v` ist das ganze Array, `np.where` pickt pro Element den passenden Wert.
+  - type: parsons
+    fading: true
+    prompt: |
+      Berechne eine Dreiecksfunktion: für $x < 1$ ist $y = x$, sonst $y = 2 - x$. Achtung: überzählige Zeilen.
+    lines:
+      - "import numpy as np"
+      - "x = np.linspace(0, 2, 5)"
+      - "y = np.where(x < 1, x, 2 - x)"
+      - "print(y)"
+    distractors:
+      - "y = x if x < 1 else 2 - x"
+      - "y = np.where(x > 1, x, 2 - x)"
+    expect_output: "[0.  0.5 1.  0.5 0. ]"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Die Funktion `totzone` funktioniert, ist aber eine Schleife – und scheitert an 2D-Arrays, also an vielen Signalen auf einmal. Ersetze den Funktionsrumpf durch **eine** Zeile mit `np.where`, sodass sie für Arrays jeder Form funktioniert.
+    starter: |
+      import numpy as np
+
+      def totzone(u, breite):
+          out = np.zeros(len(u))
+          for i in range(len(u)):
+              if abs(u[i]) < breite:
+                  out[i] = 0.0
+              else:
+                  out[i] = u[i]
+          return out
+    solution: |
+      import numpy as np
+
+      def totzone(u, breite):
+          return np.where(np.abs(u) < breite, 0.0, u)
+    tests:
+      - name: 1D-Signal
+        code: |
+          import numpy as np
+          r = totzone(np.array([0.05, -0.3, 0.8, -0.02]), 0.1)
+          assert close(r, [0.0, -0.3, 0.8, 0.0]), f"Erwartet [0, -0.3, 0.8, 0], bekommen {r}"
+      - name: 2D – mehrere Signale auf einmal
+        code: |
+          import numpy as np
+          u = np.array([[0.2, -0.01], [-0.5, 0.04]])
+          r = totzone(u, 0.1)
+          assert r.shape == (2, 2), f"Ergebnis sollte Form (2, 2) haben, hat {r.shape}"
+          assert close(r, [[0.2, 0.0], [-0.5, 0.0]]), f"Erwartet [[0.2, 0], [-0.5, 0]], bekommen {r}"
+    mutants:
+      - |
+        import numpy as np
+
+        def totzone(u, breite):
+            return np.where(u < breite, 0.0, u)
+      - |
+        import numpy as np
+
+        def totzone(u, breite):
+            return np.where(np.abs(u) < breite, u, 0.0)
+      - |
+        import numpy as np
+
+        def totzone(u, breite):
+            return u[np.abs(u) >= breite]
+    hints:
+      - "Teilziel: die `if`-Bedingung als Maske über das ganze Array formulieren."
+      - "Aus `abs(u[i]) < breite` wird `np.abs(u) < breite`."
+      - "`np.where(bedingung, 0.0, u)` – wo wahr, 0; sonst der Originalwert."
+      - "`return np.where(np.abs(u) < breite, 0.0, u)`"
+  - type: quiz
+    question: |
+      Welche Zeile setzt alle negativen Werte von `v` auf 0, **vektorisiert** und mit gleicher Länge?
+    options:
+      - text: "`v = np.where(v < 0, 0.0, v)`"
+        correct: true
+        why: Pro Element 0 oder der Originalwert, ohne Schleife.
+      - text: "`if v < 0: v = 0.0`"
+        correct: false
+        why: "`if` mit einem Array ist mehrdeutig – `ValueError`."
+      - text: "`v = v[v >= 0]`"
+        correct: false
+        why: Das wirft die negativen Werte weg; das Array wird kürzer.
+      - text: "`v = np.where(v < 0, v, 0.0)`"
+        correct: false
+        why: Vertauscht – das behält die negativen Werte und setzt alle anderen auf 0.
+cards:
+  - id: m04-c-where
+    concept: np-vektorisierung
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([1, -2, 3])
+          print(np.where(a > 0, a, 0))
+        options: ["[1 0 3]", "[1 3]", "[ 0 -2  0]", "[ True False  True]"]
+        answer: "[1 0 3]"
+        explanation: Wo die Bedingung gilt, bleibt der Wert, sonst 0 – gleiche Länge.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([0.5, 2.0, 1.5])
+          print(np.where(a > 1, 1.0, a))
+        options: ["[0.5 1.  1. ]", "[1.  2.  1.5]", "[0.5]", "[1. 1. 1.]"]
+        answer: "[0.5 1.  1. ]"
+        explanation: Werte über 1 werden durch 1.0 ersetzt – eine obere Begrenzung.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([3, 8, 5])
+          print(np.where(a % 2 == 0, "gerade", "ungerade"))
+        options: ["['ungerade' 'gerade' 'ungerade']", "['gerade' 'ungerade' 'gerade']", "[3 8 5]"]
+        answer: "['ungerade' 'gerade' 'ungerade']"
+        explanation: "`np.where` funktioniert auch mit Texten: pro Element einer der beiden Werte."
+  - id: m04-c-if-array
+    concept: np-vektorisierung
+    variants:
+      - type: quiz
+        question: |
+          Was passiert bei `if np.array([1, 2]) > 0: print("ok")`?
+        options:
+          - text: Ein `ValueError`, weil unklar ist, ob alle oder irgendein Element gemeint ist.
+            correct: true
+            why: Ein Array aus mehreren bools hat keinen eindeutigen Wahrheitswert. Gemeint ist meist `.all()` oder `.any()`.
+          - text: Es wird `ok` ausgegeben, weil beide Werte positiv sind.
+            correct: false
+            why: NumPy entscheidet das nicht stillschweigend für dich.
+          - text: Es wird zweimal `ok` ausgegeben.
+            correct: false
+            why: "`if` ist keine Schleife."
+      - type: quiz
+        question: |
+          Eine Schleife berechnet `y[i] = 3 * x[i] - 1` für alle `i`. Was ist die vektorisierte Form?
+        options:
+          - text: "`y = 3 * x - 1`"
+            correct: true
+            why: Der Ausdruck gilt elementweise für das ganze Array.
+          - text: "`y = 3 * x[i] - 1`"
+            correct: false
+            why: Ohne Schleife gibt es kein `i` – `NameError`.
+          - text: "`y = np.where(x, 3, -1)`"
+            correct: false
+            why: "`np.where` wählt zwischen zwei Werten aus; hier gibt es gar keine Bedingung."

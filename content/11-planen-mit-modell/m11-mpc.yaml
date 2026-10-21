@@ -1,0 +1,362 @@
+id: m11-mpc
+title: MPC – planen, einen Schritt tun, neu planen
+minutes: 10
+goals:
+  - Das Prinzip Receding Horizon erklären und implementieren
+  - Offene Ausführung eines Plans mit geschlossener Regelung (MPC) vergleichen
+  - Verstehen, warum MPC Modellfehler ausgleicht
+concepts: [plan-mpc, plan-modellfehler]
+steps:
+  - type: text
+    body: |
+      ## Vorausschauen, aber nur jetzt lenken
+
+      Beim Autofahren schaust du 100 m voraus, lenkst aber nur **jetzt** – und schaust gleich wieder neu. Genau das ist **Model Predictive Control** (MPC):
+
+      1. Vom **gemessenen** Zustand $s_k$ aus eine Folge über $H$ Schritte planen.
+      2. Nur die **erste** Aktion $u_0$ am echten System ausführen.
+      3. Neuen Zustand messen, Horizont um einen Schritt weiterschieben (receding horizon), zurück zu 1.
+
+      Eine einmal geplante Folge blind auszuführen heißt **offene Steuerung** (open loop). Sie funktioniert nur, wenn das Modell perfekt ist. MPC ist dagegen eine **Regelung**: Jede neue Messung korrigiert.
+  - type: example
+    intro: |
+      Das Modell nimmt $m = 1$ kg an, das echte Pendel ist 30 % schwerer – sein Motor wirkt also schwächer. Start bei $\theta = 1$ rad (schräg), Ziel oben. Die Planer-Funktionen aus der letzten Lektion stehen oben.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+          A = rng.uniform(low, high, size=(N, H))
+          J = rollout_costs(dynamics, cost, s0, A)
+          return A[np.argmin(J)], np.min(J)
+
+      modell, echt = Pendulum(), Pendulum(m=1.3)
+      rng = np.random.default_rng(0)
+      s0 = np.array([1.0, 0.0])
+
+      plan, _ = random_shooting(modell.dynamics, modell.cost, s0, 1000, 50, rng, -2, 2)
+      im_modell, offen = [s0], [s0]
+      for u in plan:
+          im_modell.append(modell.dynamics(im_modell[-1], u))
+          offen.append(echt.dynamics(offen[-1], u))
+
+      s, mpc = s0, [s0]
+      for k in range(50):
+          p, _ = random_shooting(modell.dynamics, modell.cost, s, 200, 15, rng, -2, 2)
+          s = echt.dynamics(s, p[0])
+          mpc.append(s)
+
+      fig = lab.Figure(title="Winkel θ über der Zeit", xlabel="Schritt (0,05 s)", ylabel="θ in rad")
+      for name, verlauf in [("Plan im Modell", im_modell), ("offen am echten Pendel", offen), ("MPC am echten Pendel", mpc)]:
+          fig.line(angle_normalize(np.array(verlauf)[:, 0]), label=name)
+      fig.hline(0.0, label="oben")
+      fig.show()
+      echt.render(np.array(mpc), title="MPC am echten Pendel")
+    subgoals:
+      - lines: [5, 16]
+        label: Planer aus der letzten Lektion
+      - lines: [18, 20]
+        label: Modell und Wirklichkeit festlegen
+      - lines: [22, 26]
+        label: Einmal planen, offen ausführen
+      - lines: [28, 32]
+        label: MPC – planen, ersten Schritt ausführen, wiederholen
+      - lines: [34, 39]
+        label: Vergleichen und ansehen
+    after: |
+      Der Plan funktioniert **im Modell**: Das Pendel kippt, schwingt einmal durch und kommt oben an. Am echten, schwereren Pendel fehlt mit denselben Momenten der Schwung – es fällt wieder. MPC plant nach jedem Schritt vom gemessenen Zustand aus neu und kommt trotz falschem Modell nach oben (und das mit nur 200 Folgen à 15 Schritten).
+  - type: predict
+    intro: |
+      Ein Planer liefert in Schritt `k` die Folge `[10*k, 10*k + 1, 10*k + 2]`. Was wird nach dem MPC-Prinzip ausgeführt?
+    code: |
+      def plane(k):
+          return [10 * k, 10 * k + 1, 10 * k + 2]
+
+      ausgefuehrt = []
+      for k in range(4):
+          folge = plane(k)
+          ausgefuehrt.append(folge[0])
+      print(ausgefuehrt)
+    options:
+      - "[0, 10, 20, 30]"
+      - "[0, 1, 2]"
+      - "[0, 1, 2, 10, 11, 12, 20, 21, 22, 30, 31, 32]"
+      - "[30, 31, 32]"
+    answer: "[0, 10, 20, 30]"
+    explanation: |
+      Von jeder Folge wird nur das **erste** Element ausgeführt; der Rest wird verworfen und im nächsten Schritt neu geplant.
+  - type: explain
+    question: |
+      Warum gleicht MPC den Modellfehler (falsche Masse) aus, die offene Ausführung aber nicht?
+    options:
+      - text: MPC startet jede Planung am gemessenen echten Zustand – der Modellfehler wirkt sich immer nur einen Schritt lang aus, bevor er korrigiert wird.
+        correct: true
+        why: Die Messung schließt den Regelkreis. Offen ausgeführt summieren sich die kleinen Abweichungen über 50 Schritte auf.
+      - text: MPC lernt in jedem Schritt die richtige Masse.
+        correct: false
+        why: Das Modell bleibt falsch ($m = 1$). Es wird nur ständig vom echten Zustand aus neu angewendet.
+      - text: MPC benutzt mehr Rechenzeit und ist deshalb genauer.
+        correct: false
+        why: Rechenzeit hilft der Suche, aber nicht gegen ein falsches Modell. Entscheidend ist die Rückkopplung.
+      - text: Die offene Ausführung hatte einfach Pech mit dem Zufall.
+        correct: false
+        why: Im Modell funktioniert derselbe Plan – der Unterschied kommt allein vom Modellfehler.
+  - type: parsons
+    fading: true
+    prompt: |
+      Spielzeugbeispiel: Zustand ist eine Zahl, Modell $s \leftarrow s + u$, der Planer schlägt drei Aktionen vor. Ordne die Zeilen zu einer MPC-Schleife über drei Schritte, die `0.5` ausgibt.
+    lines:
+      - "def plane(s):"
+      - "    return [-0.5 * s, -0.25 * s, 0.0]"
+      - "s = 4.0"
+      - "for k in range(3):"
+      - "    u = plane(s)[0]"
+      - "    s = s + u"
+      - "print(s)"
+    distractors:
+      - "    u = plane(s)[-1]"
+      - "    u = plane(4.0)[0]"
+    expect_output: "0.5"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng)`: `T` MPC-Schritte vom Zustand `s0` aus. In jedem Schritt mit `random_shooting` auf dem **Modell** planen (Aktionen in $[-2, 2]$), die erste Aktion auf das **echte** System anwenden.
+
+      Rückgabe: `(states, actions)` als Arrays der Länge `T + 1` bzw. `T`.
+    starter: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+          A = rng.uniform(low, high, size=(N, H))
+          J = rollout_costs(dynamics, cost, s0, A)
+          return A[np.argmin(J)], np.min(J)
+
+      def mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng):
+          s = s0
+          states, actions = [s0], []
+          # T-mal: planen, erste Aktion ausführen, merken
+          return np.array(states), np.array(actions)
+
+      modell, echt = Pendulum(), Pendulum(m=1.3)
+      states, actions = mpc(echt.dynamics, modell.dynamics, modell.cost, np.array([1.0, 0.0]), 50, 200, 15, np.random.default_rng(0))
+      echt.render(states, title="Dein MPC")
+    solution: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+          A = rng.uniform(low, high, size=(N, H))
+          J = rollout_costs(dynamics, cost, s0, A)
+          return A[np.argmin(J)], np.min(J)
+
+      def mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng):
+          s = s0
+          states, actions = [s0], []
+          for k in range(T):
+              plan, _ = random_shooting(modell_dyn, cost, s, N, H, rng, -2, 2)
+              u = plan[0]
+              s = echt_dyn(s, u)
+              states.append(s)
+              actions.append(u)
+          return np.array(states), np.array(actions)
+
+      modell, echt = Pendulum(), Pendulum(m=1.3)
+      states, actions = mpc(echt.dynamics, modell.dynamics, modell.cost, np.array([1.0, 0.0]), 50, 200, 15, np.random.default_rng(0))
+      echt.render(states, title="Dein MPC")
+    tests:
+      - name: Längen
+        code: |
+          m_t, e_t = Pendulum(), Pendulum(m=1.3)
+          S_t, U_t = mpc(e_t.dynamics, m_t.dynamics, m_t.cost, np.array([1.0, 0.0]), 5, 50, 10, np.random.default_rng(1))
+          assert np.shape(S_t) == (6, 2), f"5 Schritte → states der Form (6, 2), bekommen {np.shape(S_t)}"
+          assert np.shape(U_t) == (5,), f"5 Schritte → 5 Aktionen, bekommen Form {np.shape(U_t)}"
+      - name: Zustände kommen vom echten System
+        code: |
+          m_t, e_t = Pendulum(), Pendulum(m=1.3)
+          S_t, U_t = mpc(e_t.dynamics, m_t.dynamics, m_t.cost, np.array([1.0, 0.0]), 8, 50, 10, np.random.default_rng(2))
+          for k in range(8):
+              assert close(S_t[k + 1], e_t.dynamics(S_t[k], U_t[k])), f"states[{k + 1}] ist nicht echt_dyn(states[{k}], actions[{k}]) – wende die Aktion auf das echte System an."
+      - name: Pendel kommt oben an
+        code: |
+          m_t, e_t = Pendulum(), Pendulum(m=1.3)
+          S_t, U_t = mpc(e_t.dynamics, m_t.dynamics, m_t.cost, np.array([1.0, 0.0]), 50, 200, 15, np.random.default_rng(0))
+          rest = np.abs(angle_normalize(S_t[-10:, 0]))
+          assert rest.max() < 0.25, f"In den letzten 10 Schritten sollte |θ| < 0.25 rad sein, maximal war es {rest.max():.2f} rad"
+    mutants:
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            return A[np.argmin(J)], np.min(J)
+        def mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng):
+            plan, _ = random_shooting(modell_dyn, cost, s0, N, T, rng, -2, 2)
+            s, states = s0, [s0]
+            for u in plan:
+                s = echt_dyn(s, u)
+                states.append(s)
+            return np.array(states), plan
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            return A[np.argmin(J)], np.min(J)
+        def mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng):
+            s, states, actions = s0, [s0], []
+            for k in range(T):
+                plan, _ = random_shooting(modell_dyn, cost, s, N, H, rng, -2, 2)
+                s = echt_dyn(s, plan[-1])
+                states.append(s)
+                actions.append(plan[-1])
+            return np.array(states), np.array(actions)
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            return A[np.argmin(J)], np.min(J)
+        def mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng):
+            s, states, actions = s0, [s0], []
+            for k in range(T):
+                plan, _ = random_shooting(modell_dyn, cost, s, N, H, rng, -2, 2)
+                s = modell_dyn(s, plan[0])
+                states.append(s)
+                actions.append(plan[0])
+            return np.array(states), np.array(actions)
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            return A[np.argmin(J)], np.min(J)
+        def mpc(echt_dyn, modell_dyn, cost, s0, T, N, H, rng):
+            s, states, actions = s0, [s0], []
+            for k in range(T):
+                plan, _ = random_shooting(modell_dyn, cost, s0, N, H, rng, -2, 2)
+                s = echt_dyn(s, plan[0])
+                states.append(s)
+                actions.append(plan[0])
+            return np.array(states), np.array(actions)
+    hints:
+      - "Teilziel: Schleife über `T` Schritte – planen, erste Aktion ausführen, Zustand und Aktion speichern."
+      - Geplant wird mit `modell_dyn` vom **aktuellen** Zustand `s`; ausgeführt wird mit `echt_dyn`.
+      - "`plan, _ = random_shooting(modell_dyn, cost, s, N, H, rng, -2, 2)`"
+      - "Danach `u = plan[0]`, `s = echt_dyn(s, u)`, `states.append(s)`, `actions.append(u)`"
+  - type: quiz
+    question: |
+      Was passiert, wenn der MPC-Horizont $H$ sehr **kurz** ist, z. B. 2 Schritte (0,1 s) beim hängenden Pendel?
+    options:
+      - text: Der Planer ist kurzsichtig – er sieht nicht, dass Schwungholen sich später lohnt, und bleibt nahe unten.
+        correct: true
+        why: Erst über mehrere Sekunden zeigt sich, dass Ausholen die Kosten senkt. Der Horizont muss die wichtige Dynamik abdecken.
+      - text: Er wird genauer, weil weniger Zufallszahlen zu wählen sind.
+        correct: false
+        why: Die Suche wird zwar leichter, aber das Ziel des Planers (Kosten über 2 Schritte) passt nicht mehr zum eigentlichen Ziel.
+      - text: Das spielt keine Rolle, weil MPC sowieso jeden Schritt neu plant.
+        correct: false
+        why: Neu planen korrigiert Abweichungen, ersetzt aber nicht die fehlende Voraussicht.
+cards:
+  - id: m11-c-receding
+    concept: plan-mpc
+    variants:
+      - type: quiz
+        question: Was führt MPC nach jeder Planung am echten System aus?
+        options:
+          - text: Nur die erste Aktion der geplanten Folge
+            correct: true
+            why: Danach wird gemessen und vom neuen Zustand aus neu geplant.
+          - text: Die ganze geplante Folge
+            correct: false
+            why: Das wäre offene Steuerung – ohne Korrektur.
+          - text: Die letzte Aktion der Folge
+            correct: false
+            why: Die letzte Aktion gehört zum Ende des Horizonts, nicht zum aktuellen Zeitpunkt.
+      - type: predict
+        code: |
+          plaene = [[5, 6, 7], [8, 9, 1], [2, 3, 4]]
+          print([p[0] for p in plaene])
+        options: ["[5, 8, 2]", "[5, 6, 7]", "[7, 1, 4]", "[5, 6, 7, 8, 9, 1, 2, 3, 4]"]
+        answer: "[5, 8, 2]"
+        explanation: Aus jedem der drei Pläne wird nur die erste Aktion ausgeführt.
+  - id: m11-c-modellfehler
+    concept: plan-modellfehler
+    variants:
+      - type: quiz
+        question: Ein Planer arbeitet mit einem leicht falschen Modell. Was ist robuster?
+        options:
+          - text: MPC – jeden Schritt vom gemessenen Zustand aus neu planen
+            correct: true
+            why: Die Rückkopplung korrigiert die Abweichung, bevor sie wächst.
+          - text: Einmal sehr lange und genau planen und die Folge abspielen
+            correct: false
+            why: Offen ausgeführt summieren sich Modellfehler über die Zeit.
+          - text: Beides gleich, das Modell ist ja in beiden Fällen gleich falsch
+            correct: false
+            why: Das Modell ja – aber nur MPC benutzt die echten Messungen.
+      - type: quiz
+        question: Warum ist MPC wichtig für gelernte World Models (Modul 16)?
+        options:
+          - text: Gelernte Modelle sind nie exakt; MPC verhindert, dass sich ihre Fehler über lange Zeit aufsummieren.
+            correct: true
+            why: Ein Plan aus einem ungenauen Modell gilt nur kurz – deshalb wird ständig neu geplant.
+          - text: Weil gelernte Modelle nur einen Schritt vorhersagen können
+            correct: false
+            why: Man kann sie beliebig oft hintereinander anwenden, nur wächst dabei der Fehler.
+          - text: Weil MPC das Modell währenddessen trainiert
+            correct: false
+            why: MPC plant nur. Training ist ein eigener Schritt.

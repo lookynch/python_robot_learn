@@ -1,0 +1,315 @@
+id: m14-exploration
+title: Erkunden – ε-Zerfall und optimistische Startwerte
+minutes: 10
+goals:
+  - Einen ε-Zerfallsplan berechnen und begründen
+  - Erklären, warum Gleichstände bei `argmax` die Erkundung blockieren können
+  - Optimistische Startwerte als Erkundungsantrieb einsetzen
+concepts: [epsilon-zerfall, optimistische-q-init]
+steps:
+  - type: text
+    body: |
+      ## Erst erkunden, dann ausnutzen
+
+      Mit festem $\varepsilon = 0.1$ macht der Agent für immer 10 % Zufallsschritte – an der Klippe kostet das ständig 100 Punkte. Am Anfang braucht er dagegen **viel** Erkundung, weil er noch nichts weiß.
+
+      Ein **ε-Zerfall** verbindet beides. Häufig ist der exponentielle Plan pro Episode $k$:
+
+      $$\varepsilon_k = \max\big(\varepsilon_{\min},\; \varepsilon_0 \cdot d^{\,k}\big), \qquad 0 < d < 1$$
+
+      $\varepsilon_{\min} > 0$ sorgt dafür, dass nie ganz aufgehört wird zu erkunden. Alternativ fällt $\varepsilon$ linear bis $\varepsilon_{\min}$.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      k = np.arange(60)
+      eps_exp = np.maximum(0.05, 1.0 * 0.92 ** k)
+      eps_lin = np.maximum(0.05, 1.0 - k / 40)
+
+      fig = lab.Figure(title="ε-Zerfall", xlabel="Episode k", ylabel="ε")
+      fig.line(eps_exp, x=k, label="exponentiell, d = 0.92")
+      fig.line(eps_lin, x=k, label="linear bis Episode 40")
+      fig.hline(0.05, label="ε_min")
+      fig.show()
+      print("Episode 20:", round(eps_exp[20], 3), round(eps_lin[20], 3))
+    subgoals:
+      - lines: 4
+        label: Episodennummern anlegen
+      - lines: [5, 6]
+        label: Zwei Pläne vektorisiert berechnen
+      - lines: [8, 13]
+        label: Pläne zeichnen
+    after: |
+      `np.maximum` arbeitet elementweise und setzt die Untergrenze für alle Episoden auf einmal. Welcher Plan besser ist, hängt von der Aufgabe ab – die Zerfallsrate ist ein Hyperparameter wie $\alpha$.
+  - type: predict
+    code: |
+      eps0, eps_min, decay = 1.0, 0.05, 0.9
+      k = 10
+      print(round(max(eps_min, eps0 * decay ** k), 3))
+    options: ["0.349", "0.1", "0.05", "0.9"]
+    answer: "0.349"
+    explanation: |
+      $0.9^{10} \approx 0.349$ – exponentieller Zerfall ist anfangs schneller, als viele schätzen, aber nicht linear ($1 - 10 \cdot 0.09 = 0.1$ wäre der lineare Fehlschluss). Die Untergrenze 0.05 greift erst ab etwa $k = 29$.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9)` für den exponentiellen Plan $\max(\varepsilon_{\min}, \varepsilon_0 \cdot d^{\,k})$.
+    starter: |
+      def epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9):
+          # exponentiell fallen, aber nie unter eps_min
+          pass
+    solution: |
+      def epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9):
+          return max(eps_min, eps0 * decay ** k)
+    tests:
+      - name: Start
+        code: |
+          assert close(epsilon(0), 1.0), f"epsilon(0) sollte eps0 = 1.0 sein, ist {epsilon(0)}"
+      - name: Nach 10 Episoden
+        code: |
+          assert close(epsilon(10), 0.9 ** 10), f"epsilon(10) sollte 0.9**10 ≈ 0.349 sein, ist {epsilon(10)}"
+      - name: Untergrenze
+        code: |
+          assert close(epsilon(100), 0.05), f"epsilon(100) sollte bei der Untergrenze 0.05 liegen, ist {epsilon(100)}"
+      - name: Andere Parameter
+        code: |
+          v = epsilon(3, eps0=0.5, eps_min=0.0, decay=0.5)
+          assert close(v, 0.0625), f"epsilon(3, eps0=0.5, eps_min=0.0, decay=0.5) sollte 0.5·0.5³ = 0.0625 sein, ist {v}"
+    mutants:
+      - |
+        def epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9):
+            return min(eps_min, eps0 * decay ** k)
+      - |
+        def epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9):
+            return max(eps_min, decay ** k)
+      - |
+        def epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9):
+            return max(eps_min, eps0 * decay * k)
+      - |
+        def epsilon(k, eps0=1.0, eps_min=0.05, decay=0.9):
+            return eps0 * decay ** k
+    hints:
+      - "Teilziel: Zerfallswert berechnen, dann nach unten begrenzen."
+      - Der Zerfall ist $\varepsilon_0 \cdot d^{\,k}$ – Potenz mit `**`. Die Untergrenze heißt „das Größere von beiden“.
+      - "`return max(eps_min, eps0 * decay ** k)`"
+  - type: text
+    body: |
+      ## Gleichstände und optimistische Startwerte
+
+      Ein versteckter Fehler: Am Anfang ist $Q = 0$ für alle Aktionen, und `np.argmax` gibt bei Gleichstand **immer den ersten Index** zurück – Aktion 0 (hoch). Wenn Schritte nichts kosten ($r = 0$) und nur das Ziel +1 bringt, ändert sich dabei kein Wert: Der Agent läuft gegen die Wand, für immer.
+
+      Zwei Auswege:
+
+      - **Zufällig unter den Besten wählen** (`argmax_random`), dazu ε-greedy.
+      - **Optimistische Startwerte** (Sutton & Barto, Abschnitt 2.6): Starte mit $Q = 1$, höher als jeder echte Wert. Jede ausprobierte Aktion **enttäuscht** und sinkt – also kommt als Nächstes eine noch unversuchte dran. Das erkundet systematisch, sogar mit $\varepsilon = 0$.
+  - type: predict
+    code: |
+      import numpy as np
+      print(np.argmax([0.0, 0.0, 0.0, 0.0]), np.argmax([0.0, 2.0, 2.0, 1.0]))
+    options: ["0 1", "3 2", "0 2", "1 1"]
+    answer: "0 1"
+    explanation: |
+      `np.argmax` liefert den **ersten** Index mit dem Maximum – deterministisch, nicht zufällig. Bei lauter Gleichständen bevorzugt der Agent deshalb immer dieselbe Aktion.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `argmax_random(q, rng)`: Gib den Index einer größten Komponente von `q` zurück; gibt es mehrere, wähle **zufällig gleichverteilt** unter ihnen (mit `rng`).
+
+      Tipp: `np.flatnonzero(maske)` liefert die Indizes, an denen eine boolesche Maske `True` ist.
+    starter: |
+      import numpy as np
+
+      def argmax_random(q, rng):
+          q = np.asarray(q)
+          # Indizes aller Maxima, dann einen davon ziehen
+          pass
+    solution: |
+      import numpy as np
+
+      def argmax_random(q, rng):
+          q = np.asarray(q)
+          best = np.flatnonzero(q == q.max())
+          return int(rng.choice(best))
+    tests:
+      - name: Eindeutiges Maximum
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          picks = {argmax_random([0.0, -1.0, 3.0, 1.0], rng) for _ in range(30)}
+          assert picks == {2}, f"Bei eindeutigem Maximum an Index 2 darf nur 2 kommen, bekommen {sorted(picks)}"
+      - name: Gleichstand wird zufällig aufgelöst
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(1)
+          picks = [argmax_random([0.0, 5.0, 5.0, 1.0], rng) for _ in range(200)]
+          assert set(picks) == {1, 2}, f"Bei Gleichstand von Index 1 und 2 sollten genau diese beiden vorkommen, bekommen {sorted(set(picks))}"
+          share = picks.count(1) / len(picks)
+          assert 0.35 < share < 0.65, f"Index 1 sollte etwa in der Hälfte der Fälle kommen, kam in {share:.0%}"
+      - name: Alle gleich
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(2)
+          picks = {argmax_random(np.zeros(4), rng) for _ in range(200)}
+          assert picks == {0, 1, 2, 3}, f"Bei vier gleichen Werten sollten alle vier Indizes vorkommen, bekommen {sorted(picks)}"
+    mutants:
+      - |
+        import numpy as np
+
+        def argmax_random(q, rng):
+            return int(np.argmax(q))
+      - |
+        import numpy as np
+
+        def argmax_random(q, rng):
+            q = np.asarray(q)
+            return int(rng.integers(len(q)))
+      - |
+        import numpy as np
+
+        def argmax_random(q, rng):
+            q = np.asarray(q)
+            best = np.flatnonzero(q == q.max())
+            return int(best[-1])
+    hints:
+      - "Teilziel: alle besten Indizes finden, dann einen davon ziehen."
+      - Die Maske `q == q.max()` ist an allen Maxima `True`.
+      - "`best = np.flatnonzero(q == q.max())`"
+      - "`return int(rng.choice(best))`"
+  - type: example
+    title: Drei Strategien im Labyrinth
+    intro: |
+      Schritte kosten nichts, das Ziel bringt +1, $\gamma = 0.9$, Zeitlimit 100 Schritte. Verglichen werden: (1) `argmax` mit $Q = 0$ und $\varepsilon = 0$, (2) `argmax_random` mit $Q = 0$ und ε-Zerfall, (3) `argmax` mit optimistischem $Q = 1$ und $\varepsilon = 0$.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      MAZE = ["S..#..", ".#.#.#", ".#....", ".##.#.", "....#G"]
+      env = GridWorld(MAZE, step_reward=0, goal_reward=1, max_steps=100)
+
+      def run(q_init, ties, eps_fn, episodes=40, seed=1):
+          rng = np.random.default_rng(seed)
+          Q = np.full((env.n_states, 4), q_init)
+          steps = []
+          for k in range(episodes):
+              s, done, n = env.reset(), False, 0
+              while not done:
+                  if rng.random() < eps_fn(k):
+                      a = int(rng.integers(4))
+                  elif ties:
+                      a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+                  else:
+                      a = int(np.argmax(Q[s]))
+                  s2, r, done = env.step(a)
+                  target = r if env.is_terminal(s2) else r + 0.9 * np.max(Q[s2])
+                  Q[s, a] += 0.5 * (target - Q[s, a])
+                  s, n = s2, n + 1
+              steps.append(n)
+          return Q, steps
+
+      fig = lab.Figure(title="Schritte bis zum Ziel (100 = nicht erreicht)", xlabel="Episode", ylabel="Schritte")
+      fig.line(run(0.0, False, lambda k: 0.0)[1], label="Q = 0, argmax")
+      fig.line(run(0.0, True, lambda k: max(0.01, 0.9 ** k))[1], label="Q = 0, Zufall bei Gleichstand, ε-Zerfall")
+      Q, steps = run(1.0, False, lambda k: 0.0)
+      fig.line(steps, label="Q = 1 optimistisch, ε = 0")
+      fig.show()
+
+      s, path = env.reset(), [env.start]
+      while not env.is_terminal(s) and len(path) < 30:
+          s, r, done = env.step(int(np.argmax(Q[s])))
+          path.append(s)
+      env.render(values=np.max(Q, axis=1), policy=np.argmax(Q, axis=1), path=path, title="Optimistisch: gelernte Policy")
+    subgoals:
+      - lines: [5, 6]
+        label: Labyrinth ohne Schrittkosten
+      - lines: [8, 26]
+        label: Q-Learning mit wählbarer Erkundung
+      - lines: [28, 33]
+        label: Drei Strategien vergleichen
+      - lines: [35, 39]
+        label: Gelernten Pfad zeigen
+    after: |
+      Strategie (1) erreicht das Ziel nie: Kein Wert ändert sich, `argmax` wählt immer „hoch“. Strategie (2) irrt anfangs zufällig umher und findet nach gut 20 Episoden den kürzesten Weg (9 Schritte) – wie schnell, hängt vom Seed ab. Strategie (3) erkundet ohne jeden Zufall systematisch: Sie erreicht das Ziel ab der zweiten Episode zuverlässig und läuft nach gut 25 Episoden stabil den kürzesten Weg. Optimismus ist ein einfacher Trick, aber kein Allheilmittel: Er wirkt nur am Anfang und hilft nicht, wenn sich die Umgebung später ändert.
+  - type: quiz
+    question: |
+      In einer Gitterwelt kostet jeder Schritt −1, das Ziel 0. Ist der Start mit $Q = 0$ hier optimistisch?
+    options:
+      - text: Ja – alle echten Werte sind negativ, also enttäuscht jede ausprobierte Aktion.
+        correct: true
+        why: Genau deshalb hat Q-Learning an der Klippe auch mit `argmax` gut erkundet.
+      - text: Nein – optimistisch heißt immer $Q = 1$.
+        correct: false
+        why: Optimistisch heißt „höher als die echten Werte“; die Zahl hängt von den Belohnungen ab.
+      - text: Nein – mit $Q = 0$ erkundet ein Agent nie.
+        correct: false
+        why: Das gilt nur, wenn sich durch die Belohnungen nichts ändert (z. B. $r = 0$ überall außer am Ziel).
+      - text: Das lässt sich ohne `env.P` nicht sagen.
+        correct: false
+        why: Es reicht zu wissen, dass jeder Return eine Summe negativer Belohnungen ist.
+cards:
+  - id: m14-c-eps-zerfall
+    concept: epsilon-zerfall
+    variants:
+      - type: predict
+        code: |
+          print(round(max(0.1, 1.0 * 0.5 ** 3), 3))
+        options: ["0.125", "0.1", "0.5", "0.0"]
+        answer: "0.125"
+        explanation: "0.5³ = 0.125 liegt noch über der Untergrenze 0.1."
+      - type: predict
+        code: |
+          print(max(0.1, 1.0 * 0.5 ** 5))
+        options: ["0.1", "0.03125", "0.5", "0.0"]
+        answer: "0.1"
+        explanation: "0.5⁵ ≈ 0.031 liegt unter der Untergrenze – also 0.1."
+      - type: predict
+        code: |
+          print(round(max(0.05, 0.8 * 0.5 ** 2), 3))
+        options: ["0.2", "0.25", "0.05", "0.8"]
+        answer: "0.2"
+        explanation: "0.8 · 0.25 = 0.2."
+  - id: m14-c-argmax-gleichstand
+    concept: optimistische-q-init
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.argmax([1.0, 3.0, 3.0, 0.0]))
+        options: ["1", "2", "1 oder 2 zufällig", "3"]
+        answer: "1"
+        explanation: "`np.argmax` nimmt bei Gleichstand den ersten Index."
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.argmax(np.zeros(4)))
+        options: ["0", "3", "zufällig 0–3", "None"]
+        answer: "0"
+        explanation: Lauter Gleichstände → immer Index 0 („hoch“).
+  - id: m14-c-optimismus
+    concept: optimistische-q-init
+    variants:
+      - type: quiz
+        question: Warum erkundet ein greedy Agent mit optimistischen Startwerten?
+        options:
+          - text: Jede ausprobierte Aktion sinkt unter die noch unversuchten – die sind dann die besten.
+            correct: true
+            why: Die Enttäuschung treibt den Agenten zu den unbekannten Aktionen.
+          - text: Optimistische Werte machen Zufallsschritte häufiger.
+            correct: false
+            why: Mit $\varepsilon = 0$ gibt es gar keine Zufallsschritte – trotzdem wird erkundet.
+          - text: Weil die Belohnungen dadurch größer werden.
+            correct: false
+            why: Die Belohnungen kommen von der Umgebung; nur die Schätzungen starten hoch.
+      - type: quiz
+        question: Belohnungen liegen zwischen 0 und 1, $\gamma = 0.9$. Welcher Startwert ist sicher optimistisch?
+        options:
+          - text: $Q = 10$
+            correct: true
+            why: Der Return ist höchstens $1/(1 - 0.9) = 10$.
+          - text: $Q = 0$
+            correct: false
+            why: Echte Werte sind ≥ 0 – also eher pessimistisch.
+          - text: $Q = 1$
+            correct: false
+            why: Returns können über 1 liegen, wenn mehrere Belohnungen kommen.

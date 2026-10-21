@@ -1,0 +1,434 @@
+id: m14-cartpole-diskret
+title: CartPole mit einer Q-Tabelle
+minutes: 12
+goals:
+  - Kontinuierliche Zustände mit `np.digitize` auf Tabellenindizes abbilden
+  - Echtes Episodenende und Zeitlimit beim TD-Ziel unterscheiden
+  - Q-Learning auf CartPole trainieren und das Ergebnis animieren
+concepts: [zustands-diskretisierung, terminal-vs-abbruch, q-learning-update]
+steps:
+  - type: text
+    body: |
+      ## Aus Zahlen werden Fächer
+
+      In Modul 9 hast du gesehen, dass ein PD-Regler den Stab auf dem Wagen schlecht hält. Jetzt soll ein Agent es **lernen**. Der Zustand $[x, \dot x, \theta, \dot\theta]$ ist aber kontinuierlich – eine Tabelle braucht endlich viele Zeilen.
+
+      Lösung: Jede Größe wird in **Intervalle** (Bins) einsortiert. Mit 3 Bins für $\dot x$ und je 6 für $\theta$ und $\dot\theta$ hat die Tabelle $3 \cdot 6 \cdot 6 = 108$ Zustände mal 2 Aktionen (0 = links schieben, 1 = rechts). Die Position $x$ lassen wir weg, um die Tabelle klein zu halten (dafür kann der Wagen aus der Bahn rollen).
+
+      Der Haken: Mit $b$ Bins pro Dimension und $n$ Dimensionen gibt es $b^n$ Zellen – der **Fluch der Dimensionalität**.
+  - type: example
+    code: |
+      import numpy as np
+
+      edges = np.linspace(-0.2, 0.2, 5)       # Grenzen für theta in rad
+      print(edges)
+      for theta in (-0.25, -0.05, 0.0, 0.03, 0.15, 0.3):
+          print(theta, "->", np.digitize(theta, edges))
+    subgoals:
+      - lines: 3
+        label: Intervallgrenzen festlegen
+      - lines: [5, 6]
+        label: Werte einsortieren
+    after: |
+      5 Grenzen ergeben **6** Fächer: 0 = „unter −0.2“, …, 5 = „ab 0.2“. Ein Wert genau auf einer Grenze kommt ins **obere** Fach (`0.0` → 3). Der CartPole-Stab gilt ab $|\theta| > 12° \approx 0.21$ rad als umgefallen; die äußeren Fächer sind also schon „fast verloren“.
+  - type: predict
+    code: |
+      import numpy as np
+      edges = np.array([-0.2, -0.1, 0.0, 0.1, 0.2])
+      print(np.digitize(0.15, edges), np.digitize(-0.25, edges))
+    options: ["4 0", "3 0", "4 -1", "5 1"]
+    answer: "4 0"
+    explanation: |
+      `0.15` liegt zwischen den Grenzen 0.1 (Index 3) und 0.2 (Index 4) → Fach 4. Alles unter der ersten Grenze landet in Fach 0 – negative Indizes gibt es nicht.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `discretize(state)`, die einen CartPole-Zustand `[x, x_dot, theta, theta_dot]` auf ein Tupel `(i_xd, i_th, i_thd)` aus ganzen Zahlen abbildet. Nutze die vorgegebenen Grenzen `XD` (für `x_dot`), `TH` und `THD`. Ein **Tupel** brauchst du, damit `Q[d]` die richtige Zelle der 4D-Tabelle trifft.
+    starter: |
+      import numpy as np
+
+      XD = np.array([-0.5, 0.5])
+      TH = np.linspace(-0.2, 0.2, 5)
+      THD = np.linspace(-1.5, 1.5, 5)
+
+      def discretize(state):
+          # drei Indizes mit np.digitize, als Tupel zurückgeben
+          pass
+    solution: |
+      import numpy as np
+
+      XD = np.array([-0.5, 0.5])
+      TH = np.linspace(-0.2, 0.2, 5)
+      THD = np.linspace(-1.5, 1.5, 5)
+
+      def discretize(state):
+          return (int(np.digitize(state[1], XD)),
+                  int(np.digitize(state[2], TH)),
+                  int(np.digitize(state[3], THD)))
+    tests:
+      - name: Ruhelage
+        code: |
+          d = discretize([0.0, 0.0, 0.0, 0.0])
+          assert d == (1, 3, 3), f"Ruhelage sollte (1, 3, 3) ergeben, bekommen {d}"
+      - name: Gemischter Zustand
+        code: |
+          d = discretize([2.0, -0.7, 0.05, -2.0])
+          assert d == (0, 3, 0), f"[2.0, -0.7, 0.05, -2.0] sollte (0, 3, 0) ergeben, bekommen {d}"
+          d = discretize([-1.0, 0.7, -0.15, 0.4])
+          assert d == (2, 1, 3), f"[-1.0, 0.7, -0.15, 0.4] sollte (2, 1, 3) ergeben, bekommen {d}"
+      - name: Tupel für die Q-Tabelle
+        code: |
+          import numpy as np
+          d = discretize(np.array([0.0, 0.1, 0.12, 1.0]))
+          assert isinstance(d, tuple), f"discretize sollte ein Tupel liefern, liefert {type(d).__name__}"
+          Q = np.zeros((3, 6, 6, 2))
+          assert Q[d].shape == (2,), f"Q[d] sollte die zwei Q-Werte einer Zelle liefern, hat Form {Q[d].shape}"
+    mutants:
+      - |
+        import numpy as np
+
+        XD = np.array([-0.5, 0.5])
+        TH = np.linspace(-0.2, 0.2, 5)
+        THD = np.linspace(-1.5, 1.5, 5)
+
+        def discretize(state):
+            return (int(np.digitize(state[0], XD)),
+                    int(np.digitize(state[2], TH)),
+                    int(np.digitize(state[3], THD)))
+      - |
+        import numpy as np
+
+        XD = np.array([-0.5, 0.5])
+        TH = np.linspace(-0.2, 0.2, 5)
+        THD = np.linspace(-1.5, 1.5, 5)
+
+        def discretize(state):
+            return [int(np.digitize(state[1], XD)),
+                    int(np.digitize(state[2], TH)),
+                    int(np.digitize(state[3], THD))]
+      - |
+        import numpy as np
+
+        XD = np.array([-0.5, 0.5])
+        TH = np.linspace(-0.2, 0.2, 5)
+        THD = np.linspace(-1.5, 1.5, 5)
+
+        def discretize(state):
+            return (int(np.digitize(state[1], XD)),
+                    int(np.digitize(state[3], TH)),
+                    int(np.digitize(state[2], THD)))
+    hints:
+      - "Teilziel: drei Größen einzeln einsortieren, dann als Tupel bündeln."
+      - "`x_dot` ist `state[1]`, `theta` ist `state[2]`, `theta_dot` ist `state[3]`. Jede bekommt ihr eigenes Grenzen-Array."
+      - "`int(np.digitize(state[2], TH))` liefert den theta-Index."
+      - "`return (int(np.digitize(state[1], XD)), int(np.digitize(state[2], TH)), int(np.digitize(state[3], THD)))`"
+  - type: text
+    body: |
+      ## Umgefallen oder nur Zeit abgelaufen?
+
+      `env.step` meldet `done=True` in zwei verschiedenen Fällen:
+
+      - **Terminal:** Der Stab ist umgefallen oder der Wagen aus der Bahn. Danach kommt nichts mehr – das Ziel ist nur $r$.
+      - **Abbruch durch Zeitlimit** (`env.t == env.max_steps`): Der Stab steht noch! Ohne Limit ginge es weiter. Das Ziel bleibt $r + \gamma \max_{a'} Q(s', a')$.
+
+      Behandelt man das Zeitlimit wie einen Sturz, lernt der Agent fälschlich, dass Zustände kurz vor Schritt 200 schlecht sind. In Gymnasium heißen die beiden Fälle `terminated` und `truncated`.
+  - type: explain
+    question: |
+      Bei CartPole gibt jeder Schritt $r = 1$. Warum darf beim Zeitlimit **nicht** einfach `target = r` gesetzt werden?
+    options:
+      - text: Der Zustand ist nicht wirklich schlecht – nur die Uhr ist abgelaufen; mit `target = r` würde sein Wert künstlich klein.
+        correct: true
+        why: Der Wert eines aufrechten Stabs liegt nahe $1/(1-\gamma)$, nicht bei 1. Das Zeitlimit gehört nicht zur Aufgabe.
+      - text: Weil `r` beim Zeitlimit 0 ist.
+        correct: false
+        why: "`CartPole.step` liefert immer `r = 1.0`."
+      - text: Weil Q-Learning beim letzten Schritt kein Update machen darf.
+        correct: false
+        why: Ein Update ist richtig – nur das Ziel muss weiter bootstrappen.
+      - text: Das ist egal, weil es nur einmal pro Episode passiert.
+        correct: false
+        why: Es passiert gerade bei guten Episoden – und verfälscht genau die Zustände, auf die es ankommt.
+  - type: example
+    title: Q-Learning auf CartPole
+    intro: |
+      150 Episoden mit ε-Zerfall. Danach eine greedy Episode als Animation. Die Rechnung dauert einen Moment.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import CartPole
+
+      XD, TH, THD = np.array([-0.5, 0.5]), np.linspace(-0.2, 0.2, 5), np.linspace(-1.5, 1.5, 5)
+
+      def discretize(state):
+          return (int(np.digitize(state[1], XD)), int(np.digitize(state[2], TH)),
+                  int(np.digitize(state[3], THD)))
+
+      env = CartPole(max_steps=200, seed=0)
+      rng = np.random.default_rng(0)
+      Q = np.zeros((3, 6, 6, 2))
+      lengths = []
+      for k in range(150):
+          eps = max(0.02, 0.97 ** k)
+          d, done = discretize(env.reset()), False
+          while not done:
+              a = int(rng.integers(2)) if rng.random() < eps else int(np.argmax(Q[d]))
+              state, r, done = env.step(a)
+              d2 = discretize(state)
+              fell = done and env.t < env.max_steps
+              target = r if fell else r + 0.99 * np.max(Q[d2])
+              Q[d + (a,)] += 0.2 * (target - Q[d + (a,)])
+              d = d2
+          lengths.append(env.t)
+          lab.progress((k + 1) / 150, "Training")
+
+      fig = lab.Figure(title="CartPole: Schritte pro Episode", xlabel="Episode", ylabel="Schritte")
+      fig.line(lengths, label="Episode")
+      fig.line(np.convolve(lengths, np.ones(10) / 10, mode="valid"), x=np.arange(9, 150), label="Mittel über 10")
+      fig.show()
+
+      state, done = env.reset(), False
+      states = [state]
+      while not done:
+          state, r, done = env.step(int(np.argmax(Q[discretize(state)])))
+          states.append(state)
+      env.render(np.array(states), title=f"Greedy-Episode: {len(states) - 1} Schritte")
+    subgoals:
+      - lines: [5, 9]
+        label: Zustände diskretisieren
+      - lines: [11, 16]
+        label: Tabelle und ε-Plan
+      - lines: [18, 25]
+        label: Q-Learning mit Terminal-Check
+      - lines: [29, 32]
+        label: Lernkurve zeichnen
+      - lines: [34, 39]
+        label: Greedy-Episode animieren
+    heavy: true
+    after: |
+      Eine zufällige Policy hält den Stab etwa 20 Schritte. Nach 150 Episoden schafft der Agent meist ein Vielfaches – stabil ist das aber nicht: Die Kurve springt, und manche Zellen wurden kaum besucht. Mehr Bins würden feiner steuern, aber jede Zelle seltener sehen.
+  - type: exercise
+    mode: modify
+    heavy: true
+    prompt: |
+      In `train` fehlt das Lernen: Der Agent handelt, aber $Q$ bleibt null. Ergänze an der markierten Stelle das Q-Learning-Update mit Lernrate `alpha` und Diskont `gamma` – mit echtem Terminal-Check (`fell`). Getestet wird, ob die letzten 20 Episoden im Mittel über 60 Schritte dauern.
+    starter: |
+      import numpy as np
+      from lab.envs import CartPole
+
+      XD, TH, THD = np.array([-0.5, 0.5]), np.linspace(-0.2, 0.2, 5), np.linspace(-1.5, 1.5, 5)
+
+      def discretize(state):
+          return (int(np.digitize(state[1], XD)), int(np.digitize(state[2], TH)),
+                  int(np.digitize(state[3], THD)))
+
+      def train(episodes, seed=0, alpha=0.2, gamma=0.99):
+          env = CartPole(max_steps=200, seed=seed)
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((3, 6, 6, 2))
+          lengths = []
+          for k in range(episodes):
+              eps = max(0.02, 0.97 ** k)
+              d, done = discretize(env.reset()), False
+              while not done:
+                  a = int(rng.integers(2)) if rng.random() < eps else int(np.argmax(Q[d]))
+                  state, r, done = env.step(a)
+                  d2 = discretize(state)
+                  fell = done and env.t < env.max_steps
+                  # hier fehlt das Update von Q[d + (a,)]
+                  d = d2
+              lengths.append(env.t)
+          return lengths
+    solution: |
+      import numpy as np
+      from lab.envs import CartPole
+
+      XD, TH, THD = np.array([-0.5, 0.5]), np.linspace(-0.2, 0.2, 5), np.linspace(-1.5, 1.5, 5)
+
+      def discretize(state):
+          return (int(np.digitize(state[1], XD)), int(np.digitize(state[2], TH)),
+                  int(np.digitize(state[3], THD)))
+
+      def train(episodes, seed=0, alpha=0.2, gamma=0.99):
+          env = CartPole(max_steps=200, seed=seed)
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((3, 6, 6, 2))
+          lengths = []
+          for k in range(episodes):
+              eps = max(0.02, 0.97 ** k)
+              d, done = discretize(env.reset()), False
+              while not done:
+                  a = int(rng.integers(2)) if rng.random() < eps else int(np.argmax(Q[d]))
+                  state, r, done = env.step(a)
+                  d2 = discretize(state)
+                  fell = done and env.t < env.max_steps
+                  target = r if fell else r + gamma * np.max(Q[d2])
+                  Q[d + (a,)] += alpha * (target - Q[d + (a,)])
+                  d = d2
+              lengths.append(env.t)
+          return lengths
+    tests:
+      - name: Lernt, den Stab länger zu halten
+        code: |
+          import numpy as np
+          lengths = train(150, seed=0)
+          first, last = np.mean(lengths[:20]), np.mean(lengths[-20:])
+          assert last > 60, f"Die letzten 20 Episoden dauern im Mittel {last:.0f} Schritte (die ersten 20: {first:.0f}). Erwartet über 60 – stimmt das Update?"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import CartPole
+
+        XD, TH, THD = np.array([-0.5, 0.5]), np.linspace(-0.2, 0.2, 5), np.linspace(-1.5, 1.5, 5)
+
+        def discretize(state):
+            return (int(np.digitize(state[1], XD)), int(np.digitize(state[2], TH)),
+                    int(np.digitize(state[3], THD)))
+
+        def train(episodes, seed=0, alpha=0.2, gamma=0.99):
+            env = CartPole(max_steps=200, seed=seed)
+            rng = np.random.default_rng(seed)
+            Q = np.zeros((3, 6, 6, 2))
+            lengths = []
+            for k in range(episodes):
+                eps = max(0.02, 0.97 ** k)
+                d, done = discretize(env.reset()), False
+                while not done:
+                    a = int(rng.integers(2)) if rng.random() < eps else int(np.argmax(Q[d]))
+                    state, r, done = env.step(a)
+                    d2 = discretize(state)
+                    fell = done and env.t < env.max_steps
+                    target = r if fell else r + gamma * np.max(Q[d2])
+                    Q[d + (a,)] += alpha * (Q[d + (a,)] - target)
+                    d = d2
+                lengths.append(env.t)
+            return lengths
+      - |
+        import numpy as np
+        from lab.envs import CartPole
+
+        XD, TH, THD = np.array([-0.5, 0.5]), np.linspace(-0.2, 0.2, 5), np.linspace(-1.5, 1.5, 5)
+
+        def discretize(state):
+            return (int(np.digitize(state[1], XD)), int(np.digitize(state[2], TH)),
+                    int(np.digitize(state[3], THD)))
+
+        def train(episodes, seed=0, alpha=0.2, gamma=0.99):
+            env = CartPole(max_steps=200, seed=seed)
+            rng = np.random.default_rng(seed)
+            Q = np.zeros((3, 6, 6, 2))
+            lengths = []
+            for k in range(episodes):
+                eps = max(0.02, 0.97 ** k)
+                d, done = discretize(env.reset()), False
+                while not done:
+                    a = int(rng.integers(2)) if rng.random() < eps else int(np.argmax(Q[d]))
+                    state, r, done = env.step(a)
+                    d2 = discretize(state)
+                    fell = done and env.t < env.max_steps
+                    target = r if fell else r + gamma * np.max(Q[d])
+                    Q[d + (a,)] += alpha * (target - Q[d + (a,)])
+                    d = d2
+                lengths.append(env.t)
+            return lengths
+    hints:
+      - "Teilziel: TD-Ziel mit Terminal-Check bilden, dann den Tabelleneintrag verschieben."
+      - Nur wenn `fell` wahr ist, endet die Zukunft. Sonst kommt der beste Wert der **nächsten** Zelle `d2` dazu.
+      - "`target = r if fell else r + gamma * np.max(Q[d2])`"
+      - "`Q[d + (a,)] += alpha * (target - Q[d + (a,)])`"
+    explanation: |
+      `d + (a,)` hängt die Aktion an das Zustandstupel an – so wird aus `(1, 3, 2)` der Index `(1, 3, 2, a)` einer einzelnen Zelle.
+  - type: quiz
+    question: |
+      Du nimmst alle vier CartPole-Größen mit je 20 Bins. Wie viele Q-Werte hat die Tabelle (2 Aktionen)?
+    options:
+      - text: "320 000"
+        correct: true
+        why: "$20^4 \\cdot 2 = 160\\,000 \\cdot 2$. Die meisten Zellen würden in 150 Episoden nie besucht."
+      - text: "160"
+        correct: false
+        why: "Das wäre $20 \\cdot 4 \\cdot 2$ – Bins multiplizieren sich aber über die Dimensionen."
+      - text: "80"
+        correct: false
+        why: Das zählt nur die Bins, nicht ihre Kombinationen.
+      - text: "1 600"
+        correct: false
+        why: "$20^2 \\cdot 4$ – die Exponentialität fehlt."
+cards:
+  - id: m14-c-digitize
+    concept: zustands-diskretisierung
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.digitize(0.05, [-0.1, 0.0, 0.1]))
+        options: ["2", "1", "3", "0"]
+        answer: "2"
+        explanation: "0.0 ≤ 0.05 < 0.1 → Fach 2 (Fächer 0 bis 3)."
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.digitize(-0.3, [-0.1, 0.0, 0.1]), np.digitize(0.5, [-0.1, 0.0, 0.1]))
+        options: ["0 3", "-1 3", "0 2", "1 4"]
+        answer: "0 3"
+        explanation: Unter der ersten Grenze → 0, über der letzten → Anzahl der Grenzen (3).
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.digitize(0.0, [-0.1, 0.0, 0.1]))
+        options: ["2", "1", "1.5", "0"]
+        answer: "2"
+        explanation: Ein Wert genau auf einer Grenze kommt ins obere Fach.
+  - id: m14-c-tabellengroesse
+    concept: zustands-diskretisierung
+    variants:
+      - type: quiz
+        question: Ein Roboterarm hat 6 Gelenke, jeder Winkel wird in 10 Bins geteilt. Wie viele Zustände hat die Tabelle?
+        options:
+          - text: "$10^6$ = eine Million"
+            correct: true
+            why: Bins multiplizieren sich über alle Dimensionen.
+          - text: "60"
+            correct: false
+            why: Das ist $6 \cdot 10$ – die Kombinationen fehlen.
+          - text: "$6^{10}$"
+            correct: false
+            why: Basis und Exponent vertauscht – es sind 10 Möglichkeiten pro Gelenk.
+      - type: quiz
+        question: Warum lässt man bei CartPole oft die Position $x$ weg?
+        options:
+          - text: Um die Tabelle klein zu halten – für das Balancieren zählen Winkel und Winkelgeschwindigkeit am meisten.
+            correct: true
+            why: Jede Dimension multipliziert die Zellenzahl. Der Preis ist, dass der Wagen aus der Bahn rollen kann.
+          - text: Weil $x$ in CartPole immer 0 ist.
+            correct: false
+            why: Der Wagen bewegt sich; bei $|x| > 2.4$ endet die Episode.
+          - text: Weil `np.digitize` nur drei Größen gleichzeitig kann.
+            correct: false
+            why: "`np.digitize` sortiert jede Größe einzeln ein – die Anzahl ist beliebig."
+  - id: m14-c-terminal-abbruch
+    concept: terminal-vs-abbruch
+    variants:
+      - type: quiz
+        question: Eine Episode endet, weil `max_steps` erreicht ist, der Stab steht noch. Welches TD-Ziel ist richtig?
+        options:
+          - text: $r + \gamma \max_{a'} Q(s', a')$
+            correct: true
+            why: Das Zeitlimit ist kein echtes Ende – es wird weiter gebootstrapt.
+          - text: $r$
+            correct: false
+            why: Das gilt nur bei einem echten Endzustand (Stab umgefallen).
+          - text: $0$
+            correct: false
+            why: Auch die Belohnung des letzten Schritts zählt.
+      - type: quiz
+        question: Der Stab fällt in Schritt 37 um. Welches TD-Ziel gilt für diesen letzten Übergang?
+        options:
+          - text: $r$
+            correct: true
+            why: Nach einem echten Ende kommt nichts mehr, $V(s') = 0$.
+          - text: $r + \gamma \max_{a'} Q(s', a')$
+            correct: false
+            why: Der Folgezustand ist terminal; sein Q-Wert darf nicht einfließen.
+          - text: $\gamma \max_{a'} Q(s', a')$
+            correct: false
+            why: Die Belohnung fehlt, und der Folgezustand ist terminal.

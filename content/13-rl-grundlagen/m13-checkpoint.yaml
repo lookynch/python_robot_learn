@@ -1,0 +1,278 @@
+id: m13-checkpoint
+title: "Checkpoint: RL-Grundlagen"
+kind: checkpoint
+minutes: 15
+goals:
+  - Bandits, MDPs, Returns, Bellman-Gleichungen und dynamische Programmierung sicher anwenden
+concepts: [bandit-epsilon-greedy, bandit-ucb, mdp-definition, mdp-return, dp-policy-evaluation, dp-value-iteration, dp-greedy-policy, dp-policy-iteration]
+steps:
+  - type: predict
+    code: |
+      gamma = 0.5
+      rewards = [0, -1, 4]
+      G = 0.0
+      for r in reversed(rewards):
+          G = r + gamma * G
+      print(G)
+    options: ["0.5", "3.0", "1.5", "-0.5"]
+    answer: "0.5"
+    explanation: |
+      Rückwärts: $G_2 = 4$, $G_1 = -1 + 2 = 1$, $G_0 = 0 + 0{,}5 = 0{,}5$.
+  - type: quiz
+    question: |
+      Ein Bandit-Agent wählt immer die Aktion mit der höchsten Schätzung $Q$, alle $Q$ starten bei 0, Belohnungen sind 0 oder 1. Was ist das Hauptproblem?
+    options:
+      - text: Er kann an einer mittelmäßigen Aktion hängen bleiben, weil er andere nie wieder ausprobiert.
+        correct: true
+        why: Ohne Exploration (ε-greedy, UCB) werden falsche Schätzungen nie korrigiert.
+      - text: Die Schätzungen konvergieren nicht, weil der Mittelwert inkrementell berechnet wird.
+        correct: false
+        why: Der inkrementelle Mittelwert ist exakt der Mittelwert.
+      - text: Er wählt zu oft zufällige Aktionen.
+        correct: false
+        why: Rein greedy wählt nie zufällig.
+  - type: predict
+    code: |
+      from lab.envs import GridWorld
+      env = GridWorld(slip=0.2)
+      print(env.P[14][1])
+    options:
+      - "[(0.8, 15, 0.0, True), (0.1, 14, -1.0, False), (0.1, 10, -1.0, False)]"
+      - "[(1.0, 15, 0.0, True)]"
+      - "[(0.8, 15, -1.0, True), (0.2, 14, -1.0, False)]"
+      - "[(0.8, 15, 0.0, True), (0.1, 13, -1.0, False), (0.1, 11, -100.0, False)]"
+    answer: "[(0.8, 15, 0.0, True), (0.1, 14, -1.0, False), (0.1, 10, -1.0, False)]"
+    explanation: |
+      Gewollt rechts ins Ziel (0,8). Quer rutschen: nach unten ist der Rand – man bleibt auf 14; nach oben landet man auf 10. Rutschen erfolgt quer zur Richtung, nie rückwärts.
+  - type: fill
+    prompt: |
+      Ergänze den Backup der Policy Evaluation für die deterministische Policy `pol`.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+      env, gamma = GridWorld(slip=0.2), 0.9
+      pol = np.array([2, 1, 2, 3, 2, 0, 2, 3, 1, 1, 2, 2, 0, 1, 1, 0])
+      V = np.zeros(16)
+      for sweep in range(500):
+          V_new = np.zeros(16)
+          for s in range(16):
+              for p, s2, r, done in env.P[s][pol[s]]:
+                  V_new[s] += ___ * (r + gamma * V[___] * (not done))
+          V = V_new
+    blanks:
+      - answer: p
+        options: [p, "1", gamma]
+      - answer: s2
+        options: [s2, s, "pol[s]"]
+    tests:
+      - name: Werte gegen exakte Lösung
+        code: |
+          import numpy as np
+          P_pi, r_pi = np.zeros((16, 16)), np.zeros(16)
+          for s in range(16):
+              for p, s2, r, done in env.P[s][pol[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          exact = np.linalg.solve(np.eye(16) - 0.9 * P_pi, r_pi)
+          assert close(V, exact, 1e-6), f"V[0] erwartet {exact[0]:.3f}, bekommen {V[0]:.3f}"
+  - type: parsons
+    prompt: |
+      Value Iteration mit $\gamma = 1$ auf der Standard-Gitterwelt. Ausgabe: `-5.0`.
+    lines:
+      - "import numpy as np"
+      - "from lab.envs import GridWorld"
+      - "env = GridWorld()"
+      - "V = np.zeros(16)"
+      - "for sweep in range(10):"
+      - "    V_new = np.zeros(16)"
+      - "    for s in range(16):"
+      - "        q = [sum(p * (r + V[s2] * (not d)) for p, s2, r, d in env.P[s][a]) for a in range(4)]"
+      - "        V_new[s] = max(q)"
+      - "    V = V_new"
+      - "print(V[0])"
+    distractors:
+      - "        V_new[s] = sum(q) / 4"
+      - "        V_new[s] = np.argmax(q)"
+    expect_output: "-5.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `ucb_action(Q, N, t, c=1.0)`: Gibt es Aktionen mit `N == 0`, wähle die erste davon. Sonst wähle $\arg\max_a \big[Q(a) + c\sqrt{\ln t / N(a)}\big]$. Rückgabe als `int`.
+    starter: |
+      import numpy as np
+
+      def ucb_action(Q, N, t, c=1.0):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def ucb_action(Q, N, t, c=1.0):
+          if np.any(N == 0):
+              return int(np.argmin(N))
+          return int(np.argmax(Q + c * np.sqrt(np.log(t) / N)))
+    tests:
+      - name: Unprobierte Aktion zuerst
+        code: |
+          import numpy as np
+          a = ucb_action(np.array([0.9, 0.0, 0.0]), np.array([5.0, 0.0, 3.0]), 9)
+          assert a == 1, f"Aktion 1 wurde noch nie gewählt und muss drankommen, bekommen {a}"
+      - name: Bonus überwiegt
+        code: |
+          import numpy as np
+          a = ucb_action(np.array([0.6, 0.5]), np.array([90.0, 10.0]), 100)
+          assert a == 1, f"Mit Bonus ist Aktion 1 besser (0.5 + 0.68 > 0.6 + 0.23), bekommen {a}"
+      - name: Schätzwert überwiegt bei kleinem c
+        code: |
+          import numpy as np
+          a = ucb_action(np.array([0.6, 0.5]), np.array([90.0, 10.0]), 100, c=0.1)
+          assert a == 0, f"Mit c = 0.1 ist der Bonus klein, Aktion 0 erwartet, bekommen {a}"
+          assert isinstance(a, int), f"Rückgabe sollte int sein, ist {type(a).__name__}"
+    mutants:
+      - |
+        import numpy as np
+        def ucb_action(Q, N, t, c=1.0):
+            return int(np.argmax(Q))
+      - |
+        import numpy as np
+        def ucb_action(Q, N, t, c=1.0):
+            if np.any(N == 0):
+                return int(np.argmin(N))
+            return int(np.argmax(Q + c * np.sqrt(np.log(t) * N)))
+      - |
+        import numpy as np
+        def ucb_action(Q, N, t, c=1.0):
+            if np.any(N == 0):
+                return int(np.argmin(N))
+            return int(np.argmax(Q + np.sqrt(np.log(t) / N)))
+      - |
+        import numpy as np
+        def ucb_action(Q, N, t, c=1.0):
+            return int(np.argmax(Q + c * np.sqrt(np.log(t) / np.maximum(N, 1))))
+    hints:
+      - "Teilziel: erst den Sonderfall `N == 0`, dann die UCB-Bewertung."
+      - "`np.any(N == 0)` prüft den Sonderfall; `np.argmin(N)` liefert dann eine unprobierte Aktion."
+      - "`return int(np.argmax(Q + c * np.sqrt(np.log(t) / N)))`"
+  - type: quiz
+    question: |
+      Welche Aussage über Value Iteration (VI) und Policy Iteration (PI) stimmt?
+    options:
+      - text: Beide brauchen das Modell `P` und liefern dieselbe optimale Wertfunktion.
+        correct: true
+        why: Beide sind dynamische Programmierung auf einem bekannten MDP.
+      - text: VI braucht kein Modell, PI schon.
+        correct: false
+        why: Das Optimalitäts-Backup von VI braucht `P` genauso.
+      - text: PI liefert nur eine Näherung, VI das exakte Optimum.
+        correct: false
+        why: PI endet mit einer exakt optimalen Policy; VI nähert sich $V^*$ an.
+      - text: Eine PI-Iteration kostet genauso viel wie ein VI-Sweep.
+        correct: false
+        why: Eine PI-Iteration enthält eine vollständige Policy-Bewertung.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `greedy_policy(env, V, gamma)`: für jeden Zustand die Aktion mit dem größten $Q(s, a) = \sum p\,[r + \gamma V(s')(1 - \text{done})]$. Rückgabe: Integer-Array der Länge `env.n_states`.
+    starter: |
+      import numpy as np
+
+      def greedy_policy(env, V, gamma):
+          pi = np.zeros(env.n_states, dtype=int)
+          for s in range(env.n_states):
+              q = np.zeros(env.n_actions)
+              # Q-Werte berechnen, beste Aktion wählen
+          return pi
+    solution: |
+      import numpy as np
+
+      def greedy_policy(env, V, gamma):
+          pi = np.zeros(env.n_states, dtype=int)
+          for s in range(env.n_states):
+              q = np.zeros(env.n_actions)
+              for a in range(env.n_actions):
+                  for p, s2, r, done in env.P[s][a]:
+                      q[a] += p * (r + gamma * V[s2] * (not done))
+              pi[s] = np.argmax(q)
+          return pi
+    tests:
+      - name: Policy aus V* erreicht das Ziel
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld()
+          V_star = np.array([-5, -4, -3, -4, -4, 0, -2, -3, -3, -2, -1, 0, 0, -1, 0, 0], dtype=float)
+          pi_t = greedy_policy(env_t, V_star, 1.0)
+          s, steps, done = env_t.reset(), 0, False
+          while not done and steps < 50:
+              s, r, done = env_t.step(pi_t[s])
+              steps += 1
+          assert s == 15 and steps == 6, f"Erwartet: Ziel nach 6 Schritten, bekommen: Feld {s} nach {steps} Schritten"
+      - name: Rutschige Welt – Policy ist optimal
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld(slip=0.2)
+          V = np.zeros(16)
+          for _ in range(400):
+              V = np.array([max(sum(p * (r + 0.9 * V[s2] * (not d)) for p, s2, r, d in env_t.P[s][a]) for a in range(4)) for s in range(16)])
+          pi_t = greedy_policy(env_t, V, 0.9)
+          P_pi, r_pi = np.zeros((16, 16)), np.zeros(16)
+          for s in range(16):
+              for p, s2, r, d in env_t.P[s][int(pi_t[s])]:
+                  r_pi[s] += p * r
+                  if not d:
+                      P_pi[s, s2] += p
+          V_pi = np.linalg.solve(np.eye(16) - 0.9 * P_pi, r_pi)
+          assert close(V_pi, V, 1e-5), f"Der Wert deiner Policy im Start ist {V_pi[0]:.3f}, optimal wäre {V[0]:.3f}"
+    mutants:
+      - |
+        import numpy as np
+        def greedy_policy(env, V, gamma):
+            pi = np.zeros(env.n_states, dtype=int)
+            for s in range(env.n_states):
+                q = np.zeros(env.n_actions)
+                for a in range(env.n_actions):
+                    for p, s2, r, done in env.P[s][a]:
+                        q[a] += p * (r + gamma * V[s2] * (not done))
+                pi[s] = np.argmin(q)
+            return pi
+      - |
+        import numpy as np
+        def greedy_policy(env, V, gamma):
+            pi = np.zeros(env.n_states, dtype=int)
+            for s in range(env.n_states):
+                q = np.zeros(env.n_actions)
+                for a in range(env.n_actions):
+                    for p, s2, r, done in env.P[s][a]:
+                        q[a] += p * gamma * V[s2] * (not done)
+                pi[s] = np.argmax(q)
+            return pi
+      - |
+        import numpy as np
+        def greedy_policy(env, V, gamma):
+            pi = np.zeros(env.n_states, dtype=int)
+            for s in range(env.n_states):
+                q = np.zeros(env.n_actions)
+                for a in range(env.n_actions):
+                    for p, s2, r, done in env.P[s][a]:
+                        q[a] += p * (r + gamma * V[s] * (not done))
+                pi[s] = np.argmax(q)
+            return pi
+    hints:
+      - "Teilziel: für jede Aktion den Q-Wert aus dem Modell, dann die beste Aktion."
+      - "Summiere über alle Ergebnisse `(p, s2, r, done)` in `env.P[s][a]`, gewichtet mit `p`."
+      - "`q[a] += p * (r + gamma * V[s2] * (not done))`, danach `pi[s] = np.argmax(q)`."
+  - type: quiz
+    question: |
+      Ein Roboter soll mit 10 Steuerschritten pro Sekunde etwa 5 s vorausplanen. Welcher Diskontfaktor passt grob?
+    options:
+      - text: "$\\gamma = 0{,}98$"
+        correct: true
+        why: Horizont $1/(1-\gamma) = 50$ Schritte = 5 s.
+      - text: "$\\gamma = 0{,}5$"
+        correct: false
+        why: Horizont 2 Schritte = 0,2 s.
+      - text: "$\\gamma = 0{,}9$"
+        correct: false
+        why: Horizont 10 Schritte = 1 s.

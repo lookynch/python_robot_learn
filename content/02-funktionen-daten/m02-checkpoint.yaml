@@ -1,0 +1,311 @@
+id: m02-checkpoint
+title: "Checkpoint: Funktionen & Datenstrukturen"
+kind: checkpoint
+minutes: 15
+goals:
+  - Funktionen, Rückgaben und Scope sicher lesen und schreiben
+  - Listen, Tupel und Dicts gezielt einsetzen
+  - "`math`, Comprehensions und Ausnahmen kombinieren"
+concepts:
+  - m02-funktion-def
+  - m02-return
+  - m02-standardwerte
+  - m02-scope
+  - m02-slicing
+  - m02-aliasing
+  - m02-dict
+  - m02-comprehension
+  - m02-zip-enumerate
+  - m02-import
+  - m02-exceptions
+  - m02-raise
+steps:
+  - type: predict
+    code: |
+      def f(x, k=2):
+          print(x)
+          return x * k
+
+      y = f(3)
+      print(y + f(1, k=10))
+    options:
+      - |
+        3
+        1
+        16
+      - |
+        3
+        16
+      - |
+        3
+        1
+        13
+      - |
+        6
+        1
+        16
+    answer: |
+      3
+      1
+      16
+    explanation: |
+      `f(3)` gibt 3 aus und liefert 6. Beim zweiten Aufruf wird 1 ausgegeben und 10 zurückgegeben. $6 + 10 = 16$.
+  - type: predict
+    code: |
+      q = [0.1, 0.2, 0.3, 0.4, 0.5]
+      print(q[-1], q[1:3], q[::2])
+    options:
+      - "0.5 [0.2, 0.3] [0.1, 0.3, 0.5]"
+      - "0.5 [0.2, 0.3, 0.4] [0.1, 0.3, 0.5]"
+      - "0.1 [0.2, 0.3] [0.2, 0.4]"
+      - "0.5 [0.1, 0.2, 0.3] [0.1, 0.2]"
+    answer: "0.5 [0.2, 0.3] [0.1, 0.3, 0.5]"
+    explanation: |
+      `[-1]` ist das letzte Element, `[1:3]` die Indizes 1 und 2 (Stop ausgeschlossen), `[::2]` jedes zweite Element ab Index 0.
+  - type: fill
+    prompt: |
+      Summiere die Motorströme aller Motoren aus `aktiv`. Fehlt ein Motor in `strom`, zählt er mit 0. Erwartet: `2.5`.
+    code: |
+      strom = {"m1": 1.0, "m2": 1.5, "m3": 0.7}
+      aktiv = ["m1", "m2", "m4"]
+      summe = 0.0
+      for name in aktiv:
+          summe = summe + strom.___(name, ___)
+      print(summe)
+    blanks:
+      - answer: get
+        options: [get, items, values]
+      - answer: "0"
+        options: ["0", "1", "None"]
+    expect_output: "2.5"
+  - type: predict
+    code: |
+      n = 10
+
+      def f(n):
+          n = n + 5
+          return n * 2
+
+      m = f(n)
+      print(n, m)
+    options: ["10 30", "15 30", "10 20", "15 15"]
+    answer: "10 30"
+    explanation: |
+      Der Parameter `n` ist lokal. Das globale `n` bleibt 10; zurückgegeben wird $(10 + 5) \cdot 2$.
+  - type: parsons
+    prompt: |
+      `zelle(feld, spalten)` soll Zeile und Spalte eines Gitterfelds als Tupel zurückgeben. Ausgabe: `2 3`.
+    lines:
+      - "def zelle(feld, spalten):"
+      - "    zeile = feld // spalten"
+      - "    spalte = feld % spalten"
+      - "    return zeile, spalte"
+      - "z, s = zelle(11, 4)"
+      - "print(z, s)"
+    distractors:
+      - "    print(zeile, spalte)"
+      - "z = zelle(11, 4)"
+    expect_output: "2 3"
+  - type: predict
+    code: |
+      namen = ["a", "b", "c"]
+      werte = [3, 0, 5]
+      print({n: w for n, w in zip(namen, werte) if w > 0})
+    options:
+      - "{'a': 3, 'c': 5}"
+      - "{'a': 3, 'b': 0, 'c': 5}"
+      - "[('a', 3), ('c', 5)]"
+      - "{3: 'a', 5: 'c'}"
+    answer: "{'a': 3, 'c': 5}"
+    explanation: |
+      `zip` bildet Paare, die Bedingung filtert `b` heraus, die Dict-Comprehension baut `name: wert`.
+  - type: quiz
+    question: |
+      Was gibt das Programm aus?
+    code: |
+      def anhaengen(liste):
+          liste.append(0)
+
+      a = [1]
+      b = a
+      anhaengen(b)
+      print(a)
+    options:
+      - text: "`[1, 0]`"
+        correct: true
+        why: "`a`, `b` und der Parameter `liste` bezeichnen alle dieselbe Liste."
+      - text: "`[1]`"
+        correct: false
+        why: Das gälte nur, wenn irgendwo eine Kopie (`.copy()`) erzeugt worden wäre.
+      - text: "`None`"
+        correct: false
+        why: "`anhaengen` gibt zwar `None` zurück, ausgegeben wird aber `a`."
+  - type: predict
+    code: |
+      def pruefe(v):
+          if v > 1.0:
+              raise ValueError("zu schnell")
+          return v
+
+      for v in [0.5, 2.0, 0.8]:
+          try:
+              print(pruefe(v))
+          except ValueError as e:
+              print("Fehler:", e)
+    options:
+      - |
+        0.5
+        Fehler: zu schnell
+        0.8
+      - |
+        0.5
+        Fehler: zu schnell
+      - |
+        0.5
+        2.0
+        0.8
+      - |
+        0.5
+        Fehler: zu schnell
+        Fehler: zu schnell
+    answer: |
+      0.5
+      Fehler: zu schnell
+      0.8
+    explanation: |
+      Die Ausnahme wird innerhalb der Schleife gefangen; der nächste Durchlauf läuft normal.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `statistik(werte)`, die für eine Liste von Messwerten das Tupel `(kleinster, groesster, mittelwert)` zurückgibt. Ist die Liste leer, soll sie einen `ValueError` mit der Meldung `keine Messwerte` auslösen. Du darfst `min`, `max`, `sum` und `len` verwenden.
+    starter: |
+      def statistik(werte):
+          # dein Code
+          pass
+    solution: |
+      def statistik(werte):
+          if len(werte) == 0:
+              raise ValueError("keine Messwerte")
+          return min(werte), max(werte), sum(werte) / len(werte)
+    tests:
+      - name: Beispiel
+        code: |
+          r = statistik([2.0, 4.0, 9.0])
+          assert r == (2.0, 9.0, 5.0), f"statistik([2.0, 4.0, 9.0]) sollte (2.0, 9.0, 5.0) sein, liefert {r}"
+      - name: Ein Wert
+        code: |
+          r = statistik([-1.5])
+          assert r == (-1.5, -1.5, -1.5), f"statistik([-1.5]) sollte (-1.5, -1.5, -1.5) sein, liefert {r}"
+      - name: Leere Liste
+        code: |
+          try:
+              statistik([])
+              assert False, "statistik([]) sollte einen ValueError auslösen"
+          except ValueError as e:
+              assert "keine Messwerte" in str(e), f"Die Meldung sollte 'keine Messwerte' enthalten, ist aber: {e}"
+    mutants:
+      - |
+        def statistik(werte):
+            return min(werte), max(werte), sum(werte) / len(werte)
+      - |
+        def statistik(werte):
+            if len(werte) == 0:
+                raise ValueError("keine Messwerte")
+            return max(werte), min(werte), sum(werte) / len(werte)
+      - |
+        def statistik(werte):
+            if len(werte) == 0:
+                return (0, 0, 0)
+            return min(werte), max(werte), sum(werte) / len(werte)
+    hints:
+      - "Teilziel: erst den Randfall „leer“ abfangen, dann alle drei Werte als Tupel zurückgeben."
+      - "`if len(werte) == 0:` → `raise ValueError(\"keine Messwerte\")`"
+      - "`return min(werte), max(werte), sum(werte) / len(werte)`"
+    explanation: |
+      `min([])` löst übrigens schon selbst einen `ValueError` aus – aber mit einer Meldung, die nichts über Messwerte sagt. Eine eigene Prüfung am Anfang macht klar, **was** schiefging.
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Greifer steht bei `position` (Tupel `(x, y)` in m). `ziele` ordnet Objektnamen ihre Position zu. Schreibe `naechstes(position, ziele)`, die den **Namen** des Objekts mit dem kleinsten euklidischen Abstand zurückgibt. Nutze `math.sqrt`.
+
+      Tipp: `float("inf")` ist eine Zahl, die größer ist als jede andere – ein guter Startwert für „bisher kleinster Abstand“.
+    starter: |
+      import math
+
+      def naechstes(position, ziele):
+          # dein Code
+          pass
+    solution: |
+      import math
+
+      def naechstes(position, ziele):
+          bester = None
+          bester_abstand = float("inf")
+          for name, p in ziele.items():
+              d = math.sqrt((p[0] - position[0])**2 + (p[1] - position[1])**2)
+              if d < bester_abstand:
+                  bester = name
+                  bester_abstand = d
+          return bester
+    tests:
+      - name: Beispiel
+        code: |
+          r = naechstes((0.0, 0.0), {"becher": (1.0, 1.0), "ball": (0.5, 0.0), "box": (-2.0, 0.0)})
+          assert r == "ball", f"Erwartet 'ball', bekommen {r!r}"
+      - name: Andere Position
+        code: |
+          r = naechstes((-1.5, 0.2), {"becher": (1.0, 1.0), "ball": (0.5, 0.0), "box": (-2.0, 0.0)})
+          assert r == "box", f"Erwartet 'box', bekommen {r!r}"
+      - name: Abstand in beiden Achsen
+        code: |
+          r = naechstes((0.0, 0.0), {"b": (0.0, 0.5), "a": (0.3, 0.3)})
+          assert r == "a", f"(0.3, 0.3) ist etwa 0.42 m entfernt, (0, 0.5) genau 0.5 m – erwartet 'a', bekommen {r!r}"
+    mutants:
+      - |
+        import math
+
+        def naechstes(position, ziele):
+            bester = None
+            bester_abstand = float("inf")
+            for name, p in ziele.items():
+                d = abs(p[0] - position[0]) + abs(p[1] - position[1])
+                if d < bester_abstand:
+                    bester = name
+                    bester_abstand = d
+            return bester
+      - |
+        import math
+
+        def naechstes(position, ziele):
+            bester = None
+            bester_abstand = float("inf")
+            for name, p in ziele.items():
+                d = math.sqrt((p[0] - position[0])**2 + (p[1] - position[1])**2)
+                if d > bester_abstand:
+                    bester = name
+                    bester_abstand = d
+            return bester
+      - |
+        import math
+
+        def naechstes(position, ziele):
+            bester = None
+            bester_abstand = float("inf")
+            for name, p in ziele.items():
+                d = math.sqrt(p[0]**2 + p[1]**2)
+                if d < bester_abstand:
+                    bester = name
+                    bester_abstand = d
+            return bester
+    hints:
+      - "Teilziel: über alle Ziele laufen, Abstand berechnen, den bisher kleinsten Abstand und dessen Namen merken."
+      - "Mit `for name, p in ziele.items():` bekommst du Name und Position; der Abstand ist $\\sqrt{(x - x_0)^2 + (y - y_0)^2}$."
+      - |
+        ```python
+        bester = None
+        bester_abstand = float("inf")
+        for name, p in ziele.items():
+            d = math.sqrt((p[0] - position[0])**2 + (p[1] - position[1])**2)
+            # ... bisher kleinsten merken
+        ```
+      - "`if d < bester_abstand:` – dann `bester = name` und `bester_abstand = d`; am Ende `return bester`."

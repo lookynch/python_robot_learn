@@ -1,0 +1,339 @@
+id: m14-td
+title: TD(0) – lernen nach jedem Schritt
+minutes: 10
+goals:
+  - Das TD(0)-Update und den TD-Fehler $\delta$ anwenden
+  - Bootstrapping erklären und von Monte Carlo abgrenzen
+  - TD und MC auf dem Random Walk vergleichen
+concepts: [td0-update, mc-prediction]
+steps:
+  - type: text
+    body: |
+      ## Nicht bis zum Ende warten
+
+      MC wartet auf den vollständigen Return $G_t$. **Temporal-Difference-Lernen** (TD) aktualisiert schon nach **einem** Schritt und setzt für den Rest die eigene Schätzung ein:
+
+      $$V(s) \leftarrow V(s) + \alpha\,\big[\underbrace{r + \gamma V(s')}_{\text{TD-Ziel}} - V(s)\big]$$
+
+      Die Klammer heißt **TD-Fehler** $\delta$. Ist $s'$ ein Endzustand, gilt $V(s') = 0$, das Ziel ist dann nur $r$.
+
+      Eine Schätzung aus einer anderen Schätzung zu verbessern heißt **Bootstrapping** (wie bei der Bellman-Gleichung, nur mit einem einzigen erlebten Übergang statt der Summe über `env.P`).
+  - type: example
+    intro: |
+      Der **Random Walk** aus Sutton & Barto (Beispiel 6.2): fünf Felder A–E, Start in der Mitte, zufällig links oder rechts. Rechts raus gibt +1, links raus 0. Die wahren Werte sind $1/6, 2/6, \dots, 5/6$. Als Gitterwelt: `X` links und `G` rechts sind Endfelder.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld(["X..S..G"], step_reward=0, goal_reward=1,
+                      trap_reward=0, trap_resets=False)
+      rng = np.random.default_rng(0)
+      V = np.full(env.n_states, 0.5)
+      V[0] = V[6] = 0.0                       # Endzustände
+      alpha, gamma = 0.1, 1.0
+
+      for k in range(100):
+          s, done = env.reset(), False
+          while not done:
+              a = 1 if rng.random() < 0.5 else 3   # rechts oder links
+              s2, r, done = env.step(a)
+              target = r if done else r + gamma * V[s2]
+              V[s] += alpha * (target - V[s])
+              s = s2
+
+      print("TD:  ", np.round(V[1:6], 2))
+      print("wahr:", np.round(np.arange(1, 6) / 6, 2))
+      env.render(values=V, title="V nach 100 Episoden TD(0)")
+    subgoals:
+      - lines: [4, 9]
+        label: Umgebung und Startwerte festlegen
+      - lines: [11, 15]
+        label: Einen Schritt erleben
+      - lines: [16, 18]
+        label: TD-Update
+      - lines: [20, 22]
+        label: Mit der Wahrheit vergleichen
+    after: |
+      Die Schätzung hat schon die richtige Form (steigend von A nach E), liegt aber noch bis zu etwa 0,1 daneben. Exakt wird sie nie: Mit konstantem $\alpha = 0.1$ schiebt jede neue Episode die Werte ein Stück hin und her.
+  - type: predict
+    code: |
+      V = {"A": 0.5, "B": 0.5, "Ende": 0.0}
+      alpha, gamma = 0.1, 1.0
+      # Übergang A -> B mit Belohnung 0
+      V["A"] += alpha * (0 + gamma * V["B"] - V["A"])
+      # Übergang B -> Ende mit Belohnung 1
+      V["B"] += alpha * (1 + gamma * V["Ende"] - V["B"])
+      print(V["A"], V["B"])
+    options: ["0.5 0.55", "0.55 0.55", "0.5 1.0", "0.55 0.6"]
+    answer: "0.5 0.55"
+    explanation: |
+      Erster Übergang: $\delta = 0 + 0.5 - 0.5 = 0$ – nichts ändert sich. Zweiter: $\delta = 1 + 0 - 0.5 = 0.5$, also $V(B) = 0.5 + 0.1 \cdot 0.5 = 0.55$. Der Lernschritt $\alpha$ verhindert, dass $V(B)$ gleich auf 1 springt.
+  - type: explain
+    question: |
+      Beim Übergang A → B blieb $V(A)$ unverändert, obwohl der Agent etwas erlebt hat. Warum?
+    options:
+      - text: Die Schätzung war mit dem Erlebten konsistent – $r + \gamma V(B)$ war genau $V(A)$, also $\delta = 0$.
+        correct: true
+        why: TD korrigiert nur Widersprüche zwischen benachbarten Schätzungen. Ohne Widerspruch kein Update.
+      - text: TD aktualisiert nur Zustände direkt vor einem Endzustand.
+        correct: false
+        why: TD aktualisiert nach **jedem** Schritt; hier war das Update nur zufällig null.
+      - text: Weil die Belohnung 0 war – bei $r = 0$ lernt TD nie.
+        correct: false
+        why: Auch bei $r = 0$ gibt es ein Update, wenn sich $V(s)$ und $\gamma V(s')$ unterscheiden.
+      - text: Weil $\alpha = 0.1$ zu klein ist, um etwas zu ändern.
+        correct: false
+        why: "$\\alpha$ skaliert nur $\\delta$. Mit $\\delta = 0$ wäre auch $\\alpha = 1$ wirkungslos."
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue TD(0) für den Random Walk zusammen. Getestet wird, ob die Schätzung nach 300 Episoden nahe an den wahren Werten liegt.
+    lines:
+      - "import numpy as np"
+      - "from lab.envs import GridWorld"
+      - "env = GridWorld(['X..S..G'], step_reward=0, goal_reward=1, trap_reward=0, trap_resets=False)"
+      - "rng = np.random.default_rng(0)"
+      - "V = np.zeros(env.n_states)"
+      - "for k in range(300):"
+      - "    s, done = env.reset(), False"
+      - "    while not done:"
+      - "        a = 1 if rng.random() < 0.5 else 3"
+      - "        s2, r, done = env.step(a)"
+      - "        target = r if done else r + V[s2]"
+      - "        V[s] += 0.05 * (target - V[s])"
+      - "        s = s2"
+    tests:
+      - name: Schätzung nahe an 1/6 … 5/6
+        code: |
+          err = np.max(np.abs(V[1:6] - np.arange(1, 6) / 6))
+          assert err < 0.12, f"Größte Abweichung von den wahren Werten ist {err:.2f} – erwartet unter 0.12. Stimmen Reihenfolge und Einrückung?"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `td_update(V, s, r, s2, done, alpha, gamma)`. Die Funktion soll `V[s]` per TD(0) aktualisieren (in-place) und den TD-Fehler $\delta$ zurückgeben. Bei `done=True` ist das Ziel nur `r` – egal, was in `V[s2]` steht.
+    starter: |
+      import numpy as np
+
+      def td_update(V, s, r, s2, done, alpha, gamma):
+          # TD-Ziel, TD-Fehler, Update
+          pass
+    solution: |
+      import numpy as np
+
+      def td_update(V, s, r, s2, done, alpha, gamma):
+          target = r if done else r + gamma * V[s2]
+          delta = target - V[s]
+          V[s] += alpha * delta
+          return delta
+    tests:
+      - name: Kein Widerspruch, kein Update
+        code: |
+          import numpy as np
+          V = np.array([0.0, 0.5, 0.5, 0.0])
+          d = td_update(V, 1, 0.0, 2, False, 0.1, 1.0)
+          assert d is not None, "td_update gibt nichts zurück – return delta fehlt."
+          assert close(d, 0.0) and close(V, [0.0, 0.5, 0.5, 0.0]), f"Erwartet δ = 0 und V unverändert, bekommen δ = {d}, V = {V}"
+      - name: Update mit Diskont
+        code: |
+          import numpy as np
+          V = np.array([0.0, 0.2, 0.6, 0.0])
+          d = td_update(V, 1, 1.0, 2, False, 0.5, 0.9)
+          assert d is not None, "td_update gibt nichts zurück – return delta fehlt."
+          assert close(d, 1.34), f"δ = 1 + 0.9·0.6 − 0.2 = 1.34 erwartet, bekommen {d}"
+          assert close(V[1], 0.87), f"V[1] sollte 0.2 + 0.5·1.34 = 0.87 sein, ist {V[1]}"
+          assert close(V[[0, 2, 3]], [0.0, 0.6, 0.0]), f"Nur V[s] darf sich ändern, V ist jetzt {V}"
+      - name: Endzustand ignoriert V[s2]
+        code: |
+          import numpy as np
+          V = np.array([0.0, 0.4, 0.8, 5.0])
+          d = td_update(V, 2, 1.0, 3, True, 0.5, 1.0)
+          assert d is not None, "td_update gibt nichts zurück – return delta fehlt."
+          assert close(V[2], 0.9), f"Bei done=True ist das Ziel nur r = 1 → V[2] = 0.8 + 0.5·0.2 = 0.9 erwartet, ist {V[2]}"
+      - name: Negativer TD-Fehler
+        code: |
+          import numpy as np
+          V = np.array([0.0, 2.0, 0.0])
+          d = td_update(V, 1, -1.0, 2, False, 0.25, 1.0)
+          assert close(d, -3.0) and close(V[1], 1.25), f"δ = −1 + 0 − 2 = −3 und V[1] = 1.25 erwartet, bekommen δ = {d}, V[1] = {V[1]}"
+    mutants:
+      - |
+        import numpy as np
+
+        def td_update(V, s, r, s2, done, alpha, gamma):
+            target = r + gamma * V[s2]
+            delta = target - V[s]
+            V[s] += alpha * delta
+            return delta
+      - |
+        import numpy as np
+
+        def td_update(V, s, r, s2, done, alpha, gamma):
+            target = r if done else r + gamma * V[s2]
+            delta = V[s] - target
+            V[s] += alpha * delta
+            return delta
+      - |
+        import numpy as np
+
+        def td_update(V, s, r, s2, done, alpha, gamma):
+            target = r if done else r + gamma * V[s2]
+            delta = target - V[s]
+            V[s] += delta
+            return delta
+      - |
+        import numpy as np
+
+        def td_update(V, s, r, s2, done, alpha, gamma):
+            target = r if done else r + gamma * V[s2]
+            delta = target - V[s]
+            V[s] += alpha * delta
+    hints:
+      - "Teilziel: TD-Ziel bilden, TD-Fehler berechnen, Wert verschieben, Fehler zurückgeben."
+      - Das Ziel ist $r + \gamma V(s')$, außer bei `done` – dann nur $r$. Der Fehler ist Ziel minus alter Wert.
+      - "`target = r if done else r + gamma * V[s2]` und `delta = target - V[s]`"
+      - "Danach `V[s] += alpha * delta` und `return delta`."
+  - type: example
+    title: MC gegen TD
+    intro: |
+      Beide Verfahren auf dem Random Walk, gemittelt über 10 Läufe mit verschiedenen Seeds. Gemessen wird der RMS-Fehler zu den wahren Werten. MC nutzt hier einen konstanten Lernschritt $\alpha$ statt $1/N$ – wie in Sutton & Barto, Beispiel 6.2.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      env = GridWorld(["X..S..G"], step_reward=0, goal_reward=1,
+                      trap_reward=0, trap_resets=False)
+      true_v = np.arange(1, 6) / 6
+
+      def rms_curve(method, alpha, runs=10, episodes=100):
+          errors = np.zeros(episodes)
+          for run in range(runs):
+              rng = np.random.default_rng(run)
+              V = np.full(7, 0.5)
+              V[0] = V[6] = 0.0
+              for k in range(episodes):
+                  s, done, traj = env.reset(), False, []
+                  while not done:
+                      s2, r, done = env.step(1 if rng.random() < 0.5 else 3)
+                      traj.append((s, r, s2, done))
+                      s = s2
+                  if method == "TD":
+                      for s, r, s2, done in traj:
+                          target = r if done else r + V[s2]
+                          V[s] += alpha * (target - V[s])
+                  else:
+                      G = 0.0
+                      for s, r, s2, done in reversed(traj):
+                          G = r + G
+                          V[s] += alpha * (G - V[s])
+                  errors[k] += np.sqrt(np.mean((V[1:6] - true_v) ** 2)) / runs
+          return errors
+
+      fig = lab.Figure(title="Random Walk: Fehler der Schätzung", xlabel="Episode", ylabel="RMS-Fehler")
+      fig.line(rms_curve("MC", 0.02), label="MC, α = 0.02")
+      fig.line(rms_curve("TD", 0.1), label="TD(0), α = 0.1")
+      fig.show()
+    subgoals:
+      - lines: [9, 14]
+        label: Läufe und Startwerte festlegen
+      - lines: [15, 20]
+        label: Episode sammeln
+      - lines: [21, 29]
+        label: TD- oder MC-Update
+      - lines: [30, 31]
+        label: Fehler mitteln
+      - lines: [33, 36]
+        label: Lernkurven zeichnen
+    after: |
+      TD(0) ist hier schneller und genauer. Das TD-Ziel ist **verzerrt** (es enthält die noch falsche Schätzung $V(s')$), schwankt aber viel weniger als der volle Return. MC ist unverzerrt, aber jeder Return hängt von vielen Zufallsschritten ab. Welche Methode allgemein schneller lernt, ist theoretisch nicht bewiesen – auf solchen Aufgaben gewinnt in der Praxis meist TD.
+  - type: quiz
+    question: |
+      Welches Lernziel verwendet TD(0) für $V(s_t)$?
+    options:
+      - text: "$r_t + \\gamma V(s_{t+1})$"
+        correct: true
+        why: Eine echte Belohnung plus die eigene Schätzung für den Rest – Bootstrapping.
+      - text: "$G_t = r_t + \\gamma r_{t+1} + \\gamma^2 r_{t+2} + \\dots$"
+        correct: false
+        why: Das ist das MC-Ziel; es braucht die ganze Episode.
+      - text: "$\\sum_{s'} P(s' \\mid s, a)\\,[r + \\gamma V(s')]$"
+        correct: false
+        why: Das ist die Bellman-Erwartung – dafür bräuchte man das Modell `env.P`.
+      - text: "$V(s_{t+1}) - V(s_t)$"
+        correct: false
+        why: Da fehlt die Belohnung; außerdem ist das eher ein (unvollständiger) TD-Fehler, kein Ziel.
+  - type: quiz
+    question: |
+      Was bedeutet **Bootstrapping** beim TD-Lernen?
+    options:
+      - text: Eine Schätzung wird mithilfe einer anderen Schätzung aktualisiert.
+        correct: true
+        why: Im TD-Ziel steckt $V(s')$ – selbst nur geschätzt.
+      - text: Der Agent startet jede Episode neu am Startzustand.
+        correct: false
+        why: Das ist einfach ein Reset der Umgebung.
+      - text: Werte werden mit zufälligen Stichproben aus vielen Episoden gemittelt.
+        correct: false
+        why: Das beschreibt eher Monte Carlo (das Wort *Bootstrap* aus der Statistik ist hier nicht gemeint).
+cards:
+  - id: m14-c-td-update
+    concept: td0-update
+    variants:
+      - type: predict
+        code: |
+          V = [0.0, 1.0, 3.0]
+          alpha, gamma = 0.5, 1.0
+          s, r, s2 = 1, 0.0, 2
+          V[s] += alpha * (r + gamma * V[s2] - V[s])
+          print(V[s])
+        options: ["2.0", "3.0", "1.5", "1.0"]
+        answer: "2.0"
+        explanation: "δ = 0 + 3 − 1 = 2, also V = 1 + 0.5·2 = 2."
+      - type: predict
+        code: |
+          V = [4.0, 2.0]
+          alpha, gamma = 0.5, 0.5
+          s, r, s2 = 0, 1.0, 1
+          V[s] += alpha * (r + gamma * V[s2] - V[s])
+          print(V[s])
+        options: ["3.0", "2.0", "4.0", "1.0"]
+        answer: "3.0"
+        explanation: "Ziel = 1 + 0.5·2 = 2, δ = 2 − 4 = −2, V = 4 + 0.5·(−2) = 3."
+      - type: predict
+        code: |
+          V = [0.5, 9.0]
+          alpha = 0.5
+          s, r, s2, done = 0, 1.0, 1, True
+          target = r if done else r + V[s2]
+          V[s] += alpha * (target - V[s])
+          print(V[s])
+        options: ["0.75", "5.0", "9.5", "1.0"]
+        answer: "0.75"
+        explanation: "Bei `done` zählt nur r = 1: 0.5 + 0.5·0.5 = 0.75. V[s2] wird ignoriert."
+  - id: m14-c-td-vs-mc
+    concept: td0-update
+    variants:
+      - type: quiz
+        question: Welche Aussage über TD(0) im Vergleich zu MC stimmt?
+        options:
+          - text: Das TD-Ziel ist verzerrt, schwankt aber weniger.
+            correct: true
+            why: $V(s')$ ist eine Schätzung (Verzerrung), dafür hängt das Ziel nur von einem Zufallsschritt ab.
+          - text: TD braucht das Modell `env.P`, MC nicht.
+            correct: false
+            why: Beide sind modellfrei.
+          - text: TD funktioniert nur, wenn Episoden enden.
+            correct: false
+            why: Gerade TD kommt auch ohne Episodenende aus – es aktualisiert nach jedem Schritt.
+      - type: quiz
+        question: Ein Lagerroboter läuft ohne Pause stundenlang. Welches Verfahren kann während des Laufs lernen?
+        options:
+          - text: TD(0)
+            correct: true
+            why: TD aktualisiert nach jedem Übergang, ein Episodenende ist nicht nötig.
+          - text: Monte Carlo
+            correct: false
+            why: MC braucht den vollständigen Return – also ein Episodenende.
+          - text: Keines von beiden
+            correct: false
+            why: TD kann es – das ist einer seiner Hauptvorteile.

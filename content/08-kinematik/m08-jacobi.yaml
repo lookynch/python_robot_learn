@@ -1,0 +1,312 @@
+id: m08-jacobi
+title: Die Jacobi-Matrix
+minutes: 10
+goals:
+  - Die Jacobi-Matrix des 2-Gelenk-Arms aufstellen und implementieren
+  - Ihre Spalten als Spitzengeschwindigkeiten deuten
+  - Eine analytische Ableitung mit der numerischen Zentraldifferenz prüfen
+concepts: [jacobi-matrix]
+steps:
+  - type: text
+    body: |
+      ## Kleine Gelenkbewegung → kleine Spitzenbewegung
+
+      Dreht man die Gelenke ein wenig um $\Delta q$, bewegt sich die Spitze um ungefähr
+
+      $$\Delta p \approx J(q)\,\Delta q, \qquad J = \frac{\partial\,\mathrm{fk}}{\partial q}$$
+
+      Für den 2-Gelenk-Arm (mit $s_1 = \sin q_1$, $c_{12} = \cos(q_1+q_2)$ usw.):
+
+      $$
+      J(q) = \begin{pmatrix} -l_1 s_1 - l_2 s_{12} & -l_2 s_{12} \\ l_1 c_1 + l_2 c_{12} & l_2 c_{12} \end{pmatrix}
+      $$
+
+      **Spalte $i$** = Geschwindigkeit der Spitze, wenn nur Gelenk $i$ mit 1 rad/s dreht. Konvention: `jacobian(q, l1, l2)` → 2×2-Array.
+  - type: example
+    intro: |
+      Die Pfeile an der Spitze sind die beiden Spalten von $J$ (halbe Länge), während sich der Arm bewegt.
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12],
+                           [ l1 * c1 + l2 * c12,  l2 * c12]])
+
+      scene = lab.Scene(title="Spalten von J an der Spitze", bounds=[-2.6, 2.6, -2.6, 2.6])
+      for t in np.linspace(0, 2 * np.pi, 90):
+          q = [t, 0.6 + 0.5 * np.sin(t)]
+          elbow, tip, J = (np.cos(q[0]), np.sin(q[0])), fk(q), jacobian(q)
+          scene.line([(0, 0), elbow, tuple(tip)], color="c1", width=6)
+          for i, color in [(0, "c2"), (1, "c3")]:
+              d = 0.5 * J[:, i]
+              scene.arrow(tip[0], tip[1], d[0], d[1], color=color)
+              scene.text(tip[0] + 1.15 * d[0], tip[1] + 1.15 * d[1], f"Spalte {i + 1}", color=color, size=11)
+          scene.next_frame()
+      scene.show()
+    subgoals:
+      - lines: [8, 12]
+        label: Jacobi-Matrix als Funktion
+      - lines: [15, 17]
+        label: Für jede Stellung FK und J berechnen
+      - lines: [18, 22]
+        label: Arm und Spalten zeichnen
+    after: |
+      Spalte 2 steht immer **senkrecht** auf Glied 2, Spalte 1 senkrecht auf der Linie Basis–Spitze. Die Spitze bewegt sich jeweils auf einem Kreis um das drehende Gelenk.
+  - type: explain
+    question: |
+      Warum hat Spalte 2 immer die Länge $l_2$ und steht senkrecht auf Glied 2?
+    options:
+      - text: Dreht nur Gelenk 2, läuft die Spitze auf einem Kreis mit Radius $l_2$ um den Ellbogen – Kreisbahngeschwindigkeit ist tangential, Betrag $l_2 \cdot 1\,\mathrm{rad/s}$.
+        correct: true
+        why: $v = \omega \times r$ – senkrecht zum Radius, Betrag $\omega r$.
+      - text: Weil Glied 2 kürzer ist als Glied 1.
+        correct: false
+        why: Das gilt für beliebige Längen.
+      - text: Weil $q_2$ relativ gemessen wird, ist Spalte 2 immer $(0, l_2)$.
+        correct: false
+        why: Die Richtung dreht sich mit dem Arm mit – sie ist nur relativ zu Glied 2 fest.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12],
+                           [ l1 * c1 + l2 * c12,  l2 * c12]])
+
+      J = jacobian([0.0, np.pi / 2])
+      print(np.round(J, 2))
+    options:
+      - |
+        [[-1. -1.]
+         [ 1.  0.]]
+      - |
+        [[-1.  1.]
+         [-1.  0.]]
+      - |
+        [[0. 0.]
+         [2. 1.]]
+      - |
+        [[ 0. -1.]
+         [ 1.  0.]]
+    answer: |
+      [[-1. -1.]
+       [ 1.  0.]]
+    explanation: |
+      Spitze bei $(1, 1)$, Ellbogen bei $(1, 0)$. Gelenk 2 dreht die Spitze um den Ellbogen → Spalte 2 $= (-1, 0)$. Gelenk 1 dreht um die Basis, senkrecht zu $(1, 1)$ → Spalte 1 $= (-1, 1)$. Die zweite Option ist $J^T$, die dritte gehört zum gestreckten Arm.
+  - type: example
+    title: Numerisch prüfen
+    intro: |
+      Aus Modul 7: Zentraldifferenz, hier spaltenweise – jede Spalte ist die Ableitung nach einem Gelenk.
+    code: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12],
+                           [ l1 * c1 + l2 * c12,  l2 * c12]])
+
+      def num_jacobian(f, q, h=1e-6):
+          q = np.asarray(q, dtype=float)
+          cols = []
+          for i in range(len(q)):
+              dq = np.zeros_like(q)
+              dq[i] = h
+              cols.append((f(q + dq) - f(q - dq)) / (2 * h))
+          return np.stack(cols, axis=1)
+
+      q = np.array([0.4, 1.1])
+      err = np.abs(jacobian(q) - num_jacobian(fk, q)).max()
+      print("max. Abweichung:", f"{err:.1e}")
+    subgoals:
+      - lines: [13, 15]
+        label: Für jedes Gelenk eine Spalte
+      - lines: [16, 18]
+        label: Nur Gelenk i wackeln lassen
+      - lines: 19
+        label: Spalten nebeneinander stellen
+      - lines: [21, 23]
+        label: Analytisch gegen numerisch vergleichen
+    after: |
+      Abweichung im Bereich $10^{-10}$: Die analytische Formel stimmt. `np.stack(cols, axis=1)` stellt die Spalten **nebeneinander** – mit `axis=0` bekämst du $J^T$.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `jacobian(q, l1=1.0, l2=1.0)`, die die 2×2-Jacobi-Matrix als NumPy-Array liefert. Die Tests vergleichen mit der numerischen Ableitung der FK.
+    starter: |
+      import numpy as np
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          # 2x2-Array zurückgeben
+          pass
+    solution: |
+      import numpy as np
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12],
+                           [l1 * c1 + l2 * c12, l2 * c12]])
+    tests:
+      - name: Form 2×2
+        code: |
+          import numpy as np
+          J = np.asarray(jacobian([0.1, 0.2]))
+          assert J.shape == (2, 2), f"Erwartet Form (2, 2), bekommen {J.shape}"
+      - name: Gestreckter Arm
+        code: |
+          J = jacobian([0.0, 0.0])
+          assert close(J, [[0.0, 0.0], [2.0, 1.0]]), f"J([0, 0]) sollte [[0, 0], [2, 1]] sein, ist {J.tolist()}"
+      - name: Vergleich mit numerischer Ableitung
+        code: |
+          import numpy as np
+          def _fk(q, l1, l2):
+              return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+          rng = np.random.default_rng(4)
+          h = 1e-6
+          for _ in range(6):
+              q = rng.uniform(-np.pi, np.pi, 2)
+              l1, l2 = rng.uniform(0.4, 1.6, 2)
+              Jn = np.stack([(_fk(q + h * e, l1, l2) - _fk(q - h * e, l1, l2)) / (2 * h) for e in np.eye(2)], axis=1)
+              J = np.asarray(jacobian(q, l1, l2))
+              assert close(J, Jn, tol=1e-6), f"Bei q={np.round(q, 2)}, l1={l1:.2f}, l2={l2:.2f}: erwartet {np.round(Jn, 3).tolist()}, bekommen {np.round(J, 3).tolist()}"
+    mutants:
+      - |
+        import numpy as np
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s2, c2 = np.sin(q[1]), np.cos(q[1])
+            return np.array([[-l1 * s1 - l2 * s2, -l2 * s2], [l1 * c1 + l2 * c2, l2 * c2]])
+      - |
+        import numpy as np
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, l1 * c1 + l2 * c12], [-l2 * s12, l2 * c12]])
+      - |
+        import numpy as np
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[l1 * s1 + l2 * s12, l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+      - |
+        import numpy as np
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, -l1 * s12], [l1 * c1 + l2 * c12, l1 * c12]])
+    hints:
+      - "Teilziel: Jacobi-Matrix als Funktion – jede Spalte ist die Ableitung der FK nach einem Gelenk."
+      - "Leite $x = l_1 c_1 + l_2 c_{12}$ und $y = l_1 s_1 + l_2 s_{12}$ nach $q_1$ (Spalte 1) und $q_2$ (Spalte 2) ab. Zeilen = x, y."
+      - "Erste Zeile: `[-l1 * s1 - l2 * s12, -l2 * s12]`"
+      - "Zweite Zeile: `[l1 * c1 + l2 * c12, l2 * c12]`, beides in `np.array([...])`."
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die numerische Jacobi-Matrix (Zentraldifferenz), sodass sie für jede Funktion `f` funktioniert.
+    code: |
+      import numpy as np
+
+      def num_jacobian(f, q, h=1e-6):
+          q = np.asarray(q, dtype=float)
+          cols = []
+          for i in range(len(q)):
+              dq = np.zeros_like(q)
+              dq[i] = ___
+              cols.append(___)
+          return np.stack(cols, axis=1)
+    blanks:
+      - answer: "h"
+        options: ["h", "1.0", "q[i] + h"]
+      - answer: "(f(q + dq) - f(q - dq)) / (2 * h)"
+        options: ["(f(q + dq) - f(q - dq)) / (2 * h)", "(f(q + dq) - f(q - dq)) / h", "f(q + dq) - f(q)"]
+    tests:
+      - name: Lineare Funktion
+        code: |
+          import numpy as np
+          A = np.array([[1.0, 2.0], [3.0, -1.0]])
+          J = num_jacobian(lambda q: A @ q, [0.3, -0.2])
+          assert close(J, A, tol=1e-6), f"Für f(q) = A q muss J = A sein, bekommen {np.round(J, 4).tolist()}"
+      - name: Nichtlineare Funktion
+        code: |
+          import numpy as np
+          J = num_jacobian(lambda q: np.array([np.sin(q[0]) * q[1], q[0] ** 2]), [0.5, 2.0])
+          ref = np.array([[2.0 * np.cos(0.5), np.sin(0.5)], [1.0, 0.0]])
+          assert close(J, ref, tol=1e-5), f"Erwartet {np.round(ref, 4).tolist()}, bekommen {np.round(J, 4).tolist()}"
+  - type: quiz
+    question: |
+      Gestreckter Arm $q = (0, 0)$, $l_1 = l_2 = 1$, also $J = \begin{pmatrix}0&0\\2&1\end{pmatrix}$. Wohin bewegt sich die Spitze ungefähr bei $\Delta q = (0.01, 0)$?
+    options:
+      - text: Um $(0, 0.02)$ – senkrecht nach oben
+        correct: true
+        why: $J\,\Delta q = (0 \cdot 0.01,\; 2 \cdot 0.01)$.
+      - text: Um $(0.02, 0)$ – nach außen
+        correct: false
+        why: Gestreckt kann die Spitze sich (in erster Ordnung) gar nicht nach außen bewegen – die erste Zeile von $J$ ist null.
+      - text: Um $(0, 0.01)$
+        correct: false
+        why: Gelenk 1 bewegt die Spitze im Abstand 2 – Hebelarm $l_1 + l_2$.
+cards:
+  - id: m08-c-jacobi-spalte
+    concept: jacobi-matrix
+    variants:
+      - type: quiz
+        question: Was bedeutet die **zweite Spalte** von $J(q)$?
+        options:
+          - text: Die Geschwindigkeit der Spitze, wenn nur Gelenk 2 mit 1 rad/s dreht
+            correct: true
+            why: $J e_2$ mit $e_2 = (0, 1)$.
+          - text: Wie sich die y-Koordinate mit beiden Gelenken ändert
+            correct: false
+            why: Das ist die zweite **Zeile**.
+          - text: Die Position des Ellbogens
+            correct: false
+            why: J enthält Ableitungen, keine Positionen.
+      - type: quiz
+        question: Was bedeutet die **erste Zeile** von $J(q)$?
+        options:
+          - text: Wie stark sich x ändert, wenn Gelenk 1 bzw. Gelenk 2 dreht
+            correct: true
+            why: Zeile 1 = $(\partial x/\partial q_1, \partial x/\partial q_2)$.
+          - text: Die Geschwindigkeit der Spitze, wenn nur Gelenk 1 dreht
+            correct: false
+            why: Das ist die erste **Spalte**.
+          - text: Die Länge des ersten Glieds
+            correct: false
+            why: Die Längen stecken in den Einträgen, sind aber keine Zeile.
+  - id: m08-c-jacobi-dp
+    concept: jacobi-matrix
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          J = np.array([[-1.0, -1.0], [1.0, 0.0]])
+          dq = np.array([0.0, 0.1])
+          print(J @ dq)
+        options: ["[-0.1  0. ]", "[-0.1  0.1]", "[ 0.  -0.1]", "[0.1 0. ]"]
+        answer: "[-0.1  0. ]"
+        explanation: Nur Gelenk 2 bewegt sich, also zählt nur Spalte 2, mal 0.1.
+      - type: predict
+        code: |
+          import numpy as np
+          J = np.array([[0.0, 0.0], [2.0, 1.0]])
+          dq = np.array([0.1, -0.2])
+          print(J @ dq)
+        options: ["[0. 0.]", "[0.  0.4]", "[0.2 0. ]", "[ 0.  -0.1]"]
+        answer: "[0. 0.]"
+        explanation: $2 \cdot 0.1 + 1 \cdot (-0.2) = 0$ – diese Gelenkbewegung bewegt die Spitze in erster Ordnung gar nicht.

@@ -1,0 +1,319 @@
+id: m03-type-hints
+title: Typhinweise lesen und schreiben
+minutes: 8
+goals:
+  - Typannotationen an Parametern, Rückgaben und Variablen lesen
+  - "Eigene Funktionen mit `float`, `list[float]`, `dict[str, float]`, `tuple[...]` und `X | None` annotieren"
+  - Wissen, dass Python Typhinweise zur Laufzeit nicht prüft
+concepts: [m03-type-hints]
+steps:
+  - type: text
+    body: |
+      ## Typen dazuschreiben
+
+      In Dataclasses hast du schon `angle: float` geschrieben. Solche **Typhinweise** (type hints) gehen auch bei Funktionen:
+
+      ```python
+      def clamp(value: float, low: float, high: float) -> float:
+      ```
+
+      Hinter jedem Parameter steht nach `:` der erwartete Typ, hinter `->` der Typ des Rückgabewerts. Sie machen den Code selbsterklärend: Wer die Zeile liest, weiß, was hineingeht und was herauskommt – ohne den Körper zu lesen.
+  - type: example
+    code: |
+      def clamp(value: float, low: float, high: float) -> float:
+          return max(low, min(value, high))
+
+      def mean(values: list[float]) -> float:
+          return sum(values) / len(values)
+
+      limits: dict[str, float] = {"schulter": 1.5}
+
+      print(clamp(2.0, -1.0, 1.0))
+      print(mean([1.0, 2.0, 3.0]))
+      print(limits["schulter"])
+    subgoals:
+      - lines: [1, 2]
+        label: Parameter und Rückgabe annotieren
+      - lines: [4, 5]
+        label: Listentyp mit Elementtyp angeben
+      - lines: 7
+        label: Variable annotieren
+      - lines: [9, 11]
+        label: Ganz normal aufrufen
+    after: |
+      `list[float]` heißt „Liste von Kommazahlen“, `dict[str, float]` „Dict mit String-Schlüsseln und Kommazahl-Werten“. Am Verhalten ändert sich nichts.
+  - type: predict
+    code: |
+      def double(x: int) -> int:
+          return x * 2
+
+      print(double("ab"))
+      print(double(1.5))
+    options:
+      - |
+        abab
+        3.0
+      - |
+        4
+        3
+      - |
+        TypeError
+        3.0
+      - |
+        abab
+        3
+    answer: |
+      abab
+      3.0
+    explanation: |
+      Python **prüft Typhinweise beim Ausführen nicht**. `"ab" * 2` ist `"abab"`, `1.5 * 2` ist `3.0` – obwohl `int` dransteht.
+  - type: explain
+    question: |
+      Wozu schreibt man Typhinweise, wenn Python sie gar nicht prüft?
+    options:
+      - text: Als Dokumentation, und damit Editoren und Prüfwerkzeuge (z. B. `mypy`) Fehler finden, **bevor** das Programm läuft.
+        correct: true
+        why: Ein Prüfwerkzeug meldet z. B. `double("ab")` als Typfehler. Der Editor kann außerdem passende Vorschläge machen.
+      - text: Damit das Programm schneller läuft.
+        correct: false
+        why: Normales Python wird durch Annotationen weder schneller noch langsamer.
+      - text: Weil Python ohne Typhinweise in neuen Versionen nicht mehr startet.
+        correct: false
+        why: Typhinweise sind und bleiben freiwillig.
+  - type: text
+    body: |
+      ## Die wichtigsten Schreibweisen
+
+      | Hinweis | Bedeutung |
+      |---|---|
+      | `int`, `float`, `str`, `bool` | einfache Typen |
+      | `list[float]` | Liste von Kommazahlen |
+      | `tuple[float, float]` | Tupel mit genau zwei Kommazahlen, z. B. `(x, y)` |
+      | `dict[str, float]` | Dict: Schlüssel `str`, Werte `float` |
+      | `int \| None` | `int` **oder** `None` (z. B. „nicht gefunden“) |
+      | `-> None` | Funktion gibt nichts zurück |
+      | `Joint` | ein Objekt deiner Klasse `Joint` |
+  - type: quiz
+    question: |
+      Was sagt diese Zeile über die Funktion aus?
+    code: |
+      def find(name: str, joints: list[str]) -> int | None:
+    options:
+      - text: Sie bekommt einen String und eine Liste von Strings und liefert eine ganze Zahl oder `None`.
+        correct: true
+        why: "`int | None` heißt: Rückgabe ist ein `int` oder – etwa wenn nichts gefunden wurde – `None`."
+      - text: Sie liefert immer eine ganze Zahl; `None` ist nur ein Kommentar.
+        correct: false
+        why: "`| None` gehört zum Rückgabetyp und kündigt an, dass auch `None` vorkommen kann."
+      - text: Sie bekommt zwei Strings.
+        correct: false
+        why: "`joints` ist als `list[str]` annotiert – eine Liste von Strings."
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze passende Typhinweise: `polar` liefert ein Paar $(x, y)$, `mean` bekommt eine Liste von Kommazahlen.
+    code: |
+      import math
+
+      def polar(r: float, phi: float) -> ___:
+          return r * math.cos(phi), r * math.sin(phi)
+
+      def mean(values: ___) -> float:
+          return sum(values) / len(values)
+    blanks:
+      - answer: "tuple[float, float]"
+        options: ["tuple[float, float]", "float", "list[float]", "None"]
+      - answer: "list[float]"
+        options: ["list[float]", "float", "dict[str, float]"]
+    tests:
+      - name: Rückgabetyp polar
+        code: |
+          assert polar.__annotations__["return"] == tuple[float, float], "polar liefert ein Paar aus zwei Kommazahlen"
+      - name: Parametertyp mean
+        code: |
+          assert mean.__annotations__["values"] == list[float], "mean bekommt eine Liste von Kommazahlen"
+  - type: parsons
+    fading: true
+    prompt: |
+      Ordne die annotierte Funktion, die zählt, wie viele Werte über einer Grenze liegen. Ausgabe: `2`.
+    lines:
+      - "def count_over(values: list[float], limit: float) -> int:"
+      - "    n = 0"
+      - "    for v in values:"
+      - "        if v > limit:"
+      - "            n = n + 1"
+      - "    return n"
+      - "print(count_over([0.2, 1.5, 3.0], 1.0))"
+    distractors:
+      - "def count_over(values: list[float], limit: float) -> int"
+    expect_output: "2"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ergänze Typhinweise: `values` ist eine Liste von Kommazahlen, `factor` eine Kommazahl, und zurück kommt eine Liste von Kommazahlen. Das Verhalten bleibt gleich.
+    starter: |
+      def scale(values, factor=1.0):
+          return [v * factor for v in values]
+    solution: |
+      def scale(values: list[float], factor: float = 1.0) -> list[float]:
+          return [v * factor for v in values]
+    tests:
+      - name: Verhalten
+        code: |
+          assert scale([1.0, 2.0], 0.5) == [0.5, 1.0], f"scale([1.0, 2.0], 0.5) sollte [0.5, 1.0] sein, liefert {scale([1.0, 2.0], 0.5)}"
+          assert scale([3.0]) == [3.0], "Standardwert factor=1.0 muss erhalten bleiben"
+      - name: Typhinweise
+        code: |
+          a = scale.__annotations__
+          assert a.get("values") == list[float], f"values sollte list[float] sein, ist {a.get('values')}"
+          assert a.get("factor") == float, f"factor sollte float sein, ist {a.get('factor')}"
+          assert a.get("return") == list[float], f"Rückgabe sollte list[float] sein, ist {a.get('return')}"
+    mutants:
+      - |
+        def scale(values: list[float], factor: float = 1.0):
+            return [v * factor for v in values]
+      - |
+        def scale(values: list, factor: float = 1.0) -> list:
+            return [v * factor for v in values]
+      - |
+        def scale(values: list[float], factor: int = 1) -> list[float]:
+            return [v * factor for v in values]
+      - |
+        def scale(values: list[float], factor: float) -> list[float]:
+            return [v * factor for v in values]
+    hints:
+      - "Teilziel: jeden Parameter und die Rückgabe annotieren."
+      - "Bei Parametern mit Standardwert kommt der Typ vor das `=`: `factor: float = 1.0`."
+      - "`def scale(values: list[float], factor: float = 1.0) -> list[float]:`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `find_joint(names: list[str], name: str) -> int | None`. Sie liefert den Index des **ersten** Vorkommens von `name` in `names` oder `None`, wenn der Name fehlt. Schreibe die Typhinweise genau so dazu.
+    starter: |
+      def find_joint(names, name):
+          # dein Code
+          pass
+    solution: |
+      def find_joint(names: list[str], name: str) -> int | None:
+          for i, n in enumerate(names):
+              if n == name:
+                  return i
+          return None
+    tests:
+      - name: Gefunden
+        code: |
+          assert find_joint(["basis", "schulter", "ellbogen"], "schulter") == 1, "schulter steht an Index 1"
+          assert find_joint(["basis"], "basis") == 0, "basis steht an Index 0"
+      - name: Erstes Vorkommen
+        code: |
+          assert find_joint(["a", "b", "a"], "a") == 0, f"Erwartet 0 (erstes Vorkommen), bekommen {find_joint(['a', 'b', 'a'], 'a')}"
+      - name: Nicht gefunden
+        code: |
+          r = find_joint(["a", "b"], "c")
+          assert r is None, f"Fehlender Name sollte None liefern, bekommen {r!r}"
+          r = find_joint([], "a")
+          assert r is None, f"Leere Liste sollte None liefern, bekommen {r!r}"
+      - name: Typhinweise
+        code: |
+          a = find_joint.__annotations__
+          assert a.get("names") == list[str], f"names sollte list[str] sein, ist {a.get('names')}"
+          assert a.get("name") == str, f"name sollte str sein, ist {a.get('name')}"
+          assert a.get("return") == (int | None), f"Rückgabe sollte int | None sein, ist {a.get('return')}"
+    mutants:
+      - |
+        def find_joint(names: list[str], name: str) -> int | None:
+            for i, n in enumerate(names):
+                if n == name:
+                    return i
+            return -1
+      - |
+        def find_joint(names: list[str], name: str) -> int | None:
+            result = None
+            for i, n in enumerate(names):
+                if n == name:
+                    result = i
+            return result
+      - |
+        def find_joint(names, name):
+            for i, n in enumerate(names):
+                if n == name:
+                    return i
+            return None
+      - |
+        def find_joint(names: list[str], name: str) -> int | None:
+            for i, n in enumerate(names):
+                if n == name:
+                    return i
+                return None
+    hints:
+      - "Teilziel: mit Index über die Namen laufen, beim ersten Treffer sofort zurückgeben; nach der Schleife `None` zurückgeben."
+      - "`enumerate(names)` liefert Paare (Index, Name). `return` beendet die Funktion beim ersten Treffer."
+      - |
+        ```python
+        for i, n in enumerate(names):
+            if n == name:
+                return i
+        return None
+        ```
+      - "Die Kopfzeile lautet `def find_joint(names: list[str], name: str) -> int | None:`"
+  - type: quiz
+    question: Was bedeutet `-> None` an einer Funktion?
+    options:
+      - text: Sie gibt keinen Wert zurück (also `None`), z. B. weil sie nur ein Objekt verändert.
+        correct: true
+        why: Typisch für Methoden wie `move_to` oder `reset`, die Attribute ändern.
+      - text: Sie darf keine Parameter haben.
+        correct: false
+        why: "`->` beschreibt nur die Rückgabe, nicht die Parameter."
+      - text: Sie wird nie ausgeführt.
+        correct: false
+        why: Sie läuft ganz normal, liefert aber kein Ergebnis zurück.
+cards:
+  - id: m03-c-hints-laufzeit
+    concept: m03-type-hints
+    variants:
+      - type: predict
+        code: |
+          def add(a: int, b: int) -> int:
+              return a + b
+
+          print(add("1", "2"))
+        options: ["12", "3", "TypeError"]
+        answer: "12"
+        explanation: Typhinweise werden nicht geprüft – `"1" + "2"` verkettet Strings.
+      - type: predict
+        code: |
+          def half(x: int) -> int:
+              return x / 2
+
+          print(half(3))
+        options: ["1.5", "1", "2"]
+        answer: "1.5"
+        explanation: Trotz `-> int` liefert `/` eine Kommazahl. Ein Prüfwerkzeug würde das melden, Python selbst nicht.
+  - id: m03-c-hints-lesen
+    concept: m03-type-hints
+    variants:
+      - type: quiz
+        question: Welcher Rückgabetyp passt zu `return x, y` mit zwei Kommazahlen?
+        options:
+          - text: "`-> tuple[float, float]`"
+            correct: true
+            why: "`return x, y` liefert ein Tupel mit zwei Elementen."
+          - text: "`-> list[float]`"
+            correct: false
+            why: Es ist ein Tupel, keine Liste.
+          - text: "`-> float`"
+            correct: false
+            why: Es werden zwei Werte zurückgegeben, nicht einer.
+      - type: quiz
+        question: "Was passt zu `strom = {\"m1\": 0.8, \"m2\": 1.4}`?"
+        options:
+          - text: "`dict[str, float]`"
+            correct: true
+            why: Schlüssel sind Strings, Werte Kommazahlen.
+          - text: "`dict[float, str]`"
+            correct: false
+            why: Zuerst kommt der Typ der Schlüssel, dann der der Werte.
+          - text: "`list[float]`"
+            correct: false
+            why: Es ist ein Dict, keine Liste.

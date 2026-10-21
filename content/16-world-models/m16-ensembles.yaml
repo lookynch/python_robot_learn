@@ -1,0 +1,616 @@
+id: m16-ensembles
+title: Ensembles – wissen, was man nicht weiß
+minutes: 10
+goals:
+  - Aleatorische und epistemische Unsicherheit unterscheiden
+  - Ein Ensemble aus Bootstrap-Stichproben trainieren
+  - Zeigen, dass die Ensemble-Streuung außerhalb der Trainingsdaten wächst
+concepts: [wm-ensemble]
+steps:
+  - type: text
+    body: |
+      ## Zwei Arten von Unsicherheit
+
+      - **Aleatorisch**: echtes Rauschen im System (z. B. Sensorrauschen). Mehr Daten helfen nicht.
+      - **Epistemisch**: Unwissen, weil an dieser Stelle **keine Daten** lagen. Mehr Daten helfen.
+
+      Ein einzelnes Netz sagt immer *irgendetwas* voraus – auch dort, wo es nichts weiß. Trick: Trainiere $K$ Netze (ein **Ensemble**) mit verschiedener Initialisierung und je einer **Bootstrap-Stichprobe** (zufällig mit Zurücklegen gezogene Daten). Wo Daten liegen, stimmen sie überein; wo nicht, raten sie verschieden. Ihre **Streuung** ist ein Maß für epistemische Unsicherheit.
+
+      PETS (Chua et al. 2018) kombiniert so ein Ensemble mit CEM-Planung. Dort gibt jedes Netz zusätzlich eine Varianz aus (für aleatorische Unsicherheit) – das lassen wir weg.
+  - type: example
+    heavy: true
+    intro: |
+      Fünf Modelle, trainiert auf Daten mit Startwinkeln in $[-1, 1]$ rad. Dann fahren wir $q_1$ von $-\pi$ bis $\pi$ (bei $q_2 = 0$, Aktion $a = (1, 0)$ rad/s) und vergleichen die vorhergesagte Änderung $\Delta y$ der Spitze.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng, q_range=np.pi):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-q_range, q_range, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=240, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(20, 20, rng, q_range=1.0)
+      models = []
+      for k in range(5):
+          idx = rng.integers(0, len(S), len(S))
+          models.append(fit_model(S[idx], A[idx], S2[idx], rng))
+
+      q1 = np.linspace(-np.pi, np.pi, 60)
+      s = np.stack([q1, 0 * q1, 2 * np.cos(q1), 2 * np.sin(q1)], axis=1)
+      a = np.tile([1.0, 0.0], (60, 1))
+      P = np.array([predict(m, s, a) for m in models])
+      dy = P[:, :, 3] - s[:, 3]
+      fig = lab.Figure(title="Vorhergesagtes Δy der Spitze", xlabel="q1 in rad", ylabel="Δy in m")
+      for k in range(5):
+          fig.line(dy[k], x=q1, label=f"Modell {k + 1}")
+      fig.line(2 * (np.sin(q1 + 0.05) - np.sin(q1)), x=q1, label="wahr", color="fg")
+      fig.show()
+      lab.plot(dy.std(axis=0), x=q1, title="Streuung des Ensembles", xlabel="q1 in rad", ylabel="Std von Δy in m")
+      print("Trainingsdaten q1 von", round(S[:, 0].min(), 2), "bis", round(S[:, 0].max(), 2), "rad")
+    subgoals:
+      - lines: [57, 58]
+        label: Daten nur aus einer Region sammeln
+      - lines: [59, 62]
+        label: K Modelle auf Bootstrap-Stichproben trainieren
+      - lines: [64, 68]
+        label: Alle Modelle auf einem Schnitt durch den Zustandsraum auswerten
+      - lines: [69, 75]
+        label: Vorhersagen und Streuung zeigen
+    after: |
+      Im Bereich der Trainingsdaten (etwa $-1$ bis $1{,}5$ rad, siehe Ausgabe) liegen alle fünf Kurven auf der wahren Kurve. Außerhalb fächern sie auf – die Streuung wächst um ein Vielfaches. **Genau dort** sollte ein Planer dem Modell nicht trauen.
+  - type: predict
+    intro: |
+      Eine Bootstrap-Stichprobe zieht Indizes **mit Zurücklegen**. Hier ein fester Satz gezogener Indizes:
+    code: |
+      import numpy as np
+      data = np.array([10, 20, 30, 40, 50, 60])
+      idx = np.array([0, 2, 2, 5, 1, 2])
+      print(data[idx], len(set(idx.tolist())))
+    options:
+      - "[10 30 30 60 20 30] 4"
+      - "[10 30 30 60 20 30] 6"
+      - "[10 20 30 40 50 60] 6"
+      - "[10 30 60 20] 4"
+    answer: "[10 30 30 60 20 30] 4"
+    explanation: |
+      Die Stichprobe ist so groß wie der Datensatz, enthält aber Duplikate (30 dreimal) und lässt Punkte weg (40, 50). Bei großen Datensätzen fehlen im Mittel etwa 37 % ($\approx 1/e$) der Punkte – so sieht jedes Modell etwas andere Daten.
+  - type: explain
+    question: |
+      Warum stimmen die Ensemble-Mitglieder bei den Trainingsdaten überein, außerhalb aber nicht?
+    options:
+      - text: Bei den Daten zwingt der Verlust alle Netze zur selben Antwort; außerhalb legt nichts sie fest, also bestimmen zufällige Initialisierung und Stichprobe die Extrapolation.
+        correct: true
+        why: Die Daten „nageln“ die Funktion nur dort fest, wo sie liegen. Dazwischen und daneben ist jedes Netz frei.
+      - text: Weil außerhalb der Daten Messrauschen auftritt.
+        correct: false
+        why: Unser Reacher ist rauschfrei. Die Streuung ist epistemisch, nicht aleatorisch.
+      - text: Weil die Netze außerhalb der Trainingsdaten numerisch instabil werden.
+        correct: false
+        why: tanh-Netze bleiben beschränkt und stabil – sie sind dort nur nicht durch Daten festgelegt.
+  - type: fill
+    fading: true
+    prompt: |
+      `P` hat die Form `(K, n, 4)`: $K$ Modelle, $n$ Zustände. Ergänze die Achsen, sodass Mittelwert und Streuung **über die Modelle** gebildet werden. (Die Modelle sind hier untrainiert – es geht nur um die Formen.)
+    code: |
+      import numpy as np
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def ensemble_predict(models, s, a):
+          P = np.array([predict(m, s, a) for m in models])
+          return P.mean(axis=___), P.std(axis=___)
+
+      models = [{"p": init_mlp(6, 32, 4, np.random.default_rng(i)), "mx": np.zeros(6), "sx": np.ones(6),
+                 "my": np.zeros(4), "sy": np.ones(4)} for i in range(3)]
+      mean, std = ensemble_predict(models, np.zeros((5, 4)), np.ones((5, 2)))
+      print(mean.shape, std.shape)
+    blanks:
+      - answer: "0"
+        options: ["0", "1", "2"]
+      - answer: "0"
+        options: ["0", "1", "2"]
+    expect_output: "(5, 4) (5, 4)"
+    explanation: |
+      Achse 0 zählt die Modelle. Mittelt man über Achse 1, mischt man verschiedene Zustände – das ergibt Form `(3, 4)` und keine Unsicherheit pro Zustand.
+  - type: exercise
+    mode: make
+    heavy: true
+    prompt: |
+      Schreibe `fit_ensemble(S, A, S2, k, rng)`: Trainiere `k` Modelle mit `fit_model`. Jedes bekommt eine eigene Bootstrap-Stichprobe: `idx = rng.integers(0, n, n)` mit `n = len(S)`, dann `S[idx], A[idx], S2[idx]`. Gib die Liste der Modelle zurück.
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng, q_range=np.pi):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-q_range, q_range, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=240, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def ensemble_predict(models, s, a):
+          P = np.array([predict(m, s, a) for m in models])
+          return P.mean(axis=0), P.std(axis=0)
+
+      def fit_ensemble(S, A, S2, k, rng):
+          models = []
+          # dein Code
+          return models
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(20, 20, rng, q_range=1.0)
+      models = fit_ensemble(S, A, S2, 5, rng)
+      print(len(models), "Modelle")
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng, q_range=np.pi):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-q_range, q_range, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=240, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def ensemble_predict(models, s, a):
+          P = np.array([predict(m, s, a) for m in models])
+          return P.mean(axis=0), P.std(axis=0)
+
+      def fit_ensemble(S, A, S2, k, rng):
+          models = []
+          n = len(S)
+          for _ in range(k):
+              idx = rng.integers(0, n, n)
+              models.append(fit_model(S[idx], A[idx], S2[idx], rng))
+          return models
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(20, 20, rng, q_range=1.0)
+      models = fit_ensemble(S, A, S2, 5, rng)
+      print(len(models), "Modelle")
+    tests:
+      - name: Richtige Anzahl Modelle
+        code: |
+          assert isinstance(models, list) and len(models) == 5, f"fit_ensemble(S, A, S2, 5, rng) soll eine Liste mit 5 Modellen liefern, bekommen {type(models).__name__} der Länge {len(models) if hasattr(models, '__len__') else '?'}"
+      - name: Modelle unterscheiden sich
+        code: |
+          r = np.random.default_rng(3)
+          q = r.uniform(-3, 3, (50, 2))
+          s = np.hstack([q, env.fk(q)])
+          a = r.uniform(-2, 2, (50, 2))
+          _, std = ensemble_predict(models, s, a)
+          assert std[:, 2:].mean() > 1e-4, "Alle Modelle sagen dasselbe vorher – bekommt jedes eine eigene Bootstrap-Stichprobe und läuft rng weiter?"
+      - name: Gute Vorhersage im Datenbereich
+        code: |
+          St, At, S2t = collect(10, 20, np.random.default_rng(77), q_range=1.0)
+          mean, _ = ensemble_predict(models, St, At)
+          err = np.mean(np.linalg.norm(mean[:, 2:] - S2t[:, 2:], axis=1))
+          assert err < 0.02, f"Im Bereich der Trainingsdaten sollte der Mittelwert des Ensembles auf unter 2 cm genau sein, Fehler {err:.3f} m"
+      - name: Streuung außerhalb der Daten größer
+        code: |
+          r = np.random.default_rng(4)
+          q_in = r.uniform(-1.0, 1.0, (200, 2))
+          q_out = r.uniform(2.3, 3.1, (200, 2)) * r.choice([-1, 1], (200, 2))
+          a = r.uniform(-2, 2, (200, 2))
+          _, sd_in = ensemble_predict(models, np.hstack([q_in, env.fk(q_in)]), a)
+          _, sd_out = ensemble_predict(models, np.hstack([q_out, env.fk(q_out)]), a)
+          ratio = sd_out[:, 2:].mean() / sd_in[:, 2:].mean()
+          assert ratio > 3, f"Außerhalb der Trainingsdaten sollte die Streuung mindestens 3-mal größer sein, Verhältnis {ratio:.1f}"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng, q_range=np.pi):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-q_range, q_range, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=240, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def ensemble_predict(models, s, a):
+            P = np.array([predict(m, s, a) for m in models])
+            return P.mean(axis=0), P.std(axis=0)
+        def fit_ensemble(S, A, S2, k, rng):
+            models = []
+            for _ in range(k):
+                models.append(fit_model(S, A, S2, np.random.default_rng(0)))
+            return models
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(20, 20, rng, q_range=1.0)
+        models = fit_ensemble(S, A, S2, 5, rng)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng, q_range=np.pi):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-q_range, q_range, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=240, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def ensemble_predict(models, s, a):
+            P = np.array([predict(m, s, a) for m in models])
+            return P.mean(axis=0), P.std(axis=0)
+        def fit_ensemble(S, A, S2, k, rng):
+            models = []
+            n = len(S)
+            for _ in range(k - 1):
+                idx = rng.integers(0, n, n)
+                models.append(fit_model(S[idx], A[idx], S2[idx], rng))
+            return models
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(20, 20, rng, q_range=1.0)
+        models = fit_ensemble(S, A, S2, 5, rng)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng, q_range=np.pi):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-q_range, q_range, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=240, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def ensemble_predict(models, s, a):
+            P = np.array([predict(m, s, a) for m in models])
+            return P.mean(axis=0), P.std(axis=0)
+        def fit_ensemble(S, A, S2, k, rng):
+            models = []
+            n = len(S)
+            for _ in range(k):
+                idx = rng.integers(0, n, n)
+                models.append(fit_model(S[idx], A, S2[idx], rng))
+            return models
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(20, 20, rng, q_range=1.0)
+        models = fit_ensemble(S, A, S2, 5, rng)
+    hints:
+      - "Teilziel: K-mal eine Bootstrap-Stichprobe ziehen und darauf ein Modell trainieren."
+      - Dieselben Indizes `idx` müssen für `S`, `A` **und** `S2` benutzt werden, sonst passen die Tripel nicht mehr zusammen. Gib allen Modellen dasselbe, weiterlaufende `rng`.
+      - |
+        ```python
+        n = len(S)
+        for _ in range(k):
+            idx = rng.integers(0, n, n)
+            ...
+        ```
+      - "`models.append(fit_model(S[idx], A[idx], S2[idx], rng))`"
+  - type: quiz
+    question: |
+      Wie nutzt PETS (Chua et al. 2018) das Ensemble beim Planen mit CEM?
+    options:
+      - text: Jede Aktionsfolge wird mit mehreren Partikeln durch zufällig gewählte Ensemble-Mitglieder gerollt; die Kosten werden über die Partikel gemittelt.
+        correct: true
+        why: Das heißt Trajectory Sampling. Aktionsfolgen, die nur in einem Teil der Modelle gut aussehen, bekommen schlechtere mittlere Kosten.
+      - text: Es nimmt für jede Aktionsfolge das Modell mit den niedrigsten Kosten.
+        correct: false
+        why: Das wäre maximal optimistisch und lädt zur Modellausnutzung ein.
+      - text: Es benutzt das Ensemble nur beim Training, geplant wird mit einem einzigen Netz.
+        correct: false
+        why: Gerade beim Planen ist die Unsicherheit wichtig.
+  - type: quiz
+    question: |
+      Welche Unsicherheit schrumpft, wenn du in einer Region genug Daten sammelst?
+    options:
+      - text: Die epistemische – die Ensemble-Mitglieder werden dort übereinstimmen.
+        correct: true
+        why: Epistemische Unsicherheit ist Unwissen und nimmt mit Daten ab.
+      - text: Die aleatorische.
+        correct: false
+        why: Echtes Rauschen bleibt, egal wie viele Daten man hat.
+      - text: Beide bleiben gleich.
+        correct: false
+        why: Mehr Daten verringern sehr wohl die epistemische Unsicherheit – das siehst du in der Lektion zur Lernschleife.
+cards:
+  - id: m16-c-epistemisch
+    concept: wm-ensemble
+    variants:
+      - type: quiz
+        question: Ein Ensemble ist sich bei $q_1 = 2{,}8$ rad sehr uneinig, bei $q_1 = 0$ einig. Was folgt daraus?
+        options:
+          - text: Bei $q_1 = 2{,}8$ rad fehlen vermutlich Trainingsdaten – dort sollte man dem Modell nicht trauen.
+            correct: true
+            why: Große Streuung = hohe epistemische Unsicherheit.
+          - text: Bei $q_1 = 2{,}8$ rad ist das System verrauscht.
+            correct: false
+            why: Das Ensemble misst vor allem fehlendes Wissen, nicht Rauschen.
+          - text: Das Ensemble ist falsch trainiert.
+            correct: false
+            why: Genau dieses Verhalten ist gewünscht.
+      - type: quiz
+        question: Warum ist ein einzelnes Netz als Unsicherheitsmaß ungeeignet?
+        options:
+          - text: Es gibt überall eine Zahl aus – auch dort, wo es nichts weiß – ohne zu verraten, wie verlässlich sie ist.
+            correct: true
+            why: Erst der Vergleich mehrerer Netze zeigt, wo die Daten die Antwort nicht festlegen.
+          - text: Ein einzelnes Netz kann nicht extrapolieren.
+            correct: false
+            why: Es extrapoliert – nur meist falsch und ohne Warnung.
+          - text: Ein einzelnes Netz ist immer überangepasst.
+            correct: false
+            why: Mit genug Daten und Validierung nicht – das Problem ist fehlende Selbsteinschätzung.
+  - id: m16-c-bootstrap
+    concept: wm-ensemble
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          idx = np.array([3, 3, 0, 1])
+          print(len(idx), len(set(idx.tolist())))
+        options: ["4 3", "4 4", "3 3", "4 2"]
+        answer: "4 3"
+        explanation: Bootstrap-Stichprobe = gleiche Größe, aber mit Zurücklegen – Index 3 kommt doppelt vor, 2 fehlt.
+      - type: quiz
+        question: Was passiert, wenn alle Ensemble-Mitglieder mit **demselben** Seed und denselben Daten trainiert werden?
+        options:
+          - text: Sie werden identisch – die Streuung ist überall 0 und zeigt keine Unsicherheit mehr an.
+            correct: true
+            why: Vielfalt durch Initialisierung und Stichprobe ist die Grundlage der Methode.
+          - text: Die Streuung wird größer, weil mehr Modelle trainiert werden.
+            correct: false
+            why: Identische Modelle streuen nicht.
+          - text: Nichts – die Reihenfolge der Daten unterscheidet sie ohnehin.
+            correct: false
+            why: Wir trainieren mit dem ganzen Datensatz pro Schritt (full batch); gleiche Daten und Initialisierung ergeben exakt dasselbe Netz.

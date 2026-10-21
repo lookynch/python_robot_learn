@@ -1,0 +1,330 @@
+id: m02-module
+title: Module – math und random
+minutes: 10
+goals:
+  - Module mit `import` laden und ihre Funktionen aufrufen
+  - "`math.sin`, `math.cos`, `math.atan2`, `math.sqrt`, `math.pi` in Radiant anwenden"
+  - Zufallszahlen mit `random` erzeugen und mit `random.seed` reproduzierbar machen
+concepts: [m02-import, m02-zufall-seed]
+steps:
+  - type: text
+    body: |
+      ## Werkzeugkästen laden
+
+      Ein **Modul** (module) ist eine Sammlung fertiger Funktionen und Konstanten. Mit `import` lädst du es; danach erreichst du seinen Inhalt mit einem Punkt:
+
+      ```python
+      import math
+      math.sqrt(2)     # Wurzel
+      math.pi          # 3.14159…
+      ```
+
+      Alternativ holst du einzelne Namen direkt: `from math import pi, sqrt`.
+
+      **Wichtig:** `math.sin`, `math.cos` & Co. erwarten Winkel in **Radiant**. Umrechnen mit `math.radians(grad)` und `math.degrees(rad)`.
+  - type: example
+    code: |
+      import math
+
+      print(math.pi)
+      print(math.sqrt(16))
+      print(math.cos(0), math.sin(math.pi / 2))
+      print(math.degrees(math.pi))
+      print(math.radians(180))
+    subgoals:
+      - lines: 1
+        label: Modul laden
+      - lines: [3, 5]
+        label: Konstanten und Funktionen nutzen
+      - lines: [6, 7]
+        label: Zwischen Grad und Radiant umrechnen
+  - type: predict
+    code: |
+      import math
+      print(f"{math.sin(90):.3f}")
+      print(f"{math.sin(math.radians(90)):.3f}")
+    options:
+      - |
+        0.894
+        1.000
+      - |
+        1.000
+        1.000
+      - |
+        1.000
+        0.894
+      - |
+        0.894
+        0.894
+    answer: |
+      0.894
+      1.000
+    explanation: |
+      `math.sin(90)` rechnet mit 90 **Radiant** (über 14 Umdrehungen) – nicht mit 90°. Erst nach `math.radians(90)` = $\pi/2$ kommt 1 heraus. Dieser Fehler ist bei Roboterarmen sehr häufig.
+  - type: text
+    body: |
+      ## Vom Winkel zum Punkt und zurück
+
+      Ein Glied der Länge $l$, um den Winkel $q$ gedreht, hat seine Spitze bei
+
+      $$ x = l\cos q, \qquad y = l\sin q. $$
+
+      Umgekehrt liefert `math.atan2(y, x)` den Winkel eines Punktes – **in allen vier Quadranten** richtig, Ergebnis in $(-\pi, \pi]$. Achtung: erst `y`, dann `x`.
+
+      Den Abstand zum Ursprung liefert $\sqrt{x^2 + y^2}$, also `math.sqrt(x**2 + y**2)`.
+  - type: example
+    code: |
+      import math
+
+      def spitze(q, l=1.0):
+          x = l * math.cos(q)
+          y = l * math.sin(q)
+          return x, y
+
+      x, y = spitze(math.pi / 2, 0.5)
+      print(f"x={x:.3f} y={y:.3f}")
+      print(f"Winkel: {math.atan2(y, x):.4f} rad")
+      print(f"Länge: {math.sqrt(x**2 + y**2):.2f} m")
+    subgoals:
+      - lines: [3, 6]
+        label: Punkt aus Winkel und Länge berechnen
+      - lines: [8, 9]
+        label: Aufrufen und ausgeben
+      - lines: [10, 11]
+        label: Winkel und Länge zurückrechnen
+    after: |
+      Du hast gerade die **Vorwärtskinematik** eines Arms mit einem Gelenk geschrieben. In Modul 8 kommt ein zweites Glied dazu.
+
+      `x` ist nicht exakt 0, sondern etwa $3 \cdot 10^{-17}$ – Rundungsfehler von Kommazahlen. Mit `:.3f` sieht man das nicht.
+  - type: explain
+    question: |
+      Warum nimmt man `math.atan2(y, x)` statt `math.atan(y / x)`?
+    options:
+      - text: "`atan2` kennt die Vorzeichen von `x` und `y` einzeln und liefert so den richtigen Quadranten; außerdem funktioniert es für `x = 0`."
+        correct: true
+        why: "`y / x` ist für $(1, 1)$ und $(-1, -1)$ gleich – `atan` kann die beiden Punkte nicht unterscheiden, und für `x = 0` gibt es eine Division durch null."
+      - text: "`atan2` rechnet in Grad, `atan` in Radiant."
+        correct: false
+        why: Beide liefern Radiant.
+      - text: "`atan2` ist nur schneller, das Ergebnis ist gleich."
+        correct: false
+        why: Für Punkte mit negativem `x` unterscheiden sich die Ergebnisse um $\pi$.
+  - type: predict
+    code: |
+      import math
+      w1 = math.atan2(1, 1)
+      w2 = math.atan2(1, -1)
+      print(f"{w1:.2f} {w2:.2f}")
+    options: ["0.79 2.36", "0.79 -0.79", "0.79 0.79", "2.36 0.79"]
+    answer: "0.79 2.36"
+    explanation: |
+      $(1, 1)$ liegt bei $\pi/4 \approx 0{,}79$, der Punkt $(-1, 1)$ (x = −1, y = 1) im zweiten Quadranten bei $3\pi/4 \approx 2{,}36$. `math.atan(1 / -1)` hätte fälschlich $-0{,}79$ geliefert.
+  - type: text
+    body: |
+      ## Zufall – aber reproduzierbar
+
+      Das Modul `random` liefert Zufallszahlen:
+
+      | Aufruf | Ergebnis |
+      |---|---|
+      | `random.random()` | Kommazahl in $[0, 1)$ |
+      | `random.uniform(a, b)` | Kommazahl zwischen `a` und `b` |
+      | `random.randint(a, b)` | ganze Zahl von `a` bis **einschließlich** `b` |
+      | `random.choice(liste)` | zufälliges Element |
+
+      Computer-Zufall ist berechnet: Gleicher Startwert, gleiche Folge. `random.seed(0)` setzt diesen Startwert (**Seed**). So kannst du ein Experiment – etwa einen Lernlauf im Reinforcement Learning – exakt wiederholen.
+  - type: predict
+    code: |
+      import random
+      random.seed(42)
+      a = [random.randint(1, 6) for i in range(3)]
+      random.seed(42)
+      b = [random.randint(1, 6) for i in range(3)]
+      print(a == b)
+    options: ["True", "False", "Das hängt vom Zufall ab."]
+    answer: "True"
+    explanation: |
+      Nach demselben Seed entsteht exakt dieselbe Folge. Ohne erneutes `random.seed(42)` wäre `b` (fast sicher) anders.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne den Abstand zwischen zwei Punkten in der Ebene. Erwartet: `5.0`.
+    code: |
+      import ___
+
+      def abstand(p, q):
+          return math.___((p[0] - q[0])**2 + (p[1] - q[1])**2)
+
+      print(abstand((0, 0), (3, 4)))
+    blanks:
+      - answer: math
+        options: [math, random, numpy]
+      - answer: sqrt
+        options: [sqrt, hypot, exp, pow]
+    expect_output: "5.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Für Tests eines Roboterarms brauchst du zufällige, aber **reproduzierbare** Startstellungen. Schreibe `zufalls_pose(n, seed)`, die
+      1. den Zufallsgenerator mit `seed` initialisiert und
+      2. eine Liste von `n` Winkeln zurückgibt, jeder gleichverteilt zwischen $-\pi$ und $\pi$.
+    starter: |
+      import math
+      import random
+
+      def zufalls_pose(n, seed):
+          # dein Code
+          pass
+    solution: |
+      import math
+      import random
+
+      def zufalls_pose(n, seed):
+          random.seed(seed)
+          return [random.uniform(-math.pi, math.pi) for i in range(n)]
+    tests:
+      - name: Länge
+        code: |
+          assert len(zufalls_pose(5, 0)) == 5, "zufalls_pose(5, 0) sollte 5 Winkel liefern"
+          assert zufalls_pose(0, 0) == [], "zufalls_pose(0, 0) sollte eine leere Liste liefern"
+      - name: Wertebereich
+        code: |
+          q = zufalls_pose(50, 1)
+          assert all(-math.pi <= w <= math.pi for w in q), "Alle Winkel müssen zwischen -pi und pi liegen"
+          assert min(q) < -1 and max(q) > 1, f"Die Winkel sollten den ganzen Bereich -pi bis pi abdecken (min {min(q):.2f}, max {max(q):.2f})"
+      - name: Reproduzierbar
+        code: |
+          assert zufalls_pose(4, 7) == zufalls_pose(4, 7), "Gleicher Seed muss dieselbe Liste liefern"
+          assert zufalls_pose(4, 7) != zufalls_pose(4, 8), "Verschiedene Seeds sollten verschiedene Listen liefern"
+      - name: Verschiedene Winkel
+        code: |
+          q = zufalls_pose(3, 2)
+          assert len(set(q)) == 3, f"Die Winkel sollten sich unterscheiden, bekommen {q}"
+    mutants:
+      - |
+        import math
+        import random
+
+        def zufalls_pose(n, seed):
+            return [random.uniform(-math.pi, math.pi) for i in range(n)]
+      - |
+        import math
+        import random
+
+        def zufalls_pose(n, seed):
+            random.seed(seed)
+            return [random.uniform(0, math.pi) for i in range(n)]
+      - |
+        import math
+        import random
+
+        def zufalls_pose(n, seed):
+            q = []
+            for i in range(n):
+                random.seed(seed)
+                q.append(random.uniform(-math.pi, math.pi))
+            return q
+      - |
+        import math
+        import random
+
+        def zufalls_pose(n, seed):
+            random.seed(seed)
+            return [random.random() for i in range(n)]
+    hints:
+      - "Teilziel: erst den Seed setzen, dann `n` Werte ziehen und als Liste zurückgeben."
+      - "`random.seed(seed)` einmal am Anfang; `random.uniform(-math.pi, math.pi)` zieht einen Winkel."
+      - "`return [random.uniform(-math.pi, math.pi) for i in range(n)]`"
+  - type: quiz
+    question: Welche Werte kann `random.randint(1, 6)` liefern?
+    options:
+      - text: 1, 2, 3, 4, 5 und 6
+        correct: true
+        why: Bei `randint` ist die obere Grenze – anders als bei `range` – eingeschlossen.
+      - text: 1, 2, 3, 4 und 5
+        correct: false
+        why: Das wäre das Verhalten von `range(1, 6)`. `randint` schließt die 6 ein.
+      - text: Jede Kommazahl zwischen 1 und 6
+        correct: false
+        why: Dafür gibt es `random.uniform(1, 6)`. `randint` liefert ganze Zahlen.
+cards:
+  - id: m02-c-radiant
+    concept: m02-import
+    variants:
+      - type: predict
+        code: |
+          import math
+          print(f"{math.cos(math.pi):.1f}")
+        options: ["-1.0", "1.0", "0.0"]
+        answer: "-1.0"
+        explanation: $\cos \pi = -1$ – `math.pi` ist bereits in Radiant.
+      - type: predict
+        code: |
+          import math
+          print(f"{math.cos(180):.3f}")
+          print(f"{math.cos(math.radians(180)):.3f}")
+        options:
+          - |
+            -0.598
+            -1.000
+          - |
+            -1.000
+            -1.000
+          - |
+            -1.000
+            -0.598
+        answer: |
+          -0.598
+          -1.000
+        explanation: "`math.cos(180)` rechnet mit 180 rad, nicht 180°."
+      - type: predict
+        code: |
+          import math
+          print(math.degrees(math.pi / 2))
+        options: ["90.0", "1.5707963267948966", "0.0274"]
+        answer: "90.0"
+        explanation: $\pi/2$ rad sind 90°.
+  - id: m02-c-atan2
+    concept: m02-import
+    variants:
+      - type: predict
+        code: |
+          import math
+          print(f"{math.atan2(0, -1):.2f}")
+        options: ["3.14", "0.00", "-3.14"]
+        answer: "3.14"
+        explanation: Der Punkt $(-1, 0)$ liegt bei $\pi$.
+      - type: predict
+        code: |
+          import math
+          print(f"{math.atan2(-1, 0):.2f}")
+        options: ["-1.57", "1.57", "0.00"]
+        answer: "-1.57"
+        explanation: "Der Punkt $(0, -1)$ liegt bei $-\\pi/2$. Reihenfolge der Argumente: erst `y`, dann `x`."
+  - id: m02-c-seed
+    concept: m02-zufall-seed
+    variants:
+      - type: quiz
+        question: Wozu dient `random.seed(0)` am Anfang eines Experiments?
+        options:
+          - text: Damit bei jedem Lauf dieselbe Zufallsfolge entsteht und Ergebnisse reproduzierbar sind.
+            correct: true
+            why: Gleicher Seed → gleiche Folge.
+          - text: Damit die Zufallszahlen „zufälliger“ werden.
+            correct: false
+            why: Der Seed legt die Folge fest; er macht sie nicht besser oder schlechter.
+          - text: Damit nur noch die Zahl 0 gezogen wird.
+            correct: false
+            why: Der Seed ist der Startwert des Generators, nicht der gezogene Wert.
+      - type: predict
+        code: |
+          import random
+          random.seed(3)
+          x = random.random()
+          random.seed(3)
+          y = random.random()
+          z = random.random()
+          print(x == y, x == z)
+        options: ["True False", "True True", "False False"]
+        answer: "True False"
+        explanation: Nach dem zweiten `seed(3)` wiederholt sich die Folge; `z` ist schon die nächste Zahl.

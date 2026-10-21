@@ -1,0 +1,216 @@
+id: m06-checkpoint
+title: "Checkpoint: Simulation"
+kind: checkpoint
+minutes: 15
+goals:
+  - Zustand, Euler-Schritt und Schrittweiten-Effekte sicher anwenden
+  - Eine reine `step`-Funktion für ein mechanisches System schreiben
+concepts: [sim-zustand, sim-schleife, euler-explizit, diskretisierungsfehler, ode-erste-ordnung, energiedrift, semi-implizit-euler, step-funktion, rollout, pendel-ode]
+steps:
+  - type: quiz
+    question: |
+      Ein Wagen fährt auf einer Schiene, oben auf ihm ist ein frei drehbarer Stab gelagert (Cart-Pole). Welcher Zustand ist vollständig?
+    options:
+      - text: "$[x,\\ \\dot x,\\ \\theta,\\ \\dot\\theta]$"
+        correct: true
+        why: Zwei Freiheitsgrade, jeder mit Lage und Geschwindigkeit.
+      - text: "$[x,\\ \\theta]$"
+        correct: false
+        why: Ohne Geschwindigkeiten lässt sich die Beschleunigung nicht berechnen – das System ist 2. Ordnung.
+      - text: "$[x,\\ \\dot x,\\ \\theta,\\ \\dot\\theta,\\ l,\\ m]$"
+        correct: false
+        why: Stablänge und Masse sind Parameter, keine Zustandsgrößen.
+  - type: predict
+    code: |
+      x = 8.0
+      for k in range(2):
+          x = x + 1.0 * (-0.5 * x)
+      print(x)
+    options: ["2.0", "4.0", "0.0", "6.0"]
+    answer: "2.0"
+    explanation: |
+      Euler für $\dot x = -0{,}5x$ mit `dt = 1`: Jeder Schritt multipliziert mit $1 - 0{,}5 = 0{,}5$, also 8 → 4 → 2.
+  - type: fill
+    prompt: |
+      Ein Ball fliegt senkrecht mit Luftwiderstand: $m\dot v = -m g - c v$. Ergänze die rechte Seite, sodass für den Zustand $[y, v] = [3, -4]$ die Ausgabe `-4.0 -8.81` entsteht ($g = 9{,}81$, $c = 0{,}5$, $m = 2$).
+    code: |
+      import numpy as np
+
+      g, c, m = 9.81, 0.5, 2.0
+
+      def f(state):
+          y, v = state
+          a = ___ - c * v / m
+          return np.array([___, a])
+
+      d = f(np.array([3.0, -4.0]))
+      print(round(d[0], 3), round(d[1], 3))
+    blanks:
+      - answer: "-g"
+        options: ["-g", "g", "-m"]
+      - answer: v
+        options: [v, y, a]
+    expect_output: "-4.0 -8.81"
+  - type: predict
+    code: |
+      omega, dt = 3.0, 0.1
+      x, v = 1.0, 0.0
+      E0 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+      x, v = x + dt * v, v - dt * omega**2 * x
+      E1 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+      print(round(E1 / E0, 4))
+    question: Um welchen Faktor ändert dieser **explizite** Euler-Schritt die Energie?
+    options: ["1.09", "1.0", "1.3", "0.91"]
+    answer: "1.09"
+    explanation: |
+      Faktor $1 + \omega^2 dt^2 = 1 + 9 \cdot 0{,}01 = 1{,}09$ – in **jedem** Schritt. Das ist die Energiedrift des expliziten Euler.
+  - type: parsons
+    prompt: |
+      Baue einen Rollout: Starte bei `[0, 1]`, wende die Aktionen `1, 0, -1` mit `dt = 0.5` an und gib Anzahl der Zustände und Endzustand aus: `4 2.0 1.0`.
+    lines:
+      - "import numpy as np"
+      - "def step(s, u, dt):"
+      - "    return np.array([s[0] + dt * s[1], s[1] + dt * u])"
+      - "state = np.array([0.0, 1.0])"
+      - "states = [state]"
+      - "for u in [1.0, 0.0, -1.0]:"
+      - "    state = step(state, u, 0.5)"
+      - "    states.append(state)"
+      - "print(len(states), states[-1][0], states[-1][1])"
+    distractors:
+      - "    state = step(states[0], u, 0.5)"
+      - "states = []"
+    expect_output: "4 2.0 1.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1)` für ein **gedämpftes** Pendel mit Motor (Konvention $\theta = 0$ oben):
+
+      $$\ddot\theta = \frac{g}{l}\sin\theta - b\,\dot\theta + \frac{u}{m l^2}$$
+
+      Semi-impliziter Euler, `state = [theta, omega]` darf nicht verändert werden, Rückgabe als neues Array.
+    starter: |
+      import numpy as np
+
+      def step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1):
+          theta, omega = state
+          # dein Code
+          return np.array([theta, omega])
+    solution: |
+      import numpy as np
+
+      def step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1):
+          theta, omega = state
+          alpha = g / l * np.sin(theta) - b * omega + u / (m * l**2)
+          omega = omega + dt * alpha
+          theta = theta + dt * omega
+          return np.array([theta, omega])
+    tests:
+      - name: Oben kippt es weg
+        code: |
+          s = step(np.array([0.1, 0.0]), 0.0, 0.01)
+          assert s[1] > 0, f"Knapp neben oben (theta = 0.1) muss omega positiv werden, ist {s[1]:.4f}"
+      - name: Dämpfung bremst
+        code: |
+          s = step(np.array([np.pi, 2.0]), 0.0, 0.1, b=0.5)
+          assert close(s[1], 1.9, tol=1e-6), f"Unten mit omega = 2, b = 0.5, dt = 0.1 erwartet omega = 1.9, bekommen {s[1]:.4f}"
+      - name: Vergleich mit Referenz
+        code: |
+          th, om, u, dt, l, m, b = 1.0, -0.5, 0.4, 0.05, 0.5, 2.0, 0.2
+          alpha = 9.81 / l * np.sin(th) - b * om + u / (m * l**2)
+          om2 = om + dt * alpha
+          expected = [th + dt * om2, om2]
+          s = step(np.array([th, om]), u, dt, l=l, m=m, b=b)
+          assert close(s, expected), f"Erwartet {np.round(expected, 4)}, bekommen {np.round(s, 4)}"
+      - name: Eingabe bleibt unverändert
+        code: |
+          s0 = np.array([2.0, 1.0])
+          s1 = step(s0, 1.0, 0.1)
+          assert s0[0] == 2.0 and s0[1] == 1.0 and s1 is not s0, f"step hat den übergebenen Zustand verändert: {s0}"
+    mutants:
+      - |
+        import numpy as np
+
+        def step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1):
+            theta, omega = state
+            alpha = -g / l * np.sin(theta) - b * omega + u / (m * l**2)
+            omega = omega + dt * alpha
+            theta = theta + dt * omega
+            return np.array([theta, omega])
+      - |
+        import numpy as np
+
+        def step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1):
+            theta, omega = state
+            alpha = g / l * np.sin(theta) + b * omega + u / (m * l**2)
+            omega = omega + dt * alpha
+            theta = theta + dt * omega
+            return np.array([theta, omega])
+      - |
+        import numpy as np
+
+        def step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1):
+            theta, omega = state
+            alpha = g / l * np.sin(theta) - b * omega + u / (m * l**2)
+            theta = theta + dt * omega
+            omega = omega + dt * alpha
+            return np.array([theta, omega])
+      - |
+        import numpy as np
+
+        def step(state, u, dt, g=9.81, l=1.0, m=1.0, b=0.1):
+            alpha = g / l * np.sin(state[0]) - b * state[1] + u / (m * l**2)
+            state[1] = state[1] + dt * alpha
+            state[0] = state[0] + dt * state[1]
+            return state
+    hints:
+      - "Teilziel: Physik in step kapseln – `alpha`, dann `omega`, dann `theta`."
+      - Die Dämpfung wirkt **gegen** die Winkelgeschwindigkeit; die Schwerkraft hat ein Plus, weil $\theta = 0$ oben ist.
+      - |
+        ```python
+        alpha = g / l * np.sin(theta) - b * omega + u / (m * l**2)
+        omega = omega + dt * alpha
+        theta = ...
+        ```
+  - type: quiz
+    question: |
+      Eine Euler-Simulation über 3 s hat mit `dt = 0.01` s einen Endfehler von 2 cm. Welche Schrittweite brauchst du ungefähr für 5 mm?
+    options:
+      - text: "`dt = 0.0025` s"
+        correct: true
+        why: Fehler ~ `dt`. Ein Viertel des Fehlers braucht ein Viertel der Schrittweite.
+      - text: "`dt = 0.005` s"
+        correct: false
+        why: Damit halbiert sich der Fehler nur auf etwa 1 cm.
+      - text: "`dt = 0.04` s"
+        correct: false
+        why: Größere Schritte machen den Fehler größer, nicht kleiner.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def step(state, action, dt):
+          state[1] = state[1] + dt * action
+          return state
+
+      s0 = np.array([0.0, 1.0])
+      a = step(s0, 2.0, 0.5)
+      b = step(s0, -2.0, 0.5)
+      print(a[1], b[1])
+    options: ["1.0 1.0", "2.0 0.0", "2.0 1.0", "0.0 0.0"]
+    answer: "1.0 1.0"
+    explanation: |
+      `step` verändert `s0` direkt: Nach dem ersten Aufruf ist `s0[1] = 2.0`, der zweite setzt es auf `1.0`. `a`, `b` und `s0` sind **dasselbe** Array – beide zeigen am Ende `1.0`. Ein Planer würde hier zwei Aktionen vergleichen und völlig falsche Ergebnisse bekommen.
+  - type: quiz
+    question: |
+      Semi-impliziter Euler für eine Feder mit $k = 100$ N/m und $m = 1$ kg. Welche Schrittweite ist noch stabil?
+    options:
+      - text: "`dt = 0.1` s"
+        correct: true
+        why: $\omega = \sqrt{k/m} = 10$ rad/s, stabil für $\omega\, dt < 2$, also $dt < 0{,}2$ s.
+      - text: "`dt = 0.25` s"
+        correct: false
+        why: $\omega\, dt = 2{,}5 > 2$ – die Simulation explodiert.
+      - text: jede Schrittweite, semi-implizit ist immer stabil
+        correct: false
+        why: Auch der semi-implizite Euler hat eine Stabilitätsgrenze; steife Federn brauchen kleine `dt`.

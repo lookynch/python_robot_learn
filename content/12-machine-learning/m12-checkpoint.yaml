@@ -1,0 +1,276 @@
+id: m12-checkpoint
+title: "Checkpoint: Machine Learning"
+kind: checkpoint
+minutes: 15
+goals:
+  - Regression, Klassifikation, MLP-Shapes, Backprop und Training sicher beherrschen
+concepts: [ml-lineare-regression, ml-mse-gradient, ml-overfitting, ml-logreg-gradient, ml-kreuzentropie, ml-dense-layer, ml-backprop, ml-minibatch, ml-normalisierung, ml-gradient-check]
+steps:
+  - type: predict
+    code: |
+      import numpy as np
+      X = np.zeros((16, 5))
+      W = np.zeros((5, 3))
+      dY = np.zeros((16, 3))
+      print((X @ W).shape, (X.T @ dY).shape)
+    options:
+      - "(16, 3) (5, 3)"
+      - "(16, 3) (16, 3)"
+      - "(5, 3) (16, 3)"
+      - "(16, 5) (5, 3)"
+    answer: "(16, 3) (5, 3)"
+    explanation: |
+      Vorwärts bleibt die Batch-Achse 16 erhalten. `X.T @ dY` ist der Gradient nach `W` und hat dessen Shape `(5, 3)`.
+  - type: quiz
+    question: |
+      Polynom-Regression mit wachsendem Grad. Grad 2: Training 0,30 / Test 0,32. Grad 12: Training 0,002 / Test 3,1. Welche Aussage stimmt?
+    options:
+      - text: Grad 12 overfittet; ein kleinerer Grad oder Ridge-Regularisierung verallgemeinert besser.
+        correct: true
+        why: Winziger Trainingsfehler bei großem Testfehler ist das Kennzeichen von Overfitting.
+      - text: Grad 12 ist besser, weil der Trainingsfehler kleiner ist.
+        correct: false
+        why: Gemessen wird die Qualität auf neuen Daten – dort ist Grad 12 zehnmal schlechter.
+      - text: Grad 2 overfittet, weil Training und Test fast gleich sind.
+        correct: false
+        why: Nah beieinander liegende Fehler sprechen gegen Overfitting.
+      - text: Man sollte λ verkleinern.
+        correct: false
+        why: Kleineres λ bedeutet weniger Regularisierung – das verstärkt Overfitting.
+  - type: fill
+    prompt: |
+      Logistische Regression: Ergänze Sigmoid und Gradient, sodass mindestens 90 % richtig klassifiziert werden.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(3)
+      X = np.vstack([rng.normal(-1, 0.7, (40, 2)), rng.normal(1, 0.7, (40, 2))])
+      y = np.concatenate([np.zeros(40), np.ones(40)])
+      w, b = np.zeros(2), 0.0
+      for step in range(300):
+          p = 1 / (1 + np.exp(___))
+          w = w - 0.5 * X.T @ (___) / len(y)
+          b = b - 0.5 * np.mean(p - y)
+      acc = np.mean((p > 0.5) == y)
+    blanks:
+      - answer: -(X @ w + b)
+        options: [-(X @ w + b), X @ w + b, -(X.T @ w + b)]
+      - answer: p - y
+        options: [p - y, y - p, p * (1 - p)]
+    tests:
+      - name: Genauigkeit
+        code: |
+          assert acc >= 0.9, f"Genauigkeit sollte mindestens 0.9 sein, ist {acc:.2f}"
+  - type: predict
+    code: |
+      import numpy as np
+      p = np.array([0.9, 0.5])
+      y = np.array([1.0, 0.0])
+      print(round(float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))), 3))
+    options: ["0.399", "0.105", "0.693", "0.798"]
+    answer: "0.399"
+    explanation: |
+      Beiträge: $-\log 0{,}9 \approx 0{,}105$ und $-\log 0{,}5 \approx 0{,}693$. Mittelwert ≈ 0,399. Die Summe wäre 0,798.
+  - type: parsons
+    prompt: |
+      Bringe den Gradientenabstieg für die Gerade $y = 2x + 1$ in Ordnung. Ausgabe: `2.0 1.0`.
+    lines:
+      - "import numpy as np"
+      - "X = np.array([[1.0], [2.0], [3.0]])"
+      - "y = np.array([3.0, 5.0, 7.0])"
+      - "w, b = np.zeros(1), 0.0"
+      - "for step in range(2000):"
+      - "    err = X @ w + b - y"
+      - "    w = w - 0.05 * 2 * X.T @ err / len(y)"
+      - "    b = b - 0.05 * 2 * np.mean(err)"
+      - "print(round(w[0], 2), round(b, 2))"
+    distractors:
+      - "    err = y - (X @ w + b)"
+      - "    w = w - 0.05 * 2 * X @ err / len(y)"
+    expect_output: "2.0 1.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `dense_backward(X, W, dY)` für die Schicht `Y = X @ W + b`. Rückgabe: `(dX, dW, db)` – die Gradienten nach Eingabe, Gewichten und Bias.
+    starter: |
+      import numpy as np
+
+      def dense_backward(X, W, dY):
+          # dX = ...
+          # dW = ...
+          # db = ...
+          return dX, dW, db
+    solution: |
+      import numpy as np
+
+      def dense_backward(X, W, dY):
+          dX = dY @ W.T
+          dW = X.T @ dY
+          db = dY.sum(axis=0)
+          return dX, dW, db
+    tests:
+      - name: Shapes
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(1)
+          Xt, Wt, dYt = rng.normal(size=(6, 4)), rng.normal(size=(4, 3)), rng.normal(size=(6, 3))
+          dX, dW, db = dense_backward(Xt, Wt, dYt)
+          assert np.shape(dX) == (6, 4), f"dX sollte Shape (6, 4) haben, hat {np.shape(dX)}"
+          assert np.shape(dW) == (4, 3), f"dW sollte Shape (4, 3) haben, hat {np.shape(dW)}"
+          assert np.shape(db) == (3,), f"db sollte Shape (3,) haben, hat {np.shape(db)}"
+      - name: Werte gegen numerische Ableitung
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(1)
+          Xt, Wt, dYt = rng.normal(size=(6, 4)), rng.normal(size=(4, 3)), rng.normal(size=(6, 3))
+          bt = rng.normal(size=3)
+          # Verlust L = sum(dY * Y) hat genau dY als Gradient nach Y
+          L = lambda X, W, b: np.sum(dYt * (X @ W + b))
+          dX, dW, db = dense_backward(Xt, Wt, dYt)
+          h = 1e-6
+          for name, arr, got in [("dX", Xt, dX), ("dW", Wt, dW), ("db", bt, db)]:
+              num = np.zeros_like(arr)
+              for i in range(arr.size):
+                  old = arr.flat[i]
+                  arr.flat[i] = old + h
+                  fp = L(Xt, Wt, bt)
+                  arr.flat[i] = old - h
+                  fm = L(Xt, Wt, bt)
+                  arr.flat[i] = old
+                  num.flat[i] = (fp - fm) / (2 * h)
+              assert close(got, num, 1e-5), f"{name} stimmt nicht mit der numerischen Ableitung überein"
+    mutants:
+      - |
+        import numpy as np
+        def dense_backward(X, W, dY):
+            return dY @ W.T, X.T @ dY, dY.mean(axis=0)
+      - |
+        import numpy as np
+        def dense_backward(X, W, dY):
+            return X.T @ dY, dY @ W.T, dY.sum(axis=0)
+      - |
+        import numpy as np
+        def dense_backward(X, W, dY):
+            return dY @ W, X.T @ dY, dY.sum(axis=0)
+      - |
+        import numpy as np
+        def dense_backward(X, W, dY):
+            return dY @ W.T, X.T @ dY, dY.sum(axis=1)
+    hints:
+      - "Teilziel: jeder Gradient hat die Shape seiner Größe – `X`, `W` bzw. `b`."
+      - "Für $Y = XW$: `dW = X.T @ dY`, `dX = dY @ W.T`. Der Bias wirkt auf jede Zeile."
+      - "`db = dY.sum(axis=0)`"
+    explanation: |
+      Der Test nutzt einen Trick: Für $L = \sum_{ij} dY_{ij} Y_{ij}$ ist $\partial L / \partial Y$ genau `dY`.
+  - type: quiz
+    question: |
+      Du standardisierst Merkmale. Welche Statistik verwendest du für die Testdaten?
+    options:
+      - text: Mittelwert und Standardabweichung der Trainingsdaten.
+        correct: true
+        why: Die Normalisierung gehört zum Modell und muss für neue Daten identisch sein.
+      - text: Mittelwert und Standardabweichung der Testdaten selbst.
+        correct: false
+        why: Dann würde dieselbe Rohzahl im Test anders übersetzt als im Training.
+      - text: Gar keine – Testdaten bleiben roh.
+        correct: false
+        why: Das Modell hat nur standardisierte Eingaben gesehen.
+  - type: predict
+    code: |
+      import numpy as np
+      idx = np.arange(50)
+      print(len([idx[i:i + 16] for i in range(0, 50, 16)]))
+    options: ["4", "3", "16", "50"]
+    answer: "4"
+    explanation: |
+      Startindizes 0, 16, 32, 48 – der letzte Batch hat nur 2 Beispiele.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `train_linear(X, y, lr, steps)`: Gradientenabstieg auf dem MSE für $\hat y = X\mathbf w + b$, Start bei `w = 0`, `b = 0`. Rückgabe `(w, b)`.
+    starter: |
+      import numpy as np
+
+      def train_linear(X, y, lr, steps):
+          w = np.zeros(X.shape[1])
+          b = 0.0
+          for step in range(steps):
+              err = X @ w + b - y
+              # Update von w und b
+          return w, b
+    solution: |
+      import numpy as np
+
+      def train_linear(X, y, lr, steps):
+          w = np.zeros(X.shape[1])
+          b = 0.0
+          for step in range(steps):
+              err = X @ w + b - y
+              w = w - lr * 2 * X.T @ err / len(y)
+              b = b - lr * 2 * np.mean(err)
+          return w, b
+    tests:
+      - name: Findet die lstsq-Lösung
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(6)
+          Xt = rng.normal(size=(30, 3))
+          yt = Xt @ np.array([1.0, -0.5, 2.0]) + 3.0 + rng.normal(0, 0.1, 30)
+          w, b = train_linear(Xt, yt, 0.1, 500)
+          ref = np.linalg.lstsq(np.column_stack([Xt, np.ones(30)]), yt, rcond=None)[0]
+          assert close(w, ref[:3], 1e-3), f"w erwartet {ref[:3].round(3)}, bekommen {np.round(w, 3)}"
+          assert close(b, ref[3], 1e-3), f"b erwartet {ref[3]:.3f}, bekommen {b:.3f}"
+      - name: Verlust sinkt unter Schwelle
+        code: |
+          import numpy as np
+          Xt = np.linspace(0, 1, 20).reshape(-1, 1)
+          yt = 4 * Xt[:, 0] - 1
+          w, b = train_linear(Xt, yt, 0.5, 2000)
+          mse = np.mean((Xt @ w + b - yt) ** 2)
+          assert mse < 1e-6, f"MSE sollte unter 1e-6 fallen, ist {mse:.2e}"
+    mutants:
+      - |
+        import numpy as np
+        def train_linear(X, y, lr, steps):
+            w = np.zeros(X.shape[1])
+            b = 0.0
+            for step in range(steps):
+                err = X @ w + b - y
+                w = w - lr * 2 * X.T @ err / len(y)
+            return w, b
+      - |
+        import numpy as np
+        def train_linear(X, y, lr, steps):
+            w = np.zeros(X.shape[1])
+            b = 0.0
+            for step in range(steps):
+                err = X @ w + b - y
+                w = w + lr * 2 * X.T @ err / len(y)
+                b = b + lr * 2 * np.mean(err)
+            return w, b
+      - |
+        import numpy as np
+        def train_linear(X, y, lr, steps):
+            w = np.zeros(X.shape[1])
+            b = 0.0
+            err = X @ w + b - y
+            for step in range(steps):
+                w = w - lr * 2 * X.T @ err / len(y)
+                b = b - lr * 2 * np.mean(err)
+            return w, b
+    hints:
+      - "Teilziel: in jedem Schritt Gradient berechnen und beide Parameter aktualisieren."
+      - "$\\nabla_w = \\frac{2}{N}X^\\top \\mathrm{err}$, $\\partial_b = 2\\,\\mathrm{mean}(\\mathrm{err})$; Update mit Minus."
+      - "`w = w - lr * 2 * X.T @ err / len(y)`"
+  - type: quiz
+    question: |
+      Gradient-Check eines MLP: `W2` 1e-10, `b2` 1e-10, `W1` 0.8, `b1` 0.8. Was ist die wahrscheinlichste Ursache?
+    options:
+      - text: Fehler zwischen Ausgabeschicht und erster Schicht, z. B. vergessene Ableitung der Aktivierung.
+        correct: true
+        why: Die Ausgabeschicht stimmt, beide Gradienten der ersten Schicht sind falsch – der gemeinsame Teil `dZ1` ist verdächtig.
+      - text: Fehler im Gradienten am Ausgang `d_out`.
+        correct: false
+        why: Dann wären auch `W2` und `b2` falsch.
+      - text: Die Schrittweite h ist zu klein.
+        correct: false
+        why: Dann wären alle Werte etwas verrauscht, nicht genau zwei um Größenordnungen falsch.

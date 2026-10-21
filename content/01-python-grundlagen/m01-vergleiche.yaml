@@ -1,0 +1,338 @@
+id: m01-vergleiche
+title: Vergleiche und Wahrheitswerte
+minutes: 8
+goals:
+  - Werte mit `== != < <= > >=` vergleichen
+  - "`=` (Zuweisung) und `==` (Vergleich) sicher unterscheiden"
+  - Bedingungen mit `and`, `or` und `not` verknüpfen
+concepts: [vergleichsoperatoren, logische-operatoren]
+steps:
+  - type: text
+    body: |
+      ## Ja oder nein?
+
+      Ein Roboter entscheidet ständig: Ist das Ziel erreicht? Ist die Temperatur zu hoch? Dafür vergleicht man Werte. Das Ergebnis ist immer ein `bool`: `True` oder `False`.
+
+      | Operator | Bedeutung |
+      |---|---|
+      | `==` | gleich |
+      | `!=` | ungleich |
+      | `<` / `>` | kleiner / größer |
+      | `<=` / `>=` | kleiner oder gleich / größer oder gleich |
+
+      Wichtig: `==` (zwei Gleichheitszeichen) **vergleicht**, `=` (eins) **weist zu**.
+  - type: example
+    code: |
+      temperatur = 72
+      print(temperatur > 80)
+      print(temperatur == 72)
+      print(temperatur != 72)
+      zu_heiss = temperatur >= 70
+      print(zu_heiss)
+    subgoals:
+      - lines: 1
+        label: Messwert festlegen
+      - lines: [2, 4]
+        label: Vergleiche auswerten
+      - lines: [5, 6]
+        label: Ergebnis speichern
+    after: |
+      Ein Vergleich ist ein Ausdruck wie `3 + 4` – sein Wert ist eben `True` oder `False`. Deshalb kann man ihn auch in einer Variablen speichern (Zeile 5).
+  - type: predict
+    code: |
+      print(3 == 3.0)
+      print("3" == 3)
+    options:
+      - |
+        True
+        False
+      - |
+        False
+        False
+      - |
+        True
+        True
+      - |
+        False
+        True
+    answer: |
+      True
+      False
+    explanation: |
+      `3` und `3.0` sind derselbe Zahlenwert, also gleich. `"3"` ist aber Text und keine Zahl – Text und Zahl sind nie gleich.
+  - type: predict
+    code: |
+      print(5 <= 5)
+      print(5 < 5)
+    options:
+      - |
+        True
+        False
+      - |
+        False
+        False
+      - |
+        True
+        True
+    answer: |
+      True
+      False
+    explanation: |
+      `<=` schließt die Gleichheit ein, `<` nicht. Genau dieser Unterschied entscheidet später oft, ob eine Schleife einmal zu oft oder zu selten läuft.
+  - type: explain
+    question: |
+      Was ist der Unterschied zwischen `x = 5` und `x == 5`?
+    options:
+      - text: "`x = 5` speichert 5 in `x`; `x == 5` fragt, ob `x` gerade 5 ist, und liefert `True` oder `False`."
+        correct: true
+        why: Zuweisung verändert eine Variable, Vergleich liest sie nur und erzeugt einen Wahrheitswert.
+      - text: Beides ist gleichbedeutend, `==` ist nur die ausführliche Schreibweise.
+        correct: false
+        why: "`x == 5` ändert `x` nicht. Wer in einer Bedingung `=` schreibt, bekommt einen `SyntaxError`."
+      - text: "`x == 5` speichert 5 dauerhaft, `x = 5` nur vorübergehend."
+        correct: false
+        why: "`==` speichert gar nichts."
+  - type: predict
+    code: |
+      print(0.1 + 0.2 == 0.3)
+      print(abs((0.1 + 0.2) - 0.3) < 1e-9)
+    options:
+      - |
+        True
+        True
+      - |
+        False
+        True
+      - |
+        True
+        False
+    answer: |
+      False
+      True
+    explanation: |
+      Kommazahlen werden binär gespeichert; `0.1 + 0.2` ist tatsächlich `0.30000000000000004`. Deshalb vergleicht man `float`-Werte nicht mit `==`, sondern prüft, ob der Abstand winzig ist (`abs(…)` ist der Betrag). In der Robotik ist das Alltag: „Ziel erreicht“ heißt „nah genug dran“.
+  - type: text
+    body: |
+      ## Bedingungen verknüpfen
+
+      | Ausdruck | ist `True`, wenn … |
+      |---|---|
+      | `a and b` | **beide** `True` sind |
+      | `a or b` | **mindestens eins** `True` ist |
+      | `not a` | `a` `False` ist |
+
+      Beispiel Arbeitsbereich: `x >= 0 and x <= 1.2`. Python erlaubt auch die mathematische Kurzform `0 <= x <= 1.2`.
+
+      Vergleiche werden vor `and`/`or` ausgewertet, du brauchst hier also keine Klammern.
+  - type: predict
+    code: |
+      winkel = 2.0
+      grenze = 1.57
+      print(winkel > grenze and winkel < 3.14)
+      print(winkel < 0 or winkel > grenze)
+      print(not winkel > grenze)
+    options:
+      - |
+        True
+        True
+        False
+      - |
+        True
+        False
+        False
+      - |
+        False
+        True
+        True
+      - |
+        True
+        True
+        True
+    answer: |
+      True
+      True
+      False
+    explanation: |
+      Zeile 3: beide Vergleiche `True` → `True`. Zeile 4: der zweite ist `True`, das reicht bei `or`. Zeile 5: `winkel > grenze` ist `True`, `not` macht `False` daraus.
+  - type: fill
+    fading: true
+    prompt: |
+      Eine Warnung soll erscheinen, wenn der Akku **unter 20 %** liegt **und** der Roboter **nicht** lädt. Bei 25 % gibt es also keine Warnung – erwartete Ausgabe: `False`.
+    code: |
+      akku = 25
+      laedt = False
+      warnung = akku ___ 20 ___ not laedt
+      print(warnung)
+    blanks:
+      - answer: "<"
+        options: ["<", ">", ">=", "="]
+      - answer: and
+        options: [and, or, not]
+    expect_output: "False"
+    explanation: |
+      `akku < 20` ist `False`, damit ist der ganze `and`-Ausdruck `False`. Mit `or` gäbe es eine Warnung, nur weil nicht geladen wird.
+  - type: exercise
+    mode: make
+    prompt: |
+      Der Arbeitsbereich des Greifers reicht von 0 m bis **einschließlich** 1.2 m. Berechne für beide Positionen, ob sie im Bereich liegen, speichere das Ergebnis in `ok1` und `ok2` und gib beide aus.
+
+      Erwartete Ausgabe:
+      ```
+      True False
+      ```
+    starter: |
+      x1 = 1.2
+      x2 = -0.3
+      # ok1 = ...
+      # ok2 = ...
+      print(ok1, ok2)
+    solution: |
+      x1 = 1.2
+      x2 = -0.3
+      ok1 = x1 >= 0 and x1 <= 1.2
+      ok2 = x2 >= 0 and x2 <= 1.2
+      print(ok1, ok2)
+    tests:
+      - name: Randwert 1.2 liegt im Bereich
+        code: |
+          assert ok1 is True, f"x1 = 1.2 liegt im Bereich (einschließlich), ok1 ist aber {ok1!r}"
+      - name: Negativer Wert liegt außerhalb
+        code: |
+          assert ok2 is False, f"x2 = -0.3 liegt außerhalb, ok2 ist aber {ok2!r}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["True False"], f"Erwartet ['True False'], bekommen {lines()}"
+    mutants:
+      - |
+        x1 = 1.2
+        x2 = -0.3
+        ok1 = x1 > 0 and x1 < 1.2
+        ok2 = x2 > 0 and x2 < 1.2
+        print(ok1, ok2)
+      - |
+        x1 = 1.2
+        x2 = -0.3
+        ok1 = x1 >= 0 or x1 <= 1.2
+        ok2 = x2 >= 0 or x2 <= 1.2
+        print(ok1, ok2)
+      - |
+        x1 = 1.2
+        x2 = -0.3
+        ok1 = x1 <= 1.2
+        ok2 = x2 <= 1.2
+        print(ok1, ok2)
+    hints:
+      - "Teilziel: für jede Position zwei Vergleiche (untere und obere Grenze) verknüpfen."
+      - "„Einschließlich“ heißt `<=` bzw. `>=`. Beide Grenzen müssen gelten → `and`."
+      - "`ok1 = x1 >= 0 and x1 <= 1.2`"
+  - type: quiz
+    question: |
+      Welcher Ausdruck prüft korrekt, ob `x` gleich 1 **oder** gleich 2 ist?
+    options:
+      - text: "`x == 1 or x == 2`"
+        correct: true
+        why: Jede Seite von `or` ist ein vollständiger Vergleich.
+      - text: "`x == 1 or 2`"
+        correct: false
+        why: Python liest das als `(x == 1) or 2`. Die `2` allein gilt als „wahr“, deshalb ist der Ausdruck nie `False` – ein klassischer Anfängerfehler.
+      - text: "`x == 1 and x == 2`"
+        correct: false
+        why: "`x` kann nicht gleichzeitig 1 und 2 sein – das ist immer `False`."
+      - text: "`x = 1 or x = 2`"
+        correct: false
+        why: "`=` ist eine Zuweisung, kein Vergleich – das ist ein `SyntaxError`."
+cards:
+  - id: m01-c-vergleich-grenze
+    concept: vergleichsoperatoren
+    variants:
+      - type: predict
+        code: |
+          print(10 >= 10, 10 > 10)
+        options: ["True False", "True True", "False False"]
+        answer: "True False"
+        explanation: "`>=` schließt Gleichheit ein, `>` nicht."
+      - type: predict
+        code: |
+          print(4 != 4.0, "a" == "A")
+        options: ["False False", "True False", "False True"]
+        answer: "False False"
+        explanation: 4 und 4.0 sind gleich, also ist `!=` False. Groß- und Kleinbuchstaben sind verschiedene Zeichen.
+      - type: predict
+        code: |
+          print(7 == "7")
+        options: ["False", "True", "Fehler"]
+        answer: "False"
+        explanation: Eine Zahl ist nie gleich einem Text – auch wenn er gleich aussieht. Ein Fehler entsteht dabei nicht.
+  - id: m01-c-and-or
+    concept: logische-operatoren
+    variants:
+      - type: predict
+        code: |
+          a = 3
+          print(a > 0 and a < 2)
+        options: ["False", "True"]
+        answer: "False"
+        explanation: "`a < 2` ist False – bei `and` reicht das für False."
+      - type: predict
+        code: |
+          a = 3
+          print(a < 0 or a > 2)
+        options: ["True", "False"]
+        answer: "True"
+        explanation: "`a > 2` ist True – bei `or` reicht eine Seite."
+      - type: predict
+        code: |
+          offen = False
+          print(not offen)
+        options: ["True", "False", "not False"]
+        answer: "True"
+        explanation: "`not` kehrt den Wahrheitswert um."
+  - id: m01-c-gleich-zuweisung
+    concept: vergleichsoperatoren
+    variants:
+      - type: quiz
+        question: Welche Zeile **prüft**, ob `n` den Wert 0 hat?
+        options:
+          - text: "`n == 0`"
+            correct: true
+            why: Zwei Gleichheitszeichen vergleichen.
+          - text: "`n = 0`"
+            correct: false
+            why: Das setzt `n` auf 0, statt zu prüfen.
+          - text: "`0 = n`"
+            correct: false
+            why: Links von `=` muss ein Name stehen – `SyntaxError`.
+      - type: predict
+        code: |
+          n = 4
+          print(n == 5, n)
+        options: ["False 4", "True 5", "False 5"]
+        answer: "False 4"
+        explanation: "`==` vergleicht nur und liefert `False`; `n` bleibt dabei 4."
+  - id: m01-c-float-toleranz
+    concept: vergleichsoperatoren
+    variants:
+      - type: quiz
+        question: Warum ist `0.1 + 0.2 == 0.3` in Python `False`?
+        options:
+          - text: Kommazahlen sind binär nur angenähert gespeichert; die Summe ist minimal größer als 0.3.
+            correct: true
+            why: Deshalb vergleicht man floats mit einer Toleranz, z. B. `abs(a - b) < 1e-9`.
+          - text: Weil `==` nur für ganze Zahlen funktioniert.
+            correct: false
+            why: "`==` funktioniert für alle Zahlen, z. B. ist `0.5 + 0.25 == 0.75` True."
+          - text: Weil Python falsch rechnet.
+            correct: false
+            why: Python rechnet nach dem Standard IEEE 754 korrekt – die Werte 0.1 und 0.2 sind nur nicht exakt darstellbar.
+      - type: quiz
+        question: "`x` ist das Ergebnis einer Rechnung mit Kommazahlen. Welche Prüfung „ist `x` gleich 0.3?“ ist robust?"
+        options:
+          - text: "`abs(x - 0.3) < 1e-9`"
+            correct: true
+            why: Der Abstand zum Sollwert muss winzig sein – Rundungsfehler im Bereich $10^{-17}$ stören dann nicht.
+          - text: "`x == 0.3`"
+            correct: false
+            why: Schon ein winziger Rundungsfehler macht den Vergleich `False`.
+          - text: "`x - 0.3 < 1e-9`"
+            correct: false
+            why: Ohne Betrag wäre auch ein viel zu kleines `x` wie `-5.0` „gleich“.

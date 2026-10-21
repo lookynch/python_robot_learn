@@ -1,0 +1,285 @@
+id: m04-broadcasting
+title: Broadcasting – wenn Formen nicht gleich sind
+minutes: 10
+goals:
+  - Die Broadcasting-Regel anwenden und die Ergebnisform vorhersagen
+  - Mit `reshape` Zeilen- und Spaltenvektoren bilden
+  - Viele Punkte auf einmal verschieben und Abstände berechnen
+concepts: [np-broadcasting]
+steps:
+  - type: text
+    body: |
+      ## Formen strecken
+
+      `a * 2` funktioniert, obwohl `2` kein Array ist: NumPy „streckt“ die Zahl auf die Form von `a`. Das heißt **Broadcasting** und gilt auch für Arrays.
+
+      **Regel:** Vergleiche die Formen **von rechts**. Zwei Achsen passen, wenn sie gleich lang sind oder eine davon die Länge 1 hat. Fehlt links eine Achse, zählt sie als 1. Achsen der Länge 1 werden gestreckt.
+
+      | Form A | Form B | Ergebnis |
+      |---|---|---|
+      | `(3, 2)` | `(2,)` | `(3, 2)` |
+      | `(3, 1)` | `(1, 4)` | `(3, 4)` |
+      | `(3,)` | `(4,)` | Fehler |
+  - type: example
+    code: |
+      import numpy as np
+      punkte = np.array([[0.0, 0.0],
+                         [1.0, 0.0],
+                         [1.0, 1.0]])
+      basis = np.array([2.0, -1.0])
+      print(punkte + basis)
+      t = np.array([0.0, 0.5, 1.0]).reshape(3, 1)
+      v = np.array([2.0, 4.0])
+      print(t * v)
+    subgoals:
+      - lines: [1, 5]
+        label: Punkte (eine Zeile pro Punkt) und Verschiebung anlegen
+      - lines: 6
+        label: Alle Punkte auf einmal verschieben
+      - lines: [7, 9]
+        label: Spaltenvektor mal Zeile ergibt eine Tabelle
+    after: |
+      - `(3, 2) + (2,)`: Der Vektor `basis` wird zu jeder Zeile addiert – alle drei Punkte werden um $(2, -1)$ verschoben.
+      - `reshape(3, 1)` macht aus 3 Werten eine **Spalte**. `(3, 1) * (2,)` ergibt `(3, 2)`: Zeile $i$ ist die Position $t_i \cdot \vec v$ bei konstanter Geschwindigkeit $\vec v$.
+  - type: explain
+    question: |
+      Warum klappt `punkte + basis` mit den Formen `(3, 2)` und `(2,)`?
+    options:
+      - text: "Von rechts verglichen passen 2 und 2; die fehlende Achse von `basis` zählt als 1 und wird auf 3 Zeilen gestreckt."
+        correct: true
+        why: Genau die Broadcasting-Regel. Das Ergebnis hat die Form `(3, 2)`.
+      - text: NumPy wiederholt das kürzere Array, bis es gleich viele Elemente hat.
+        correct: false
+        why: Es wird nur entlang von Achsen der Länge 1 (oder fehlenden Achsen) gestreckt. Sonst gäbe es auch für `(3,)` und `(2,)` ein Ergebnis – es gibt aber einen Fehler.
+      - text: Weil beide Arrays Kommazahlen enthalten.
+        correct: false
+        why: Der dtype spielt für Broadcasting keine Rolle, nur die Form.
+  - type: predict
+    code: |
+      import numpy as np
+      a = np.array([[1], [2], [3]])
+      b = np.array([10, 20])
+      print((a + b).shape)
+      print(a + b)
+    options:
+      - |
+        (3, 2)
+        [[11 21]
+         [12 22]
+         [13 23]]
+      - |
+        (3, 1)
+        [[11]
+         [22]
+         [33]]
+      - |
+        (2, 3)
+        [[11 12 13]
+         [21 22 23]]
+    answer: |
+      (3, 2)
+      [[11 21]
+       [12 22]
+       [13 23]]
+    explanation: |
+      `a` hat die Form `(3, 1)`, `b` die Form `(2,)`. Von rechts: 1 und 2 → 2; dann 3 und (fehlend =) 1 → 3. Jede Zeile von `a` wird mit jedem Element von `b` kombiniert.
+  - type: quiz
+    question: |
+      Welche Rechnung erzeugt einen **Fehler**?
+    options:
+      - text: "`np.zeros((2, 3)) + np.ones(2)`"
+        correct: true
+        why: "Von rechts: 3 und 2 – weder gleich noch 1. Passen würde `np.ones(3)` oder `np.ones((2, 1))`."
+      - text: "`np.zeros((2, 3)) + np.ones(3)`"
+        correct: false
+        why: "3 und 3 passen; der Vektor wird zu jeder der 2 Zeilen addiert."
+      - text: "`np.zeros((2, 3)) + np.ones((2, 1))`"
+        correct: false
+        why: "3 und 1 passen, 2 und 2 passen – Ergebnis `(2, 3)`."
+      - text: "`np.zeros((2, 3)) + 5`"
+        correct: false
+        why: Eine einzelne Zahl passt immer.
+  - type: text
+    body: |
+      ## Zeilen- und Spaltenvektor
+
+      Ein 1D-Array der Form `(3,)` ist weder Zeile noch Spalte. Wenn du die Richtung brauchst, gib sie mit `reshape` an:
+
+      - `v.reshape(1, 3)` → Zeilenvektor, Form `(1, 3)`
+      - `v.reshape(3, 1)` → Spaltenvektor, Form `(3, 1)`
+
+      Typischer Fehler: Du willst von einem Vektor `x` der Form `(5,)` einen Vektor `y` der Form `(5, 1)` abziehen und erwartest 5 Werte. Broadcasting macht daraus eine `(5, 5)`-Tabelle – ohne Fehlermeldung. Prüfe darum bei Zwischenergebnissen die `shape`.
+  - type: fill
+    fading: true
+    prompt: |
+      Erzeuge mit Broadcasting die Einmaleins-Tabelle für 1 bis 3: Spaltenvektor mal Zeilenvektor.
+    code: |
+      import numpy as np
+      z = np.arange(1, 4)
+      tabelle = z.reshape(___) * z.reshape(___)
+      print(tabelle)
+    blanks:
+      - answer: "3, 1"
+        options: ["3, 1", "1, 3", "1, 1"]
+      - answer: "1, 3"
+        options: ["1, 3", "3, 1", "1, 1"]
+    expect_output: |
+      [[1 2 3]
+       [2 4 6]
+       [3 6 9]]
+  - type: parsons
+    fading: true
+    prompt: |
+      Berechne für 5 Zeitpunkte und 2 Frequenzen alle Produkte $f \cdot t$ auf einmal (Form `(5, 2)`) und gib Form und letzte Zeile aus. Achtung: überzählige Zeilen.
+    lines:
+      - "import numpy as np"
+      - "t = np.linspace(0, 1, 5)"
+      - "f = np.array([1.0, 2.0])"
+      - "produkt = t.reshape(5, 1) * f"
+      - "print(produkt.shape)"
+      - "print(produkt[-1])"
+    distractors:
+      - "produkt = t * f"
+      - "produkt = t.reshape(1, 5) * f"
+    expect_output: |
+      (5, 2)
+      [1. 2.]
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `abstaende(punkte, ziel)`. `punkte` hat die Form `(N, 2)` (eine Zeile pro Punkt), `ziel` die Form `(2,)`. Gib ein Array der Form `(N,)` mit den Abständen jedes Punkts zum Ziel zurück – ohne Schleife.
+    starter: |
+      import numpy as np
+
+      def abstaende(punkte, ziel):
+          d = punkte - ziel      # Form (N, 2)
+          # Abstand pro Zeile berechnen
+          pass
+    solution: |
+      import numpy as np
+
+      def abstaende(punkte, ziel):
+          d = punkte - ziel
+          return np.sqrt(d[:, 0] ** 2 + d[:, 1] ** 2)
+    tests:
+      - name: Drei Punkte
+        code: |
+          import numpy as np
+          r = abstaende(np.array([[3.0, 4.0], [0.0, 0.0], [1.0, 1.0]]), np.array([0.0, 0.0]))
+          assert r.shape == (3,), f"Erwartet Form (3,), bekommen {r.shape}"
+          assert close(r, [5.0, 0.0, 2 ** 0.5]), f"Erwartet [5, 0, 1.414], bekommen {r}"
+      - name: Ziel nicht im Ursprung
+        code: |
+          import numpy as np
+          r = abstaende(np.array([[1.0, 2.0], [4.0, 6.0]]), np.array([1.0, 2.0]))
+          assert close(r, [0.0, 5.0]), f"Erwartet [0, 5], bekommen {r}"
+    mutants:
+      - |
+        import numpy as np
+
+        def abstaende(punkte, ziel):
+            d = punkte - ziel
+            return d[:, 0] ** 2 + d[:, 1] ** 2
+      - |
+        import numpy as np
+
+        def abstaende(punkte, ziel):
+            d = punkte - ziel
+            return np.sqrt(d[0] ** 2 + d[1] ** 2)
+      - |
+        import numpy as np
+
+        def abstaende(punkte, ziel):
+            d = punkte - ziel
+            return np.sqrt(d[:, 0] ** 2)
+    hints:
+      - "Teilziel: aus den Differenzvektoren pro Zeile die Länge berechnen."
+      - "`d[:, 0]` sind alle x-Differenzen, `d[:, 1]` alle y-Differenzen."
+      - "Abstand = $\\sqrt{dx^2 + dy^2}$ – mit `np.sqrt` für alle Zeilen gleichzeitig."
+      - "`return np.sqrt(d[:, 0] ** 2 + d[:, 1] ** 2)`"
+    explanation: |
+      `punkte - ziel` ist Broadcasting: `(N, 2) - (2,)`. Damit hast du in einer Zeile alle Differenzvektoren – egal ob es 3 oder 3000 Punkte sind.
+  - type: quiz
+    question: |
+      `x` hat die Form `(5,)`, `y` die Form `(5, 1)`. Welche Form hat `x - y`?
+    options:
+      - text: "`(5, 5)`"
+        correct: true
+        why: "Von rechts: 5 und 1 → 5, dann (fehlend =) 1 und 5 → 5. Kein Fehler, aber vermutlich nicht gemeint."
+      - text: "`(5,)`"
+        correct: false
+        why: Das wäre nur bei gleichen Formen so. Hier wird gestreckt.
+      - text: "`(5, 1)`"
+        correct: false
+        why: Die Achse der Länge 1 von `y` wird auf 5 gestreckt.
+      - text: Fehler
+        correct: false
+        why: Beide Achsenpaare passen (5/1 und 1/5) – genau deshalb ist dieser Fehler so tückisch.
+cards:
+  - id: m04-c-broadcast-shape
+    concept: np-broadcasting
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print((np.zeros((3, 1)) + np.zeros((1, 4))).shape)
+        options: ["(3, 4)", "(3, 1)", "(1, 4)", "(4, 3)"]
+        answer: "(3, 4)"
+        explanation: Beide Achsen der Länge 1 werden gestreckt.
+      - type: predict
+        code: |
+          import numpy as np
+          print((np.ones((2, 3)) * np.arange(3)).shape)
+        options: ["(2, 3)", "(3,)", "(2, 3, 3)", "(6,)"]
+        answer: "(2, 3)"
+        explanation: "`(3,)` passt von rechts zu 3 und wird über die 2 Zeilen gestreckt."
+      - type: predict
+        code: |
+          import numpy as np
+          x = np.zeros(4)
+          y = np.zeros((4, 1))
+          print((x - y).shape)
+        options: ["(4, 4)", "(4,)", "(4, 1)"]
+        answer: "(4, 4)"
+        explanation: Der klassische Fehler – `(4,)` gegen `(4, 1)` ergibt eine Tabelle.
+  - id: m04-c-broadcast-zeilen
+    concept: np-broadcasting
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          P = np.array([[1, 1], [2, 2]])
+          print(P + np.array([10, 20]))
+        options:
+          - |
+            [[11 21]
+             [12 22]]
+          - |
+            [[11 11]
+             [22 22]]
+          - |
+            [[11 12]
+             [21 22]]
+        answer: |
+          [[11 21]
+           [12 22]]
+        explanation: Der Vektor `(2,)` wird zu **jeder Zeile** addiert.
+      - type: predict
+        code: |
+          import numpy as np
+          P = np.array([[1, 1], [2, 2]])
+          print(P + np.array([[10], [20]]))
+        options:
+          - |
+            [[11 11]
+             [22 22]]
+          - |
+            [[11 21]
+             [12 22]]
+          - |
+            [[11 12]
+             [21 22]]
+        answer: |
+          [[11 11]
+           [22 22]]
+        explanation: Ein Spaltenvektor `(2, 1)` wird zu **jeder Spalte** addiert – Zeile 0 bekommt 10, Zeile 1 bekommt 20.

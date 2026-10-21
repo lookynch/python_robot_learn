@@ -1,0 +1,343 @@
+id: m04-arrays
+title: Arrays – Zahlen im Block
+minutes: 9
+goals:
+  - Mit `np.array` ein Array aus einer Liste anlegen
+  - "`shape` und `dtype` eines Arrays lesen"
+  - Arrays mit `np.zeros`, `np.ones`, `np.arange` und `np.linspace` erzeugen
+concepts: [np-array, np-erzeugen]
+steps:
+  - type: text
+    body: |
+      ## Warum NumPy?
+
+      Ein Roboterarm mit drei Gelenken hat drei Winkel. Als Liste geht das: `q = [0.1, 0.5, -0.3]`. Aber Listen können nicht rechnen: `q * 2` hängt die Liste zweimal hintereinander, statt jeden Winkel zu verdoppeln.
+
+      **NumPy** ist die Bibliothek für Rechnen mit Zahlenblöcken. Ihr Grundbaustein ist das **Array** (`ndarray`): eine Tabelle von Zahlen, alle vom selben Typ, mit fester Form. Ein 1D-Array ist ein Vektor, ein 2D-Array eine Matrix.
+
+      Konvention, die du überall siehst:
+
+      ```python
+      import numpy as np
+      ```
+  - type: example
+    code: |
+      import numpy as np
+      q = np.array([0.1, 0.5, -0.3])
+      print(q)
+      print(q.shape)
+      print(q.dtype)
+      M = np.array([[1, 2, 3], [4, 5, 6]])
+      print(M.shape)
+      print(M.ndim)
+    subgoals:
+      - lines: 1
+        label: NumPy importieren
+      - lines: 2
+        label: Array aus Liste anlegen
+      - lines: [3, 5]
+        label: Eigenschaften abfragen
+      - lines: [6, 8]
+        label: 2D-Array aus verschachtelter Liste
+    after: |
+      - `print` zeigt ein Array **ohne Kommas** – so erkennst du es in der Ausgabe.
+      - `shape` ist ein **Tupel** mit einer Länge pro Achse: `(3,)` für 3 Werte, `(2, 3)` für 2 Zeilen × 3 Spalten.
+      - `dtype` ist der Elementtyp: `float64` für Kommazahlen. `ndim` ist die Zahl der Achsen.
+  - type: explain
+    question: |
+      Warum ist `q.shape` gleich `(3,)` und nicht einfach `3`?
+    options:
+      - text: "`shape` ist immer ein Tupel – eine Zahl pro Achse. Ein 1D-Array hat eine Achse, also ein Tupel mit einem Element."
+        correct: true
+        why: Genau. So funktioniert `shape` für jede Dimension gleich; `(3,)` ist die Python-Schreibweise für ein Tupel mit einem Element.
+      - text: Das Komma bedeutet, dass noch eine leere zweite Achse folgt.
+        correct: false
+        why: Es gibt keine zweite Achse. Ohne Komma wäre `(3)` einfach die Zahl 3 in Klammern, kein Tupel.
+      - text: "`(3,)` heißt: das Array enthält die Zahl 3."
+        correct: false
+        why: "`shape` beschreibt die Form, nicht den Inhalt. `q` enthält 0.1, 0.5 und -0.3."
+  - type: predict
+    code: |
+      import numpy as np
+      liste = [1, 2, 3]
+      arr = np.array([1, 2, 3])
+      print(liste * 2)
+      print(arr * 2)
+    options:
+      - |
+        [1, 2, 3, 1, 2, 3]
+        [2 4 6]
+      - |
+        [2, 4, 6]
+        [2 4 6]
+      - |
+        [1, 2, 3, 1, 2, 3]
+        [1 2 3 1 2 3]
+    answer: |
+      [1, 2, 3, 1, 2, 3]
+      [2 4 6]
+    explanation: |
+      Bei einer Liste bedeutet `* 2` „zweimal hintereinander“. Beim Array wird **jedes Element** mit 2 multipliziert – so wie in der Mathematik $2\,\vec v$. Die Ausgabe ohne Kommas verrät, dass es ein Array ist.
+  - type: predict
+    code: |
+      import numpy as np
+      b = np.array([1, 2.5, 3])
+      print(b)
+      print(b.dtype)
+    options:
+      - |
+        [1.  2.5 3. ]
+        float64
+      - |
+        [1, 2.5, 3]
+        mixed
+      - |
+        [1 2 3]
+        int32
+      - |
+        [1.  2.5 3. ]
+        int32
+    answer: |
+      [1.  2.5 3. ]
+      float64
+    explanation: |
+      Alle Elemente eines Arrays haben **denselben** Typ. Weil 2.5 eine Kommazahl ist, wandelt NumPy alles in `float64` um: `1` wird `1.`. Die Leerzeichen richten die Spalten aus.
+
+      Nur ganze Zahlen ergeben ein Ganzzahl-Array. Im Browser heißt dessen dtype `int32`, auf einem PC meist `int64` – für dich macht das selten einen Unterschied.
+  - type: text
+    body: |
+      ## Arrays erzeugen
+
+      Oft tippst du die Werte nicht ab, sondern lässt sie erzeugen:
+
+      | Aufruf | Ergebnis |
+      |---|---|
+      | `np.zeros(3)` | `[0. 0. 0.]` |
+      | `np.ones((2, 3))` | 2×3-Matrix voller Einsen |
+      | `np.arange(0, 1, 0.25)` | Start, Stopp, **Schrittweite** – Stopp ist ausgeschlossen (wie `range`) |
+      | `np.linspace(0, 1, 5)` | Start, Stopp, **Anzahl** – Stopp ist eingeschlossen |
+
+      Für 2D übergibst du die Form als Tupel: `np.zeros((2, 3))` – mit doppelten Klammern. `zeros` und `ones` liefern immer `float64`.
+
+      Für Zeitachsen in Simulationen ist `linspace` meist die bessere Wahl: Du bestimmst genau, wie viele Punkte es werden und dass der Endzeitpunkt dabei ist.
+  - type: predict
+    code: |
+      import numpy as np
+      print(np.arange(0, 1, 0.25))
+      print(np.linspace(0, 1, 5))
+    options:
+      - |
+        [0.   0.25 0.5  0.75]
+        [0.   0.25 0.5  0.75 1.  ]
+      - |
+        [0.   0.25 0.5  0.75 1.  ]
+        [0.   0.25 0.5  0.75 1.  ]
+      - |
+        [0.   0.25 0.5  0.75]
+        [0.  0.2 0.4 0.6 0.8]
+    answer: |
+      [0.   0.25 0.5  0.75]
+      [0.   0.25 0.5  0.75 1.  ]
+    explanation: |
+      `arange` läuft in Schritten von 0.25 und hört **vor** 1 auf. `linspace` verteilt 5 Punkte gleichmäßig von 0 **bis einschließlich** 1 – das ergibt den Abstand $\frac{1-0}{5-1} = 0.25$.
+  - type: fill
+    fading: true
+    prompt: |
+      Erzeuge eine Zeitachse von 0 s bis einschließlich 2 s mit 5 gleichmäßig verteilten Zeitpunkten.
+    code: |
+      import numpy as np
+      t = np.___(0, 2, ___)
+      print(t)
+    blanks:
+      - answer: linspace
+        options: [linspace, arange, zeros]
+      - answer: "5"
+        options: ["5", "4", "0.5"]
+    expect_output: "[0.  0.5 1.  1.5 2. ]"
+    explanation: |
+      `np.linspace(0, 2, 5)` – drittes Argument ist die **Anzahl**. Mit `arange` wäre das dritte Argument die Schrittweite, und die 2 wäre nicht dabei.
+  - type: parsons
+    fading: true
+    prompt: |
+      Ordne die Zeilen so, dass zuerst die Form und dann der Inhalt einer 2×3-Nullmatrix ausgegeben wird.
+    lines:
+      - "import numpy as np"
+      - "M = np.zeros((2, 3))"
+      - "print(M.shape)"
+      - "print(M)"
+    expect_output: |
+      (2, 3)
+      [[0. 0. 0.]
+       [0. 0. 0.]]
+  - type: exercise
+    mode: modify
+    prompt: |
+      Die Zeitachse soll von 0 s bis **einschließlich** 1 s reichen, mit genau 11 Zeitpunkten (Abstand 0.1 s). Ändere die markierte Zeile.
+    starter: |
+      import numpy as np
+      t = np.arange(0, 1, 0.1)   # ändern
+      print(t.shape)
+    solution: |
+      import numpy as np
+      t = np.linspace(0, 1, 11)
+      print(t.shape)
+    tests:
+      - name: Anzahl der Zeitpunkte
+        code: |
+          assert t.shape == (11,), f"t sollte 11 Werte haben (shape (11,)), hat aber shape {t.shape}"
+      - name: Anfang und Ende
+        code: |
+          assert close(t[0], 0.0) and close(t[-1], 1.0), f"t soll bei 0 beginnen und bei 1 enden, ist aber {t[0]} … {t[-1]}"
+      - name: Gleichmäßiger Abstand 0.1
+        code: |
+          import numpy as np
+          assert close(t, np.arange(11) * 0.1), f"Die Zeitpunkte sollten 0.0, 0.1, …, 1.0 sein, sind aber {t}"
+    mutants:
+      - |
+        import numpy as np
+        t = np.linspace(0, 1, 10)
+        print(t.shape)
+      - |
+        import numpy as np
+        t = np.linspace(0, 1, 0.1)
+        print(t.shape)
+      - |
+        import numpy as np
+        t = np.linspace(0, 10, 11)
+        print(t.shape)
+    hints:
+      - "Teilziel: Zeitachse mit fester Anzahl Punkte und eingeschlossenem Ende."
+      - "`np.linspace(start, stopp, anzahl)` schließt den Stopp ein."
+      - "Von 0 bis 1 in Schritten von 0.1 sind es 11 Punkte (0.0, 0.1, …, 1.0)."
+      - "`t = np.linspace(0, 1, 11)`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Der Zustand eines Arms mit `n` Gelenken besteht aus `n` Winkeln und `n` Winkelgeschwindigkeiten, also `2 * n` Zahlen. Schreibe `startzustand(n)`, die einen solchen Zustand als **1D-Array aus Kommazahlen** voller Nullen zurückgibt.
+
+      Beispiel: `startzustand(2)` → `[0. 0. 0. 0.]`
+    starter: |
+      import numpy as np
+
+      def startzustand(n):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def startzustand(n):
+          return np.zeros(2 * n)
+    tests:
+      - name: Zwei Gelenke
+        code: |
+          s = startzustand(2)
+          assert s.shape == (4,), f"startzustand(2) sollte shape (4,) haben, hat {s.shape}"
+      - name: Drei Gelenke
+        code: |
+          s = startzustand(3)
+          assert s.shape == (6,), f"startzustand(3) sollte shape (6,) haben, hat {s.shape}"
+      - name: Nur Nullen als Kommazahlen
+        code: |
+          s = startzustand(3)
+          assert s.dtype == "float64", f"dtype sollte float64 sein, ist {s.dtype}"
+          assert (s == 0).all(), f"Alle Werte sollten 0 sein: {s}"
+    mutants:
+      - |
+        import numpy as np
+
+        def startzustand(n):
+            return np.zeros(n)
+      - |
+        import numpy as np
+
+        def startzustand(n):
+            return np.zeros((2, n))
+      - |
+        import numpy as np
+
+        def startzustand(n):
+            return np.array([0] * (2 * n))
+    hints:
+      - "Teilziel: Array der richtigen Länge erzeugen und mit `return` zurückgeben."
+      - "`np.zeros(k)` liefert `k` Nullen als `float64`."
+      - "Die Länge ist `2 * n`, nicht `n` – und ein 1D-Array, keine Matrix."
+      - "`return np.zeros(2 * n)`"
+  - type: quiz
+    question: |
+      Welcher Aufruf liefert die Werte 0, 5 und 10?
+    options:
+      - text: "`np.linspace(0, 10, 3)`"
+        correct: true
+        why: 3 Punkte gleichmäßig von 0 bis einschließlich 10.
+      - text: "`np.arange(0, 10, 5)`"
+        correct: false
+        why: Bei `arange` ist der Stopp ausgeschlossen – du bekommst nur 0 und 5.
+      - text: "`np.linspace(0, 10, 5)`"
+        correct: false
+        why: Das dritte Argument ist die Anzahl – das wären 5 Werte (0, 2.5, 5, 7.5, 10).
+cards:
+  - id: m04-c-shape
+    concept: np-array
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.zeros((2, 3)).shape)
+        options: ["(2, 3)", "(3, 2)", "6", "(6,)"]
+        answer: "(2, 3)"
+        explanation: Das Tupel `(2, 3)` beim Erzeugen ist direkt die Form – 2 Zeilen, 3 Spalten.
+      - type: predict
+        code: |
+          import numpy as np
+          M = np.array([[1, 2], [3, 4], [5, 6]])
+          print(M.shape)
+        options: ["(3, 2)", "(2, 3)", "(6,)", "3"]
+        answer: "(3, 2)"
+        explanation: Drei innere Listen = 3 Zeilen, jede mit 2 Werten = 2 Spalten.
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.ones(4).shape)
+        options: ["(4,)", "4", "(1, 4)", "(4, 1)"]
+        answer: "(4,)"
+        explanation: Ein 1D-Array hat eine Achse – `shape` ist trotzdem ein Tupel, hier mit einem Element.
+  - id: m04-c-linspace-arange
+    concept: np-erzeugen
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.linspace(0, 1, 3))
+        options: ["[0.  0.5 1. ]", "[0. 1. 2.]", "[0.  0.5]", "[0.   0.33 0.67]"]
+        answer: "[0.  0.5 1. ]"
+        explanation: 3 Punkte von 0 bis einschließlich 1.
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.arange(0, 2, 0.5))
+        options: ["[0.  0.5 1.  1.5]", "[0.  0.5 1.  1.5 2. ]", "[0. 2.]"]
+        answer: "[0.  0.5 1.  1.5]"
+        explanation: "`arange` nimmt eine Schrittweite und schließt den Stopp (2) aus."
+      - type: predict
+        code: |
+          import numpy as np
+          print(len(np.linspace(0, 2, 21)))
+        options: ["21", "20", "2", "42"]
+        answer: "21"
+        explanation: Das dritte Argument von `linspace` ist die Anzahl der Punkte.
+  - id: m04-c-liste-vs-array
+    concept: np-array
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.array([1, 2]) + np.array([10, 20]))
+        options: ["[11 22]", "[1, 2, 10, 20]", "[1 2 10 20]", "33"]
+        answer: "[11 22]"
+        explanation: Arrays werden elementweise addiert; Listen würden mit `+` aneinandergehängt.
+      - type: predict
+        code: |
+          print([1, 2] + [10, 20])
+        options: ["[1, 2, 10, 20]", "[11, 22]", "[11 22]"]
+        answer: "[1, 2, 10, 20]"
+        explanation: Das sind Listen – `+` hängt sie aneinander. Zum Rechnen braucht es `np.array`.

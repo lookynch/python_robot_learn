@@ -1,0 +1,239 @@
+id: m11-checkpoint
+title: "Checkpoint: Planen mit Modell"
+kind: checkpoint
+minutes: 15
+goals:
+  - Rollouts vektorisiert berechnen und Aktionsfolgen bewerten
+  - Random Shooting, CEM und MPPI unterscheiden und implementieren
+  - MPC mit Warmstart sicher einsetzen
+concepts: [plan-batch-rollout, plan-random-shooting, plan-mpc, plan-modellfehler, plan-cem, plan-elite, plan-mppi, plan-temperatur, plan-warmstart]
+steps:
+  - type: text
+    body: |
+      ## Checkpoint Modul 11
+
+      Gemischte Aufgaben zu Kosten, Rollouts, Random Shooting, MPC, CEM und MPPI. Bestanden ist der Checkpoint mit mindestens 80 % beim ersten Versuch.
+  - type: predict
+    intro: |
+      Ein MPC-Regler hat nacheinander diese drei Pläne berechnet:
+    code: |
+      plaene = [[0.5, 0.4, 0.1], [-0.2, 0.9, 0.0], [1.5, -1.0, 2.0]]
+      ausgefuehrt = [p[0] for p in plaene]
+      print(ausgefuehrt)
+    options: ["[0.5, -0.2, 1.5]", "[0.5, 0.4, 0.1]", "[0.1, 0.0, 2.0]", "[1.5, -1.0, 2.0]"]
+    answer: "[0.5, -0.2, 1.5]"
+    explanation: |
+      MPC führt von jedem Plan nur die erste Aktion aus und plant dann vom neuen Zustand aus neu.
+  - type: fill
+    prompt: |
+      Ergänze den vektorisierten Rollout für `N` Folgen gleichzeitig (`A` hat die Form `(N, H)`).
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              u = A[___]
+              total = total + cost(___, u)
+              s = dynamics(s, u)
+          return total
+    blanks:
+      - answer: ":, t"
+        options: [":, t", "t", "t, :"]
+      - answer: "s"
+        options: ["s", "s0", "dynamics(s, u)"]
+    tests:
+      - name: Stimmt mit Einzel-Rollouts überein
+        code: |
+          env_t = Pendulum()
+          A_t = np.random.default_rng(7).uniform(-2, 2, size=(3, 6))
+          J_t = rollout_costs(env_t.dynamics, env_t.cost, np.array([1.0, -0.5]), A_t)
+          for i in range(3):
+              s_t, soll = np.array([1.0, -0.5]), 0.0
+              for u in A_t[i]:
+                  soll += env_t.cost(s_t, u)
+                  s_t = env_t.dynamics(s_t, u)
+              assert close(J_t[i], soll), f"Folge {i}: erwartet {soll:.4f}, bekommen {J_t[i]}"
+  - type: predict
+    code: |
+      import numpy as np
+      A = np.array([[1.0, 0.0], [3.0, 2.0], [5.0, 4.0], [0.0, 9.0]])
+      c = np.array([2.0, 0.5, 1.0, 7.0])
+      elite = A[np.argsort(c)[:2]]
+      print(elite.mean(axis=0))
+    options: ["[4. 3.]", "[2. 1.]", "[0.5 1. ]", "[2.25 3.75]"]
+    answer: "[4. 3.]"
+    explanation: |
+      Die zwei billigsten Samples haben die Kosten 0.5 (Zeile 1) und 1.0 (Zeile 2). Ihr Mittelwert pro Komponente ist $(4, 3)$.
+  - type: predict
+    code: |
+      import numpy as np
+      c = np.array([4.0, 2.0, 2.0])
+      w = np.exp(-(c - c.min()) / 1.0)
+      print(np.round(w / w.sum(), 2))
+    options: ["[0.06 0.47 0.47]", "[0.5 0.25 0.25]", "[0.88 0.06 0.06]", "[0. 0.5 0.5]"]
+    answer: "[0.06 0.47 0.47]"
+    explanation: |
+      Die beiden Samples mit den kleinsten Kosten teilen sich fast das ganze Gewicht; das teure bekommt $e^{-2}/(e^{-2} + 2) \approx 0.06$ – wenig, aber nicht 0.
+  - type: parsons
+    prompt: |
+      Ordne die Zeilen zu einer CEM-Suche, die das Minimum von $\lVert a - (1, -1) \rVert^2$ findet.
+    lines:
+      - "import numpy as np"
+      - "rng = np.random.default_rng(0)"
+      - "mu, sigma = np.zeros(2), np.ones(2) * 2.0"
+      - "for it in range(8):"
+      - "    A = mu + sigma * rng.standard_normal((100, 2))"
+      - "    c = np.sum((A - np.array([1.0, -1.0])) ** 2, axis=1)"
+      - "    elite = A[np.argsort(c)[:10]]"
+      - "    mu = elite.mean(axis=0)"
+      - "    sigma = elite.std(axis=0)"
+      - "print(np.round(mu, 1))"
+    distractors:
+      - "    elite = A[np.argsort(c)[-10:]]"
+      - "    mu = elite.mean(axis=1)"
+    expect_output: "[ 1. -1.]"
+  - type: quiz
+    question: |
+      Das Modell eines Roboters unterschätzt die Reibung leicht. Welche Strategie kommt damit am besten zurecht?
+    options:
+      - text: MPC – in jedem Schritt vom gemessenen Zustand aus neu planen und nur die erste Aktion ausführen
+        correct: true
+        why: Die Rückkopplung korrigiert den Modellfehler laufend.
+      - text: Einmal mit sehr vielen Samples planen und die Folge abspielen
+        correct: false
+        why: Offen ausgeführt summieren sich Modellfehler auf – egal wie gut die Suche war.
+      - text: Random Shooting mit möglichst langem Horizont, offen ausgeführt
+        correct: false
+        why: Langer Horizont macht die Zufallssuche schlechter, und offen ausgeführt fehlt die Korrektur.
+  - type: quiz
+    question: |
+      Welche Aussage über die MPPI-Temperatur $\lambda$ stimmt?
+    options:
+      - text: Für $\lambda \to 0$ übernimmt MPPI das beste Sample, für $\lambda \to \infty$ den ungewichteten Mittelwert.
+        correct: true
+        why: Die Gewichte $\exp(-(c_i - c_{\min})/\lambda)$ werden scharf bzw. flach.
+      - text: Großes $\lambda$ macht MPPI wählerischer.
+        correct: false
+        why: Umgekehrt – großes $\lambda$ gleicht die Gewichte an.
+      - text: $\lambda$ bestimmt die Zahl der Elite-Samples.
+        correct: false
+        why: Eine Elite gibt es nur bei CEM. MPPI gewichtet alle Samples.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `verschiebe(mu)` für den Warmstart: Die erste Aktion fällt weg, hinten kommt eine **Null-Aktion** dazu. Das muss für Pläne der Form `(H,)` (Pendel) **und** `(H, 2)` (Arm) funktionieren – die Form bleibt gleich.
+
+      Werkzeuge: `np.zeros_like(x)` erzeugt ein Null-Array derselben Form wie `x`; `np.concatenate([a, b])` hängt Arrays entlang der ersten Achse aneinander.
+    starter: |
+      import numpy as np
+
+      def verschiebe(mu):
+          # dein Code
+          pass
+
+      print(verschiebe(np.array([1.0, 2.0, 3.0])))
+      print(verschiebe(np.array([[1.0, 1.0], [2.0, 2.0]])))
+    solution: |
+      import numpy as np
+
+      def verschiebe(mu):
+          return np.concatenate([mu[1:], np.zeros_like(mu[:1])])
+
+      print(verschiebe(np.array([1.0, 2.0, 3.0])))
+      print(verschiebe(np.array([[1.0, 1.0], [2.0, 2.0]])))
+    tests:
+      - name: Skalare Aktionen
+        code: |
+          r = verschiebe(np.array([1.0, 2.0, 3.0]))
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert np.shape(r) == (3,) and close(r, [2.0, 3.0, 0.0]), f"Erwartet [2, 3, 0], bekommen {r}"
+      - name: Aktionsvektoren
+        code: |
+          r = verschiebe(np.array([[1.0, -1.0], [2.0, 0.5], [3.0, 4.0]]))
+          assert np.shape(r) == (3, 2), f"Form (3, 2) muss erhalten bleiben, bekommen {np.shape(r)}"
+          assert close(r, [[2.0, 0.5], [3.0, 4.0], [0.0, 0.0]]), f"Erwartet [[2, 0.5], [3, 4], [0, 0]], bekommen {r.tolist()}"
+    mutants:
+      - |
+        import numpy as np
+        def verschiebe(mu):
+            return np.append(mu[1:], 0.0)
+      - |
+        import numpy as np
+        def verschiebe(mu):
+            return np.concatenate([np.zeros_like(mu[:1]), mu[:-1]])
+      - |
+        import numpy as np
+        def verschiebe(mu):
+            return mu[1:]
+      - |
+        import numpy as np
+        def verschiebe(mu):
+            return np.concatenate([mu[1:], mu[-1:]])
+    hints:
+      - "Teilziel: Rest des Plans nehmen und eine Null-Aktion derselben Form hinten anhängen."
+      - "`mu[1:]` ist der Plan ohne die erste Aktion. `mu[:1]` hat die Form einer einzelnen Aktion (mit Zeitachse der Länge 1)."
+      - "`np.zeros_like(mu[:1])` erzeugt die passende Null-Aktion."
+      - "`return np.concatenate([mu[1:], np.zeros_like(mu[:1])])`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe **eine** CEM-Iteration `cem_schritt(f, mu, sigma, N, n_elite, rng)`: `N` Samples aus $N(\mu, \sigma^2)$ ziehen (`rng.standard_normal`), mit `f` bewerten, die `n_elite` besten wählen und `(mu_neu, sigma_neu)` zurückgeben.
+    starter: |
+      import numpy as np
+
+      def cem_schritt(f, mu, sigma, N, n_elite, rng):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def cem_schritt(f, mu, sigma, N, n_elite, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          elite = A[np.argsort(f(A))[:n_elite]]
+          return elite.mean(axis=0), elite.std(axis=0)
+    tests:
+      - name: Konvergiert auf bekanntes Minimum
+        code: |
+          ziel_t = np.array([2.0, -1.0, 0.0, 0.5])
+          def f_t(A):
+              return np.sum((A - ziel_t) ** 2, axis=1)
+          rng_t = np.random.default_rng(3)
+          mu_t, sigma_t = np.zeros(4), np.full(4, 2.0)
+          for _ in range(12):
+              r = cem_schritt(f_t, mu_t, sigma_t, 150, 15, rng_t)
+              assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+              mu_t, sigma_t = r
+          assert close(mu_t, ziel_t, tol=0.05), f"mu sollte gegen {ziel_t} konvergieren, ist {np.round(mu_t, 3)}"
+      - name: Ein Schritt verkleinert sigma
+        code: |
+          def f_t(A):
+              return np.sum(A ** 2, axis=1)
+          mu_t, sigma_t = cem_schritt(f_t, np.zeros(3), np.ones(3), 200, 20, np.random.default_rng(4))
+          assert np.shape(sigma_t) == (3,) and np.all(sigma_t < 0.8), f"sigma sollte nach einem Schritt deutlich unter 1 liegen, ist {np.round(sigma_t, 3)}"
+    mutants:
+      - |
+        import numpy as np
+        def cem_schritt(f, mu, sigma, N, n_elite, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            elite = A[np.argsort(f(A))[:n_elite]]
+            return elite.mean(axis=0), sigma
+      - |
+        import numpy as np
+        def cem_schritt(f, mu, sigma, N, n_elite, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            elite = A[np.argsort(-f(A))[:n_elite]]
+            return elite.mean(axis=0), elite.std(axis=0)
+      - |
+        import numpy as np
+        def cem_schritt(f, mu, sigma, N, n_elite, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            elite = A[np.argsort(f(A))[:n_elite]]
+            return A.mean(axis=0), elite.std(axis=0)
+    hints:
+      - "Teilziel: sampeln → bewerten → Elite → Mittelwert und Streuung der Elite."
+      - "`np.argsort` sortiert aufsteigend; gemittelt wird über die Samples (`axis=0`)."
+      - "`A = mu + sigma * rng.standard_normal((N,) + mu.shape)` und `elite = A[np.argsort(f(A))[:n_elite]]`"
+      - "`return elite.mean(axis=0), elite.std(axis=0)`"

@@ -1,0 +1,465 @@
+id: m09-pd-pid
+title: PD und PID – dämpfen und nachführen
+minutes: 10
+goals:
+  - Mit dem D-Anteil Überschwingen und Ausschwingen reduzieren
+  - Mit dem I-Anteil eine bleibende Regelabweichung beseitigen
+  - Regler-Parameter nach Kriterien (Zeit, Überschwingen) einstellen
+concepts: [pd-regler, pid-regler]
+steps:
+  - type: text
+    body: |
+      ## Drei Anteile
+
+      $$\tau = K_p\,e \;+\; K_i \int_0^t e\,dt \;-\; K_d\,\dot q$$
+
+      | Anteil | wirkt wie | hilft gegen |
+      |---|---|---|
+      | P: $K_p e$ | Feder | großen Fehler |
+      | D: $-K_d \dot q$ | Dämpfer | Überschwingen, langes Ausschwingen |
+      | I: $K_i \int e\,dt$ | „Gedächtnis“ | bleibende Abweichung bei Dauerlast |
+
+      Bei konstantem Sollwert ist $\dot e = -\dot q$. Deshalb nimmt man für den D-Anteil meist direkt die gemessene Geschwindigkeit. Das Integral wird im Code einfach aufsummiert: `integral += e * dt`.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def step(state, tau, dt, I=1.0, b=1.0):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      def simulate(Kp, Kd, q_ref=1.0, T=3.0, dt=0.01):
+          state, qs = np.array([0.0, 0.0]), [0.0]
+          for k in range(round(T / dt)):
+              tau = Kp * (q_ref - state[0]) - Kd * state[1]
+              state = step(state, tau, dt)
+              qs.append(state[0])
+          return np.array(qs)
+
+      t = np.arange(301) * 0.01
+      fig = lab.Figure(title="P vs. PD (Kp = 50)", xlabel="t (s)", ylabel="q (rad)")
+      fig.line(simulate(50.0, 0.0), x=t, label="P")
+      fig.line(simulate(50.0, 13.0), x=t, label="PD, Kd = 13")
+      fig.hline(1.0, label="Soll")
+      fig.show()
+    subgoals:
+      - lines: [4, 7]
+        label: Strecke festlegen
+      - lines: [9, 15]
+        label: Regelschleife mit P- und D-Anteil
+      - lines: [17, 22]
+        label: Varianten im selben Plot vergleichen
+    after: |
+      Mit $K_d = 13$ fährt das Gelenk in unter einer Sekunde ohne Überschwingen auf den Sollwert. Die Regel dahinter (lineare Schwingung): Dämpfungsgrad $\zeta = \frac{b + K_d}{2\sqrt{I K_p}}$, hier $\zeta = 14/(2\sqrt{50}) \approx 1$ – **aperiodischer Grenzfall**.
+  - type: explain
+    question: |
+      Warum hilft beim reinen P-Regler ein **größeres** $K_p$ nicht gegen das lange Ausschwingen?
+    options:
+      - text: Die Abklingrate hängt nur von der Dämpfung ab ($b/2I$); größeres $K_p$ macht die Schwingung schneller, aber nicht kürzer.
+        correct: true
+        why: Die Einhüllende fällt mit $e^{-bt/(2I)}$, unabhängig von $K_p$. Erst $K_d$ erhöht die effektive Dämpfung auf $b + K_d$.
+      - text: Größeres $K_p$ macht das System instabil.
+        correct: false
+        why: Dieses idealisierte Gelenk bleibt für jedes $K_p > 0$ stabil – es schwingt nur heftiger. (Mit Verzögerungen oder Abtastung kann zu großes $K_p$ allerdings tatsächlich instabil werden.)
+      - text: Das Moment ist begrenzt.
+        correct: false
+        why: In diesem Modell gibt es keine Begrenzung.
+  - type: example
+    title: Dauerlast und I-Anteil
+    intro: |
+      Jetzt hängt eine konstante Last am Gelenk: $\tau_{\text{last}} = -2$ N·m (z. B. ein Gewicht). PD gegen PID.
+    code: |
+      import numpy as np
+      import lab
+
+      def step(state, tau, dt, I=1.0, b=1.0):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      def simulate(Kp, Ki, Kd, load, q_ref=1.0, T=8.0, dt=0.01):
+          state, integral, qs = np.array([0.0, 0.0]), 0.0, [0.0]
+          for k in range(round(T / dt)):
+              e = q_ref - state[0]
+              integral += e * dt
+              tau = Kp * e + Ki * integral - Kd * state[1]
+              state = step(state, tau + load, dt)
+              qs.append(state[0])
+          return np.array(qs)
+
+      t = np.arange(801) * 0.01
+      fig = lab.Figure(title="Last -2 N·m: PD vs. PID", xlabel="t (s)", ylabel="q (rad)")
+      fig.line(simulate(20.0, 0.0, 8.0, -2.0), x=t, label="PD")
+      fig.line(simulate(20.0, 10.0, 8.0, -2.0), x=t, label="PID, Ki = 10")
+      fig.hline(1.0, label="Soll")
+      fig.show()
+    subgoals:
+      - lines: [10, 13]
+        label: Fehler aufintegrieren
+      - lines: [14, 15]
+        label: PID-Moment plus Last
+      - lines: [18, 23]
+        label: PD und PID vergleichen
+    after: |
+      PD bleibt unter dem Sollwert hängen, PID zieht langsam nach: Solange ein Fehler bleibt, wächst das Integral – bis es die Last genau ausgleicht.
+  - type: predict
+    intro: |
+      Wie groß ist die bleibende Abweichung $q_{\text{ref}} - q$ mit dem **PD**-Regler ($K_p = 20$) unter der Last $-2$ N·m?
+    code: |
+      import numpy as np
+
+      def step(state, tau, dt, I=1.0, b=1.0):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      state = np.array([0.0, 0.0])
+      for k in range(500):
+          tau = 20.0 * (1.0 - state[0]) - 8.0 * state[1]
+          state = step(state, tau - 2.0, 0.01)
+      print(round(1.0 - state[0], 2))
+    options: ["0.1", "0.0", "2.0", "0.05"]
+    answer: "0.1"
+    explanation: |
+      In Ruhe muss das Reglermoment die Last tragen: $K_p\,e = 2$ → $e = 2/20 = 0.1$ rad. Größeres $K_p$ verkleinert die Abweichung, beseitigt sie aber nie – das kann nur der I-Anteil.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den PID-Regler, sodass das Gelenk trotz Last den Sollwert 1.0 erreicht.
+    code: |
+      import numpy as np
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - qd)
+          return np.array([q + dt * qd, qd])
+
+      Kp, Ki, Kd, dt = 20.0, 10.0, 8.0, 0.01
+      state, integral = np.array([0.0, 0.0]), 0.0
+      for k in range(1000):
+          e = 1.0 - state[0]
+          ___
+          tau = ___
+          state = step(state, tau - 2.0, dt)
+      print(round(state[0], 2))
+    blanks:
+      - answer: "integral += e * dt"
+        options: ["integral += e * dt", "integral = e * dt", "integral += e"]
+      - answer: "Kp * e + Ki * integral - Kd * state[1]"
+        options: ["Kp * e + Ki * integral - Kd * state[1]", "Kp * e + Ki * integral + Kd * state[1]", "Kp * e + Ki * integral"]
+    expect_output: "1.0"
+    explanation: |
+      `integral = e * dt` vergisst die Vergangenheit (kein I-Anteil, Ergebnis 0.9). `integral += e` ohne `dt` macht $K_i$ effektiv 100-mal größer – der Kreis wird instabil. `+ Kd * state[1]` „entdämpft“: Das System schaukelt sich auf.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01)`: Start bei $q = 0$, $\dot q = 0$; in jedem Schritt PID-Moment berechnen, `load` dazuaddieren, `step` aufrufen. Rückgabe: Array aller Winkel inklusive Start.
+    starter: |
+      import numpy as np
+      import lab
+
+      def step(state, tau, dt, I=1.0, b=1.0):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      def simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01):
+          state, integral = np.array([0.0, 0.0]), 0.0
+          qs = [state[0]]
+          # PID-Schleife
+          return np.array(qs)
+
+      fig = lab.Figure(title="Mein PID", xlabel="Schritt", ylabel="q (rad)")
+      fig.line(simulate_pid(20.0, 10.0, 8.0, load=-2.0), label="PID")
+      fig.hline(1.0, label="Soll")
+      fig.show()
+    solution: |
+      import numpy as np
+      import lab
+
+      def step(state, tau, dt, I=1.0, b=1.0):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd) / I
+          return np.array([q + dt * qd, qd])
+
+      def simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01):
+          state, integral = np.array([0.0, 0.0]), 0.0
+          qs = [state[0]]
+          for k in range(round(T / dt)):
+              e = q_ref - state[0]
+              integral += e * dt
+              tau = Kp * e + Ki * integral - Kd * state[1]
+              state = step(state, tau + load, dt)
+              qs.append(state[0])
+          return np.array(qs)
+
+      fig = lab.Figure(title="Mein PID", xlabel="Schritt", ylabel="q (rad)")
+      fig.line(simulate_pid(20.0, 10.0, 8.0, load=-2.0), label="PID")
+      fig.hline(1.0, label="Soll")
+      fig.show()
+    tests:
+      - name: Länge und Start
+        code: |
+          qs = simulate_pid(20.0, 0.0, 8.0, T=1.0)
+          assert len(qs) == 101 and qs[0] == 0.0, f"Erwartet 101 Werte mit Start 0, bekommen {len(qs)} Werte, Start {qs[0]}"
+      - name: PD unter Last hängt durch
+        code: |
+          qs = simulate_pid(20.0, 0.0, 8.0, load=-2.0)
+          assert abs((1.0 - qs[-1]) - 0.1) < 0.01, f"Ohne I-Anteil sollte die bleibende Abweichung load/Kp = 0.1 sein, ist {1.0 - qs[-1]:.3f} (Last addiert?)"
+      - name: PID erreicht den Sollwert trotz Last
+        code: |
+          for load, q_ref in [(-2.0, 1.0), (1.5, -0.5)]:
+              qs = simulate_pid(20.0, 10.0, 8.0, load=load, q_ref=q_ref)
+              assert abs(qs[-1] - q_ref) < 0.01, f"Last {load}, Soll {q_ref}: nach 8 s ist q = {qs[-1]:.3f} (Integral mit dt? Vorzeichen des D-Anteils?)"
+      - name: D-Anteil verhindert Überschwingen
+        code: |
+          qs = simulate_pid(50.0, 0.0, 13.0, T=3.0)
+          assert qs.max() < 1.02, f"Mit Kp=50, Kd=13 sollte q kaum über 1 gehen, Maximum {qs.max():.3f}"
+    mutants:
+      - |
+        import numpy as np
+        def step(state, tau, dt, I=1.0, b=1.0):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01):
+            state, integral = np.array([0.0, 0.0]), 0.0
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                e = q_ref - state[0]
+                integral += e
+                tau = Kp * e + Ki * integral - Kd * state[1]
+                state = step(state, tau + load, dt)
+                qs.append(state[0])
+            return np.array(qs)
+      - |
+        import numpy as np
+        def step(state, tau, dt, I=1.0, b=1.0):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01):
+            state = np.array([0.0, 0.0])
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                integral = 0.0
+                e = q_ref - state[0]
+                integral += e * dt
+                tau = Kp * e + Ki * integral - Kd * state[1]
+                state = step(state, tau + load, dt)
+                qs.append(state[0])
+            return np.array(qs)
+      - |
+        import numpy as np
+        def step(state, tau, dt, I=1.0, b=1.0):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01):
+            state, integral = np.array([0.0, 0.0]), 0.0
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                e = q_ref - state[0]
+                integral += e * dt
+                tau = Kp * e + Ki * integral + Kd * state[1]
+                state = step(state, tau + load, dt)
+                qs.append(state[0])
+            return np.array(qs)
+      - |
+        import numpy as np
+        def step(state, tau, dt, I=1.0, b=1.0):
+            q, qd = state
+            qd = qd + dt * (tau - b * qd) / I
+            return np.array([q + dt * qd, qd])
+        def simulate_pid(Kp, Ki, Kd, load=0.0, q_ref=1.0, T=8.0, dt=0.01):
+            state, integral = np.array([0.0, 0.0]), 0.0
+            qs = [state[0]]
+            for k in range(round(T / dt)):
+                e = q_ref - state[0]
+                integral += e * dt
+                tau = Kp * e + Ki * integral - Kd * state[1]
+                state = step(state, tau, dt)
+                qs.append(state[0])
+            return np.array(qs)
+    hints:
+      - "Teilziel: Fehler aufintegrieren, dann PID-Moment plus Last an `step` geben."
+      - "Das Integral lebt **außerhalb** der Schleife und wächst um `e * dt` pro Schritt. D-Anteil: `- Kd * state[1]`."
+      - |
+        ```python
+        for k in range(round(T / dt)):
+            e = q_ref - state[0]
+            integral += e * dt
+            ...
+        ```
+      - "`tau = Kp * e + Ki * integral - Kd * state[1]`, dann `state = step(state, tau + load, dt)` und `qs.append(state[0])`."
+    explanation: |
+      Achtung in der Praxis: Ist das Motormoment begrenzt (Sättigung, siehe nächste Lektion), wächst das Integral weiter, obwohl der Motor schon am Anschlag ist. Dieses **Windup** führt später zu großem Überschwingen. Gegenmittel (Anti-Windup): das Integral begrenzen oder nicht weiter aufsummieren, solange die Stellgröße sättigt.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Stelle den PD-Regler (ohne Last) ein: Ändere `Kp` und `Kd` so, dass
+
+      - $q$ nach **1.5 s** dauerhaft innerhalb $\pm 0.02$ rad um den Sollwert 1.0 bleibt,
+      - das Überschwingen unter **5 %** liegt ($q_{\max} < 1.05$).
+
+      Tipp: Für $\zeta \approx 1$ gilt $(b + K_d)^2 \approx 4 I K_p$ mit $I = b = 1$.
+    starter: |
+      import numpy as np
+      import lab
+
+      Kp = 5.0
+      Kd = 0.0
+
+      def simulate(Kp, Kd, T=3.0, dt=0.01):
+          state, qs = np.array([0.0, 0.0]), [0.0]
+          for k in range(round(T / dt)):
+              tau = Kp * (1.0 - state[0]) - Kd * state[1]
+              qd = state[1] + dt * (tau - state[1])
+              state = np.array([state[0] + dt * qd, qd])
+              qs.append(state[0])
+          return np.array(qs)
+
+      qs = simulate(Kp, Kd)
+      fig = lab.Figure(title=f"Kp = {Kp}, Kd = {Kd}", xlabel="t (s)", ylabel="q (rad)")
+      fig.line(qs, x=np.arange(len(qs)) * 0.01, label="Ist")
+      fig.hline(1.0, label="Soll")
+      fig.show()
+    solution: |
+      import numpy as np
+      import lab
+
+      Kp = 50.0
+      Kd = 13.0
+
+      def simulate(Kp, Kd, T=3.0, dt=0.01):
+          state, qs = np.array([0.0, 0.0]), [0.0]
+          for k in range(round(T / dt)):
+              tau = Kp * (1.0 - state[0]) - Kd * state[1]
+              qd = state[1] + dt * (tau - state[1])
+              state = np.array([state[0] + dt * qd, qd])
+              qs.append(state[0])
+          return np.array(qs)
+
+      qs = simulate(Kp, Kd)
+      fig = lab.Figure(title=f"Kp = {Kp}, Kd = {Kd}", xlabel="t (s)", ylabel="q (rad)")
+      fig.line(qs, x=np.arange(len(qs)) * 0.01, label="Ist")
+      fig.hline(1.0, label="Soll")
+      fig.show()
+    tests:
+      - name: Überschwingen unter 5 %
+        code: |
+          import numpy as np
+          def _sim(Kp, Kd, T=3.0, dt=0.01):
+              s, out = np.array([0.0, 0.0]), [0.0]
+              for k in range(round(T / dt)):
+                  tau = Kp * (1.0 - s[0]) - Kd * s[1]
+                  qd = s[1] + dt * (tau - s[1])
+                  s = np.array([s[0] + dt * qd, qd])
+                  out.append(s[0])
+              return np.array(out)
+          qs = _sim(float(Kp), float(Kd))
+          assert np.all(np.isfinite(qs)), "Die Simulation ist explodiert – Kp oder Kd extrem groß? Mit dt = 0.01 s wird die Simulation dann numerisch instabil."
+          assert qs.max() < 1.05, f"Maximum {qs.max():.3f} – Überschwingen über 5 %. Mehr Kd?"
+      - name: Nach 1.5 s eingeschwungen
+        code: |
+          import numpy as np
+          def _sim(Kp, Kd, T=3.0, dt=0.01):
+              s, out = np.array([0.0, 0.0]), [0.0]
+              for k in range(round(T / dt)):
+                  tau = Kp * (1.0 - s[0]) - Kd * s[1]
+                  qd = s[1] + dt * (tau - s[1])
+                  s = np.array([s[0] + dt * qd, qd])
+                  out.append(s[0])
+              return np.array(out)
+          qs = _sim(float(Kp), float(Kd))
+          late = np.abs(qs[150:] - 1.0).max()
+          assert late < 0.02, f"Nach 1.5 s weicht q noch bis zu {late:.3f} rad ab (erlaubt 0.02). Zu langsam (Kp größer) oder zu schwingend (Kd größer)?"
+    mutants:
+      - |
+        Kp = 50.0
+        Kd = 0.0
+      - |
+        Kp = 1.0
+        Kd = 10.0
+      - |
+        Kp = 5.0
+        Kd = 2.0
+    hints:
+      - "Teilziel: zuerst schnell genug (Kp), dann genug Dämpfung (Kd)."
+      - "Größeres $K_p$ macht die Bewegung schneller, größeres $K_d$ dämpft. Probiere z. B. $K_p$ zwischen 20 und 100."
+      - "Für $\\zeta \\approx 1$: $K_d \\approx 2\\sqrt{K_p} - 1$."
+      - "Zum Beispiel `Kp = 50.0` und `Kd = 13.0`."
+    explanation: |
+      Es gibt viele richtige Paare – z. B. auch $K_p = 100$, $K_d = 19$. Reale Grenzen sind Motormoment, Sensorrauschen (ein großes $K_d$ verstärkt Rauschen in $\dot q$) und Abtastrate.
+  - type: quiz
+    question: |
+      Ein Gelenk hält unter Dauerlast 0.05 rad unter dem Sollwert. Welcher Anteil beseitigt das?
+    options:
+      - text: Der I-Anteil
+        correct: true
+        why: Das Integral wächst, solange ein Fehler bleibt, bis es die Last ausgleicht.
+      - text: Ein größerer D-Anteil
+        correct: false
+        why: In Ruhe ist $\dot q = 0$ – der D-Anteil liefert dann kein Moment.
+      - text: Ein kleineres $K_p$
+        correct: false
+        why: Die bleibende Abweichung ist Last$/K_p$ – kleineres $K_p$ macht sie **größer**.
+cards:
+  - id: m09-c-pid-rollen
+    concept: pid-regler
+    variants:
+      - type: quiz
+        question: Welcher Regleranteil wirkt wie ein **Dämpfer**?
+        options:
+          - text: D
+            correct: true
+            why: $-K_d \dot q$ bremst proportional zur Geschwindigkeit.
+          - text: P
+            correct: false
+            why: P wirkt wie eine Feder.
+          - text: I
+            correct: false
+            why: I summiert den Fehler über die Zeit auf.
+      - type: quiz
+        question: Welcher Anteil liefert auch dann noch Moment, wenn der Fehler gerade null ist und das Gelenk ruht?
+        options:
+          - text: I
+            correct: true
+            why: Das Integral „erinnert“ sich an vergangene Fehler.
+          - text: P
+            correct: false
+            why: $K_p \cdot 0 = 0$.
+          - text: D
+            correct: false
+            why: In Ruhe ist $\dot q = 0$.
+      - type: quiz
+        question: Ein PD-Regler schwingt stark über. Was hilft am direktesten?
+        options:
+          - text: $K_d$ erhöhen
+            correct: true
+            why: Mehr Dämpfung reduziert Überschwingen.
+          - text: $K_p$ erhöhen
+            correct: false
+            why: Steifere Feder – eher mehr Schwingen (kleineres $\zeta$).
+          - text: $K_i$ hinzufügen
+            correct: false
+            why: Der I-Anteil verstärkt Überschwingen eher.
+  - id: m09-c-bleibende-abweichung
+    concept: pd-regler
+    variants:
+      - type: predict
+        code: |
+          Kp, load = 40.0, -2.0
+          print(round(-load / Kp, 3))
+        options: ["0.05", "0.0", "2.0", "0.5"]
+        answer: "0.05"
+        explanation: In Ruhe gilt $K_p e = -\text{Last}$, also $e = 2/40$.
+      - type: predict
+        code: |
+          Kp, load = 10.0, -3.0
+          print(round(-load / Kp, 3))
+        options: ["0.3", "0.0", "3.0", "0.03"]
+        answer: "0.3"
+        explanation: $e = 3/10$ rad – mit kleinem $K_p$ hängt das Gelenk deutlich durch.

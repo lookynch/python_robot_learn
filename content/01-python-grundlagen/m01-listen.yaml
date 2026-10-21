@@ -1,0 +1,315 @@
+id: m01-listen
+title: Listen – viele Werte unter einem Namen
+minutes: 10
+goals:
+  - Listen anlegen, Elemente per Index lesen und mit `append` erweitern
+  - Mit `for x in liste` über alle Elemente laufen
+  - Summe, Mittelwert und Maximum selbst berechnen
+concepts: [liste-grundlagen, liste-durchlaufen]
+steps:
+  - type: text
+    body: |
+      ## Mehrere Werte in einer Variablen
+
+      Ein Arm mit drei Gelenken hat drei Winkel. Statt `w1`, `w2`, `w3` nimmt man eine **Liste** (*list*):
+
+      ```python
+      winkel = [0.0, 1.57, -0.5]
+      ```
+
+      - Eckige Klammern, Elemente durch Kommas getrennt.
+      - `winkel[0]` ist das **erste** Element – wie bei Strings zählt der Index ab 0.
+      - `len(winkel)` ist die Anzahl der Elemente (hier 3).
+      - `winkel.append(3.14)` hängt ein Element **hinten an**. `append` ist eine **Methode** (*method*): eine Funktion, die zu einem Wert gehört und mit Punkt dahinter aufgerufen wird.
+  - type: example
+    code: |
+      winkel = [0.0, 1.57, -0.5]
+      print(winkel[1])
+      print(len(winkel))
+      winkel.append(3.14)
+      print(winkel)
+      print(len(winkel))
+    subgoals:
+      - lines: 1
+        label: Liste anlegen
+      - lines: [2, 3]
+        label: Element lesen und zählen
+      - lines: [4, 6]
+        label: Element anhängen
+    after: |
+      `append` verändert die Liste selbst – danach hat sie 4 Elemente. Man schreibt **nicht** `winkel = winkel.append(…)`: `append` liefert kein Ergebnis zurück, `winkel` wäre danach `None` („nichts“) und die Liste verloren.
+  - type: predict
+    code: |
+      gelenke = ["Basis", "Schulter", "Ellbogen"]
+      print(gelenke[1])
+      print(gelenke[len(gelenke) - 1])
+    options:
+      - |
+        Schulter
+        Ellbogen
+      - |
+        Basis
+        Ellbogen
+      - |
+        Schulter
+        Schulter
+      - |
+        Basis
+        Schulter
+    answer: |
+      Schulter
+      Ellbogen
+    explanation: |
+      Index 1 ist das zweite Element. `len(gelenke) - 1` ist 2, der Index des letzten Elements.
+  - type: quiz
+    question: Was passiert hier?
+    code: |
+      gelenke = ["Basis", "Schulter", "Ellbogen"]
+      print(gelenke[3])
+    options:
+      - text: "`IndexError` – die Liste hat nur die Indizes 0, 1, 2."
+        correct: true
+        why: "Drei Elemente → letzter Index ist 2. Python meldet `IndexError: list index out of range`."
+      - text: "Es wird `Ellbogen` ausgegeben."
+        correct: false
+        why: "`Ellbogen` ist das 3. Element, hat aber den Index 2."
+      - text: Es wird eine leere Zeile ausgegeben.
+        correct: false
+        why: Ein ungültiger Index ist immer ein Fehler, nie ein leerer Wert.
+  - type: text
+    body: |
+      ## Über alle Elemente laufen
+
+      `for` funktioniert nicht nur mit `range`, sondern direkt mit einer Liste:
+
+      ```python
+      for w in winkel:
+          print(w)
+      ```
+
+      `w` ist in jedem Durchlauf **das nächste Element** (nicht sein Index). Zusammen mit dem Akkumulator-Muster kannst du so alles selbst berechnen, was man über Messreihen wissen will: Summe, Mittelwert, Maximum.
+  - type: trace
+    code: |
+      messungen = [3, 7, 2]
+      summe = 0
+      for m in messungen:
+          summe = summe + m
+      print(summe / len(messungen))
+    questions:
+      - line: 4
+        hit: 2
+        var: summe
+        answer: "10"
+        prompt: Zeile 4 lief zum 2. Mal. Welchen Wert hat `summe`?
+      - line: 4
+        hit: 2
+        var: m
+        answer: "7"
+        prompt: Welchen Wert hat `m` dabei?
+    after: |
+      `m` ist nacheinander 3, 7, 2 – die Elemente selbst. Am Ende: 12 / 3 = 4.0.
+  - type: predict
+    intro: |
+      Diese Schleife soll das Maximum finden.
+    code: |
+      werte = [-4, -1, -7]
+      groesster = 0
+      for w in werte:
+          if w > groesster:
+              groesster = w
+      print(groesster)
+    options: ["-1", "0", "-7", "-4"]
+    answer: "0"
+    explanation: |
+      Kein Wert ist größer als der Startwert 0, also wird `groesster` nie geändert. Das Programm meldet ein Maximum, das gar nicht in der Liste vorkommt.
+  - type: explain
+    question: |
+      Wie startet man die Maximumsuche richtig?
+    options:
+      - text: Mit `groesster = werte[0]` – dem ersten Element der Liste.
+        correct: true
+        why: Das Maximum ist mindestens so groß wie irgendein Element. Mit einem echten Element zu starten funktioniert auch bei negativen Werten.
+      - text: Mit `groesster = 0`, das reicht immer.
+        correct: false
+        why: Nur, wenn alle Werte positiv sind – wie eben gesehen, nicht bei negativen.
+      - text: Mit `groesster = werte[len(werte)]` – dem letzten Element.
+        correct: false
+        why: Mit einem echten Element zu starten wäre richtig, aber `werte[len(werte)]` ist ein `IndexError`. Das letzte Element ist `werte[len(werte) - 1]`.
+  - type: fill
+    fading: true
+    prompt: |
+      Baue die Liste der Quadratzahlen `[1, 4, 9]` in einer Schleife auf.
+    code: |
+      quadrate = ___
+      for i in range(1, 4):
+          quadrate.___(i ** 2)
+      print(quadrate)
+    blanks:
+      - answer: "[]"
+        options: ["[]", "0", '""']
+      - answer: append
+        options: [append, add, push, insert]
+    expect_output: "[1, 4, 9]"
+    explanation: |
+      `[]` ist eine leere Liste. Listen haben die Methode `append`; `add` und `push` gibt es dafür in Python nicht (`AttributeError`), `insert` braucht zusätzlich eine Position.
+  - type: parsons
+    fading: true
+    prompt: |
+      Berechne den Mittelwert der Zykluszeiten (Ausgabe `1.0`). Bringe die Zeilen in Reihenfolge und Einrückung.
+    lines:
+      - "zeiten = [1.2, 0.8, 1.0]"
+      - "summe = 0"
+      - "for t in zeiten:"
+      - "    summe = summe + t"
+      - "print(summe / len(zeiten))"
+    distractors:
+      - "for t in zeiten"
+      - "print(summe / len(t))"
+    expect_output: "1.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Finde die **höchste** Temperatur in der Liste, ohne die eingebaute Funktion `max` zu benutzen. Speichere sie in `maximum` und gib sie aus.
+
+      Erwartete Ausgabe:
+      ```
+      -1.2
+      ```
+    starter: |
+      temperaturen = [-3.5, -1.2, -8.0, -1.9]
+      # maximum = ...
+    solution: |
+      temperaturen = [-3.5, -1.2, -8.0, -1.9]
+      maximum = temperaturen[0]
+      for t in temperaturen:
+          if t > maximum:
+              maximum = t
+      print(maximum)
+    tests:
+      - name: Maximum stimmt
+        code: |
+          assert "maximum" in globals(), "Es gibt noch keine Variable maximum."
+          assert maximum == -1.2, f"Das Maximum ist -1.2, maximum ist aber {maximum}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["-1.2"], f"Erwartete Ausgabe -1.2, bekommen {lines()}"
+    mutants:
+      - |
+        temperaturen = [-3.5, -1.2, -8.0, -1.9]
+        maximum = 0
+        for t in temperaturen:
+            if t > maximum:
+                maximum = t
+        print(maximum)
+      - |
+        temperaturen = [-3.5, -1.2, -8.0, -1.9]
+        maximum = temperaturen[0]
+        for t in temperaturen:
+            if t < maximum:
+                maximum = t
+        print(maximum)
+      - |
+        temperaturen = [-3.5, -1.2, -8.0, -1.9]
+        maximum = temperaturen[0]
+        for t in temperaturen:
+            maximum = t
+        print(maximum)
+    hints:
+      - "Teilziel: Startwert aus der Liste → jedes Element vergleichen → bei Bedarf ersetzen."
+      - Merke dir den bisher größten Wert. Ist das aktuelle Element größer, wird es der neue größte Wert.
+      - |
+        ```python
+        maximum = temperaturen[0]
+        for t in temperaturen:
+            if ...
+        ```
+      - |
+        ```python
+        maximum = temperaturen[0]
+        for t in temperaturen:
+            if t > maximum:
+                maximum = t
+        print(maximum)
+        ```
+    explanation: |
+      Später nimmst du `max(temperaturen)` – aber genau dieses Muster (bisher Bestes merken und vergleichen) steckt auch in Suchverfahren und in der Auswahl der besten Aktion beim Reinforcement Learning.
+  - type: quiz
+    question: Eine Liste `daten` hat 8 Elemente. Welcher Ausdruck liefert das letzte?
+    options:
+      - text: "`daten[7]` bzw. `daten[len(daten) - 1]`"
+        correct: true
+        why: Bei 8 Elementen laufen die Indizes von 0 bis 7.
+      - text: "`daten[8]`"
+        correct: false
+        why: Index 8 gibt es nicht – `IndexError`.
+      - text: "`daten[len(daten)]`"
+        correct: false
+        why: Das ist `daten[8]` – ebenfalls ein `IndexError`.
+cards:
+  - id: m01-c-liste-index
+    concept: liste-grundlagen
+    variants:
+      - type: predict
+        code: |
+          xs = [10, 20, 30, 40]
+          print(xs[2], len(xs))
+        options: ["30 4", "20 4", "30 3", "20 3"]
+        answer: "30 4"
+        explanation: Index 2 ist das dritte Element; die Liste hat 4 Elemente.
+      - type: predict
+        code: |
+          xs = [5]
+          xs.append(6)
+          xs.append(7)
+          print(xs, len(xs))
+        options: ["[5, 6, 7] 3", "[7, 6, 5] 3", "[5, 6, 7] 1"]
+        answer: "[5, 6, 7] 3"
+        explanation: "`append` hängt hinten an und verlängert die Liste."
+  - id: m01-c-liste-summe
+    concept: liste-durchlaufen
+    variants:
+      - type: predict
+        code: |
+          s = 0
+          for x in [4, 1, 5]:
+              s = s + x
+          print(s)
+        options: ["10", "3", "5", "2"]
+        answer: "10"
+        explanation: "`x` ist jedes Element selbst (4, 1, 5), nicht der Index – Summe 10."
+      - type: predict
+        code: |
+          zaehler = 0
+          for x in [3, 8, 1, 9]:
+              if x > 2:
+                  zaehler = zaehler + 1
+          print(zaehler)
+        options: ["3", "4", "2", "21"]
+        answer: "3"
+        explanation: 3, 8 und 9 sind größer als 2 – drei Treffer.
+  - id: m01-c-maximum-start
+    concept: liste-durchlaufen
+    variants:
+      - type: quiz
+        question: Warum startet man die Maximumsuche mit `m = liste[0]` statt mit `m = 0`?
+        options:
+          - text: Bei lauter negativen Werten bliebe `m = 0` stehen – ein Wert, der gar nicht in der Liste ist.
+            correct: true
+            why: Ein echtes Element als Startwert ist immer ein gültiger Kandidat.
+          - text: Weil `0` als Variablenwert nicht erlaubt ist.
+            correct: false
+            why: 0 ist ein völlig normaler Wert – er ist nur der falsche Startwert.
+          - text: Weil die Schleife sonst nicht läuft.
+            correct: false
+            why: Die Schleife läuft so oder so über alle Elemente.
+      - type: predict
+        code: |
+          werte = [-2, -5, -1]
+          m = werte[0]
+          for w in werte:
+              if w > m:
+                  m = w
+          print(m)
+        options: ["-1", "0", "-2", "-5"]
+        answer: "-1"
+        explanation: "Start mit dem echten Element -2; nur -1 ist größer und ersetzt es. Mit `m = 0` käme fälschlich 0 heraus."

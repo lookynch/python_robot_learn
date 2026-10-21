@@ -1,0 +1,363 @@
+id: m13-bellman
+title: Wertfunktion und Bellman-Gleichung
+minutes: 12
+goals:
+  - Die Wertfunktion $V^\pi$ als erwarteten Return deuten
+  - Einen Bellman-Backup von Hand und in Code berechnen
+  - Policy Evaluation iterativ implementieren und mit der exakten Lösung prüfen
+concepts: [dp-wertfunktion, dp-policy-evaluation]
+steps:
+  - type: text
+    body: |
+      ## Wie gut ist ein Zustand?
+
+      Die **Wertfunktion** (value function) $V^\pi(s)$ ist der erwartete Return, wenn man in $s$ startet und der Policy $\pi$ folgt. Endzustände haben den Wert 0.
+
+      Ein Schritt weiter gedacht: Wert jetzt = erwartete Belohnung + diskontierter Wert danach. Das ist die **Bellman-Erwartungsgleichung**:
+
+      $$V^\pi(s) = \sum_a \pi(a \mid s) \sum_{(p,\, s',\, r,\, \text{done})} p\,\big[\,r + \gamma\, V^\pi(s')\cdot(1 - \text{done})\,\big]$$
+
+      Die innere Summe läuft genau über die Liste `env.P[s][a]`. Ist die Episode vorbei (`done`), kommt kein Wert mehr dazu.
+  - type: predict
+    intro: |
+      Ein Bellman-Backup von Hand: Aus Zustand A kommt man mit 0,5 nach B, mit 0,5 bleibt man in A, beides mit Belohnung −1.
+    code: |
+      gamma = 0.9
+      V = {"A": 0.0, "B": 10.0}
+      v_A = 0.5 * (-1 + gamma * V["B"]) + 0.5 * (-1 + gamma * V["A"])
+      print(round(v_A, 2))
+    options: ["3.5", "4.0", "8.0", "4.5"]
+    answer: "3.5"
+    explanation: |
+      $0{,}5 \cdot (-1 + 9) + 0{,}5 \cdot (-1 + 0) = 4 - 0{,}5 = 3{,}5$. Die Belohnung −1 fällt in beiden Fällen an – wer sie nur einmal zählt, kommt auf 4,0.
+  - type: example
+    intro: |
+      **Policy Evaluation:** Die Gleichung als Update-Regel immer wieder auf alle Zustände anwenden (ein **Sweep**), bis sich nichts mehr ändert. Hier für die Zufalls-Policy (jede Aktion mit 0,25).
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld()
+      gamma = 0.9
+      pi = np.full((env.n_states, env.n_actions), 0.25)   # Zufalls-Policy
+
+      V = np.zeros(env.n_states)
+      for sweep in range(1000):
+          V_new = np.zeros(env.n_states)
+          for s in range(env.n_states):
+              for a in range(env.n_actions):
+                  for p, s2, r, done in env.P[s][a]:
+                      V_new[s] += pi[s, a] * p * (r + gamma * V[s2] * (not done))
+          delta = np.max(np.abs(V_new - V))
+          V = V_new
+          if delta < 1e-6:
+              break
+
+      print("Sweeps:", sweep + 1)
+      print(np.round(V.reshape(4, 4), 1))
+      env.render(values=V, title="V der Zufalls-Policy (γ = 0.9)")
+    subgoals:
+      - lines: [4, 6]
+        label: Welt, Diskont und Policy festlegen
+      - lines: [10, 14]
+        label: Bellman-Backup für alle Zustände
+      - lines: [15, 18]
+        label: Auf Konvergenz prüfen
+      - lines: [20, 22]
+        label: Werte zeigen
+    after: |
+      Die Werte sind stark negativ: Zufällig herumirren dauert lange und führt oft in die Falle (−100). Felder neben der Falle sind am schlechtesten. Wände und Ziel haben Wert 0.
+  - type: explain
+    question: |
+      Warum konvergiert die Iteration überhaupt?
+    options:
+      - text: Jeder Sweep verkleinert den größten Fehler zur wahren Lösung mindestens um den Faktor γ – die Bellman-Abbildung ist eine Kontraktion.
+        correct: true
+        why: Mit $\gamma = 0{,}9$ schrumpft der Fehler pro Sweep auf 90 %; nach 135 Sweeps sind es etwa $0{,}9^{135} \approx 10^{-6}$ des Anfangsfehlers.
+      - text: Weil die Policy in jedem Sweep besser wird.
+        correct: false
+        why: Die Policy bleibt fest – hier wird nur bewertet, nicht verbessert.
+      - text: Weil nach 16 Sweeps jeder Zustand einmal besucht wurde.
+        correct: false
+        why: Jeder Sweep besucht alle 16 Zustände; trotzdem braucht es viele Sweeps.
+      - text: Sie konvergiert nur, weil `range(1000)` begrenzt ist.
+        correct: false
+        why: Die Grenze ist nur ein Sicherheitsnetz; abgebrochen wird über `delta`.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den Bellman-Backup in der Bewertung einer stochastischen Policy. Der Test vergleicht mit der exakten Lösung.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld(slip=0.2)
+      gamma = 0.9
+      pi = np.full((16, 4), 0.25)
+      V = np.zeros(16)
+      for sweep in range(1000):
+          V_new = np.zeros(16)
+          for s in range(16):
+              for a in range(4):
+                  for p, s2, r, done in env.P[s][a]:
+                      V_new[s] ___ pi[s, a] * p * (r + ___ * V[s2] * (not done))
+          if np.max(np.abs(V_new - V)) < 1e-8:
+              V = V_new
+              break
+          V = V_new
+    blanks:
+      - answer: "+="
+        options: ["+=", "="]
+      - answer: gamma
+        options: [gamma, "1", gamma ** 2]
+    tests:
+      - name: Werte stimmen mit der exakten Lösung
+        code: |
+          import numpy as np
+          P_pi, r_pi = np.zeros((16, 16)), np.zeros(16)
+          for s in range(16):
+              for a in range(4):
+                  for p, s2, r, done in env.P[s][a]:
+                      r_pi[s] += 0.25 * p * r
+                      if not done:
+                          P_pi[s, s2] += 0.25 * p
+          exact = np.linalg.solve(np.eye(16) - 0.9 * P_pi, r_pi)
+          assert close(V, exact, 1e-5), f"V[0] erwartet {exact[0]:.3f}, bekommen {V[0]:.3f}"
+    explanation: |
+      `+=`, weil über alle Aktionen und alle Ergebnisse summiert wird. Mit `=` bliebe nur der letzte Summand übrig.
+  - type: example
+    intro: |
+      Für kleine MDPs gibt es auch eine **direkte Lösung**. Mit Policy-gemittelten Übergängen $P_\pi$ und Belohnungen $r_\pi$ lautet die Bellman-Gleichung in Matrixform $V = r_\pi + \gamma P_\pi V$, also
+
+      $$(I - \gamma P_\pi)\, V = r_\pi$$
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld()
+      gamma, n = 0.9, env.n_states
+      pi = np.full((n, 4), 0.25)
+
+      P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+      for s in range(n):
+          for a in range(4):
+              for p, s2, r, done in env.P[s][a]:
+                  r_pi[s] += pi[s, a] * p * r
+                  if not done:
+                      P_pi[s, s2] += pi[s, a] * p
+
+      V = np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+      print(np.round(V.reshape(4, 4), 1))
+    subgoals:
+      - lines: [8, 14]
+        label: Übergänge und Belohnungen unter π mitteln
+      - lines: [16, 17]
+        label: Lineares Gleichungssystem lösen
+    after: |
+      Dieselben Werte wie iterativ. Kosten: $\mathcal O(n^3)$ für $n$ Zustände – bei 16 Feldern trivial, bei einer Million unmöglich. Darum lernt man das iterative Verfahren; es ist auch die Grundlage für das Lernen aus Erfahrung in Modul 14.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `evaluate(env, policy, gamma, theta=1e-8)` für eine **deterministische** Policy (`policy[s]` = Aktion). Wiederhole Sweeps, bis die größte Änderung kleiner als `theta` ist, und gib `V` zurück.
+    starter: |
+      import numpy as np
+
+      def evaluate(env, policy, gamma, theta=1e-8):
+          V = np.zeros(env.n_states)
+          for sweep in range(2000):
+              V_new = np.zeros(env.n_states)
+              for s in range(env.n_states):
+                  a = policy[s]
+                  # Backup für Zustand s
+              # Abbruch prüfen, V aktualisieren
+          return V
+    solution: |
+      import numpy as np
+
+      def evaluate(env, policy, gamma, theta=1e-8):
+          V = np.zeros(env.n_states)
+          for sweep in range(2000):
+              V_new = np.zeros(env.n_states)
+              for s in range(env.n_states):
+                  a = policy[s]
+                  for p, s2, r, done in env.P[s][a]:
+                      V_new[s] += p * (r + gamma * V[s2] * (not done))
+              if np.max(np.abs(V_new - V)) < theta:
+                  return V_new
+              V = V_new
+          return V
+    tests:
+      - name: Kurzer Weg ins Ziel (deterministisch)
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld()
+          pol = np.full(16, 2)
+          pol[[0, 1, 14]] = 1
+          V = evaluate(env_t, pol, 1.0)
+          assert close(V[0], -5.0), f"Vom Start sind es 5 Schritte à −1 bis vor das Ziel: V[0] = −5 erwartet, bekommen {V[0]:.3f}"
+          assert close(V[14], 0.0), f"V[14] sollte 0 sein (ein Schritt ins Ziel), ist {V[14]:.3f}"
+      - name: Rutschige Welt gegen exakte Lösung
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld(slip=0.2)
+          pol = np.array([1, 1, 2, 3, 0, 0, 2, 2, 1, 1, 2, 2, 0, 1, 1, 0])
+          V = evaluate(env_t, pol, 0.9)
+          P_pi, r_pi = np.zeros((16, 16)), np.zeros(16)
+          for s in range(16):
+              for p, s2, r, done in env_t.P[s][pol[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          exact = np.linalg.solve(np.eye(16) - 0.9 * P_pi, r_pi)
+          assert np.shape(V) == (16,), f"V sollte Shape (16,) haben, hat {np.shape(V)}"
+          assert close(V, exact, 1e-5), f"V[0] erwartet {exact[0]:.3f}, bekommen {V[0]:.3f}"
+    mutants:
+      - |
+        import numpy as np
+        def evaluate(env, policy, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            while True:
+                V_new = np.zeros(env.n_states)
+                for s in range(env.n_states):
+                    p, s2, r, done = env.P[s][policy[s]][0]
+                    V_new[s] = r + gamma * V[s2] * (not done)
+                if np.max(np.abs(V_new - V)) < theta:
+                    return V_new
+                V = V_new
+      - |
+        import numpy as np
+        def evaluate(env, policy, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            while True:
+                V_new = np.zeros(env.n_states)
+                for s in range(env.n_states):
+                    for p, s2, r, done in env.P[s][policy[s]]:
+                        V_new[s] += p * (r + V[s2] * (not done))
+                if np.max(np.abs(V_new - V)) < theta:
+                    return V_new
+                V = V_new
+      - |
+        import numpy as np
+        def evaluate(env, policy, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            for s in range(env.n_states):
+                for p, s2, r, done in env.P[s][policy[s]]:
+                    V[s] += p * (r + gamma * V[s2] * (not done))
+            return V
+      - |
+        import numpy as np
+        def evaluate(env, policy, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            while True:
+                V_new = np.zeros(env.n_states)
+                for s in range(env.n_states):
+                    for p, s2, r, done in env.P[s][policy[s]]:
+                        V_new[s] += r + gamma * V[s2] * (not done)
+                if np.max(np.abs(V_new - V)) < theta:
+                    return V_new
+                V = V_new
+    hints:
+      - "Teilziel: Bellman-Backup für jeden Zustand, dann auf Konvergenz prüfen."
+      - "Bei deterministischer Policy fällt die Summe über $a$ weg: nur `env.P[s][policy[s]]`, gewichtet mit `p`."
+      - "`V_new[s] += p * (r + gamma * V[s2] * (not done))`"
+      - |
+        ```python
+        if np.max(np.abs(V_new - V)) < theta:
+            return V_new
+        V = V_new
+        ```
+    explanation: |
+      Der erste Test nutzt $\gamma = 1$: Weil die Policy sicher ins Ziel führt, konvergiert die Iteration trotzdem – nach wenigen Sweeps stehen die exakten Schrittkosten da. Eine Policy, die nie ankommt, hätte mit $\gamma = 1$ keinen endlichen Wert – dann bricht erst die Obergrenze von 2000 Sweeps die Schleife ab.
+  - type: quiz
+    question: |
+      Unter der Zufalls-Policy ist $V^\pi(0) \approx -18{,}4$. Was bedeutet diese Zahl?
+    options:
+      - text: Startet der Agent in Feld 0 und wählt zufällig, ist sein diskontierter Return im Mittel etwa −18,4.
+        correct: true
+        why: Genau so ist $V^\pi$ definiert – ein Erwartungswert über alle möglichen Episoden.
+      - text: Der Agent braucht 18,4 Schritte bis ins Ziel.
+        correct: false
+        why: Mit Diskont und Fallen-Strafe ist der Wert keine Schrittzahl.
+      - text: Der bestmögliche Return von Feld 0 aus.
+        correct: false
+        why: Das wäre $V^*(0)$; die Zufalls-Policy ist weit davon entfernt.
+cards:
+  - id: m13-c-backup
+    concept: dp-policy-evaluation
+    variants:
+      - type: predict
+        code: |
+          gamma = 0.5
+          V_next = 8.0
+          print(1.0 * (-1 + gamma * V_next))
+        options: ["3.0", "7.0", "4.0", "-0.5"]
+        answer: "3.0"
+        explanation: "$-1 + 0{,}5 \\cdot 8 = 3$."
+      - type: predict
+        code: |
+          gamma = 1.0
+          outcomes = [(0.5, 4.0, -1.0, False), (0.5, 0.0, 0.0, True)]   # (p, V[s2], r, done)
+          print(sum(p * (r + gamma * v * (not done)) for p, v, r, done in outcomes))
+        options: ["1.5", "1.0", "3.0", "2.0"]
+        answer: "1.5"
+        explanation: "$0{,}5 \\cdot (-1 + 4) + 0{,}5 \\cdot 0 = 1{,}5$ – nach `done` zählt kein Folgewert."
+  - id: m13-c-wert-bedeutung
+    concept: dp-wertfunktion
+    variants:
+      - type: quiz
+        question: |
+          Welchen Wert hat ein Endzustand (z. B. das Ziel) in der Wertfunktion?
+        options:
+          - text: "0"
+            correct: true
+            why: Nach dem Ende der Episode gibt es keine Belohnungen mehr.
+          - text: Die Belohnung fürs Erreichen des Ziels.
+            correct: false
+            why: Diese Belohnung gehört zum Übergang **ins** Ziel und steckt im Wert des Vorgängerzustands.
+          - text: Unendlich.
+            correct: false
+            why: Ein Endzustand liefert keinen weiteren Return.
+      - type: quiz
+        question: |
+          Hängt $V^\pi(s)$ von der Policy ab?
+        options:
+          - text: Ja – andere Aktionen führen zu anderen Returns.
+            correct: true
+            why: Deshalb das $\pi$ im Index; die beste erreichbare Wertfunktion heißt $V^*$.
+          - text: Nein, nur von der Umgebung.
+            correct: false
+            why: Dieselbe Welt mit einer besseren Policy hat höhere Werte.
+          - text: Nur bei stochastischen Umgebungen.
+            correct: false
+            why: Auch deterministisch bestimmt die Policy den Weg.
+  - id: m13-c-sweeps
+    concept: dp-policy-evaluation
+    variants:
+      - type: quiz
+        question: |
+          Policy Evaluation mit $\gamma = 0{,}5$ statt $0{,}9$. Was passiert mit der Zahl der Sweeps bis zur Konvergenz?
+        options:
+          - text: Sie sinkt deutlich, weil der Fehler pro Sweep auf die Hälfte statt auf 90 % schrumpft.
+            correct: true
+            why: Die Kontraktionsrate ist $\gamma$.
+          - text: Sie steigt.
+            correct: false
+            why: Kleineres $\gamma$ heißt schnellere Kontraktion.
+          - text: Sie bleibt gleich, weil die Welt gleich bleibt.
+            correct: false
+            why: Die Konvergenzgeschwindigkeit hängt von $\gamma$ ab.
+      - type: quiz
+        question: |
+          Wozu dient `delta = np.max(np.abs(V_new - V))` in der Iteration?
+        options:
+          - text: Als Abbruchkriterium – ist die größte Änderung winzig, sind die Werte (fast) konvergiert.
+            correct: true
+            why: Der verbleibende Fehler ist höchstens etwa $\delta\,\gamma/(1-\gamma)$.
+          - text: Es ist der Wert des Startzustands.
+            correct: false
+            why: Es misst eine Änderung, keinen Wert.
+          - text: Es ist die Lernrate.
+            correct: false
+            why: Policy Evaluation mit Modell hat keine Lernrate.

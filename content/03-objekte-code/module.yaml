@@ -1,0 +1,42 @@
+id: m03
+number: 3
+title: Objekte & Code-Organisation
+summary: |
+  Klassen bündeln Daten und Verhalten – ein Gelenk weiß selbst, wie weit es sich drehen darf. Dazu Dataclasses, Typhinweise, eigene Tests und systematisches Debugging: das Handwerk, um größere Programme zuverlässig zu bauen.
+depth: voll
+lessons:
+  - m03-klassen
+  - m03-roboter-klasse
+  - m03-dataclasses
+  - m03-type-hints
+  - m03-tests
+  - m03-debugging
+  - m03-checkpoint
+concepts:
+  - id: m03-klasse-objekt
+    name: Klasse und Objekt
+    description: Eine Klasse ist ein Bauplan; jedes Objekt (Instanz) hat eigene Attribute, die __init__ beim Erzeugen anlegt.
+  - id: m03-methode-self
+    name: Methoden und self
+    description: Methoden sind Funktionen in der Klasse; self ist das Objekt, auf dem sie aufgerufen werden, und self.x sein Attribut.
+  - id: m03-komposition
+    name: Komposition
+    description: Ein Objekt enthält andere Objekte als Attribute (ein Robot hat eine Liste von Joints) und delegiert Aufgaben an sie.
+  - id: m03-dataclass
+    name: Dataclasses
+    description: "@dataclass erzeugt __init__, __repr__ und __eq__ aus annotierten Feldern; Felder mit Standardwert stehen hinten."
+  - id: m03-repr
+    name: Lesbare Darstellung mit __repr__
+    description: __repr__ legt fest, wie print und Listen ein Objekt anzeigen.
+  - id: m03-type-hints
+    name: Typhinweise
+    description: "Annotationen wie q: float, -> list[float] oder int | None dokumentieren Typen; Python prüft sie zur Laufzeit nicht."
+  - id: m03-tests-assert
+    name: Tests mit assert
+    description: assert bedingung, "Meldung" löst bei falscher Bedingung einen AssertionError aus; Testfunktionen vergleichen Ergebnis und Erwartung.
+  - id: m03-randfaelle
+    name: Randfälle und Kommazahl-Vergleiche
+    description: Gute Tests prüfen Grenzen, leere Eingaben und Fehlerfälle; Kommazahlen vergleicht man mit Toleranz.
+  - id: m03-debugging
+    name: Systematisches Debugging
+    description: Beobachten, Hypothese bilden, mit kleinstem Fall und Zwischenausgaben prüfen, korrigieren, erneut testen.

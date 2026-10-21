@@ -1,0 +1,44 @@
+id: m18
+number: 18
+title: Moderne World Models & Foundation Models
+summary: |
+  JEPA und V-JEPA 2, generative Video-World-Models, Vision-Language-Action-Modelle und Imitation Learning – was hinter den aktuellen Robotik-Schlagzeilen steckt, mit kleinen NumPy-Spielversionen. Alle aktuellen Angaben mit Quelle, Stand: Oktober 2026.
+depth: konzept
+lessons:
+  - m18-jepa
+  - m18-vjepa2
+  - m18-video-world-models
+  - m18-vla
+  - m18-imitation
+  - m18-checkpoint
+concepts:
+  - id: jepa-latente-vorhersage
+    name: Vorhersage im latenten Raum (JEPA)
+    description: JEPA sagt die Repräsentation des Ziels vorher statt seiner Pixel; unvorhersagbare Details muss das Modell nicht abbilden.
+  - id: ssl-kollaps-ema
+    name: Repräsentationskollaps und EMA-Ziel-Encoder
+    description: Ein konstanter Encoder macht den Vorhersagefehler trivial null; stop-gradient und ein Ziel-Encoder als gleitender Mittelwert (EMA) wirken dem entgegen.
+  - id: latentes-zielplanen
+    name: Planen auf Zielabstand im latenten Raum
+    description: Aktionsfolgen werden mit einem latenten Prädiktor ausgerollt und per CEM so optimiert, dass der Abstand zur Repräsentation eines Zielbildes klein wird (V-JEPA 2-AC).
+  - id: video-weltmodell
+    name: Generative Video-World-Models
+    description: Modelle wie Cosmos oder Genie 3 erzeugen Videos bzw. interaktive Welten; sie sind nützlich für Daten und Simulation, aber langsam und physikalisch nicht verlässlich.
+  - id: vla-modell
+    name: Vision-Language-Action-Modelle
+    description: Ein vortrainiertes Vision-Language-Modell wird so erweitert, dass es aus Bild und Sprachbefehl direkt Roboteraktionen ausgibt.
+  - id: aktions-diskretisierung
+    name: Aktionen als Tokens
+    description: Kontinuierliche Aktionen werden in Intervalle (Bins) zerlegt und als Token-Nummern ausgegeben; der Quantisierungsfehler ist höchstens eine halbe Bin-Breite.
+  - id: behavior-cloning
+    name: Behavior Cloning
+    description: Imitation Learning als überwachtes Lernen – Regression von Beobachtung auf Expertenaktion.
+  - id: bc-verteilungsshift
+    name: Verteilungsverschiebung und Fehlerfortpflanzung
+    description: Kleine Fehler führen in Zustände, die in den Demonstrationen nicht vorkamen; dort wird die Policy schlechter und die Fehler wachsen.
+  - id: multimodale-demos
+    name: Multimodale Demonstrationen
+    description: Gibt es mehrere gute Aktionen, liefert eine MSE-Regression ihren Mittelwert, der schlecht sein kann; ACT und Diffusion Policy modellieren Verteilungen bzw. Aktionsfolgen.
+  - id: sim-to-real
+    name: Sim-to-Real
+    description: Policies aus der Simulation scheitern an der Realitätslücke; Domain Randomization variiert die Simulation, damit die Realität wie eine weitere Variante wirkt.

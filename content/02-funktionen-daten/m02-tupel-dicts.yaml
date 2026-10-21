@@ -1,0 +1,349 @@
+id: m02-tupel-dicts
+title: Tupel und Dictionaries
+minutes: 10
+goals:
+  - Tupel für feste Wertepaare nutzen und entpacken
+  - Ein Dictionary anlegen, lesen, ändern und mit `get` sicher lesen
+  - Mit `items()` über Schlüssel und Werte iterieren
+concepts: [m02-tupel, m02-dict]
+steps:
+  - type: text
+    body: |
+      ## Tupel: feste Pakete
+
+      Ein **Tupel** sieht aus wie eine Liste mit runden Klammern: `punkt = (2.0, -1.0)`. Lesen geht genauso (`punkt[0]`, `len(punkt)`, entpacken mit `x, y = punkt`).
+
+      Der Unterschied: Tupel sind **unveränderlich** (immutable). `punkt[0] = 3.0` ergibt einen `TypeError`.
+
+      Nimm Tupel für Dinge mit fester Bedeutung pro Position – eine Koordinate $(x, y)$, ein Gelenkgrenzen-Paar $(q_{\min}, q_{\max})$. Listen nimmst du für Sammlungen, die wachsen oder sich ändern.
+  - type: predict
+    code: |
+      punkt = (2.0, -1.0)
+      x, y = punkt
+      print(punkt[0] + y)
+      print(len(punkt))
+    options:
+      - |
+        1.0
+        2
+      - |
+        3.0
+        2
+      - |
+        1.0
+        1
+    answer: |
+      1.0
+      2
+    explanation: |
+      `punkt[0]` ist 2.0 und `y` ist -1.0 – zusammen 1.0. Das Tupel hat zwei Elemente.
+  - type: text
+    body: |
+      ## Dictionary: Werte unter Namen
+
+      Bei einer Liste findest du Werte über die **Position**. Ein **Dictionary** (`dict`) ordnet stattdessen **Schlüsseln** (keys) **Werte** (values) zu:
+
+      ```python
+      gelenke = {"schulter": 0.5, "ellbogen": -0.2}
+      ```
+
+      | Aktion | Code |
+      |---|---|
+      | lesen | `gelenke["schulter"]` |
+      | ändern / neu anlegen | `gelenke["hand"] = 0.0` |
+      | sicher lesen | `gelenke.get("greifer", 0.0)` |
+      | enthalten? | `"schulter" in gelenke` |
+
+      Ein fehlender Schlüssel mit `[]` ergibt einen `KeyError`; `get` liefert stattdessen den Standardwert (ohne Angabe `None`).
+  - type: example
+    code: |
+      gelenke = {"schulter": 0.5, "ellbogen": -0.2}
+      print(gelenke["schulter"])
+      gelenke["ellbogen"] = 0.1
+      gelenke["handgelenk"] = 0.0
+      print(len(gelenke))
+      print(gelenke.get("greifer", "fehlt"))
+      print("schulter" in gelenke)
+      print(gelenke)
+    subgoals:
+      - lines: 1
+        label: Dictionary anlegen
+      - lines: 2
+        label: Wert über Schlüssel lesen
+      - lines: [3, 4]
+        label: Wert ändern bzw. neuen Schlüssel anlegen
+      - lines: [5, 8]
+        label: Größe, sicheres Lesen und Enthaltensein prüfen
+    after: |
+      Die Zuweisung an einen vorhandenen Schlüssel überschreibt den Wert, an einen neuen legt sie ihn an. `in` prüft bei Dicts die **Schlüssel**, nicht die Werte.
+  - type: explain
+    question: |
+      Wann ist `d.get(k, standard)` besser als `d[k]`?
+    options:
+      - text: Wenn der Schlüssel fehlen darf und es einen sinnvollen Ersatzwert gibt.
+        correct: true
+        why: "`get` liefert dann den Ersatzwert statt mit `KeyError` abzubrechen."
+      - text: Immer – `d[k]` sollte man nie verwenden.
+        correct: false
+        why: Wenn ein Schlüssel vorhanden sein **muss**, ist ein `KeyError` sogar hilfreich, weil er einen Fehler sofort sichtbar macht.
+      - text: Wenn man einen Wert ändern will.
+        correct: false
+        why: "`get` liest nur. Geändert wird mit `d[k] = wert`."
+  - type: predict
+    code: |
+      limits = {"schulter": 1.5, "ellbogen": 2.0}
+      limits["schulter"] = 1.2
+      print(limits.get("ellbogen", 0))
+      print(limits.get("hand", 0))
+      print(limits["schulter"])
+    options:
+      - |
+        2.0
+        0
+        1.2
+      - |
+        2.0
+        None
+        1.2
+      - |
+        2.0
+        0
+        1.5
+      - |
+        0
+        0
+        1.2
+    answer: |
+      2.0
+      0
+      1.2
+    explanation: |
+      `"hand"` fehlt, also liefert `get` den angegebenen Standardwert `0`. Der Wert für `"schulter"` wurde vorher überschrieben.
+  - type: example
+    intro: |
+      Über ein Dict iterierst du am bequemsten mit `.items()`: Jede Runde liefert ein Paar `(schluessel, wert)`, das du direkt entpackst. `.keys()` liefert nur die Schlüssel, `.values()` nur die Werte. Die Reihenfolge ist die des Einfügens.
+    code: |
+      strom_mA = {"motor1": 800, "motor2": 1400, "motor3": 500}
+      for name, strom in strom_mA.items():
+          if strom > 1000:
+              print(name, "zu hoch:", strom, "mA")
+      gesamt = 0
+      for strom in strom_mA.values():
+          gesamt = gesamt + strom
+      print("gesamt:", gesamt, "mA")
+    subgoals:
+      - lines: [2, 4]
+        label: Über Paare iterieren und prüfen
+      - lines: [5, 7]
+        label: Über Werte aufsummieren
+      - lines: 8
+        label: Ergebnis ausgeben
+  - type: trace
+    intro: |
+      Ein häufiges Muster: Ereignisse zählen. Beobachte, wie das Dict wächst.
+    code: |
+      zaehler = {}
+      for status in ["ok", "warnung", "ok"]:
+          zaehler[status] = zaehler.get(status, 0) + 1
+      print(zaehler)
+    questions:
+      - line: 3
+        hit: 2
+        var: zaehler
+        prompt: Nach dem zweiten Durchlauf von Zeile 3?
+        answer: "{'ok': 1, 'warnung': 1}"
+      - line: 3
+        hit: 3
+        var: zaehler
+        prompt: Nach dem dritten Durchlauf?
+        answer: "{'ok': 2, 'warnung': 1}"
+    after: |
+      `zaehler.get(status, 0)` liefert beim ersten Auftreten 0 – so braucht man keine Sonderbehandlung für neue Schlüssel.
+  - type: fill
+    fading: true
+    prompt: |
+      Gib alle Abstandssensoren aus, die näher als 0,2 m an einem Hindernis sind. Erwartet: `rechts`.
+    code: |
+      sensoren = {"links": 0.42, "rechts": 0.13, "vorne": 0.95}
+      for name, abstand in sensoren.___():
+          if abstand < ___:
+              print(name)
+    blanks:
+      - answer: items
+        options: [items, keys, values]
+      - answer: "0.2"
+        options: ["0.2", "0.5", "1.0"]
+    expect_output: rechts
+    explanation: |
+      Nur `.items()` liefert Paare, die man auf `name, abstand` entpacken kann. `keys()` bzw. `values()` liefern einzelne Werte – das Entpacken scheitert.
+  - type: parsons
+    fading: true
+    prompt: |
+      Lege ein Dict für eine Position an, fülle es und gib jede Achse aus.
+    lines:
+      - "pos = {}"
+      - 'pos["x"] = 1.5'
+      - 'pos["y"] = -0.5'
+      - "for achse, wert in pos.items():"
+      - "    print(achse, wert)"
+    distractors:
+      - "for achse, wert in pos:"
+    expect_output: |
+      x 1.5
+      y -0.5
+  - type: exercise
+    mode: make
+    prompt: |
+      `winkel` ordnet Gelenknamen ihren aktuellen Winkel (rad) zu, `limits` den erlaubten Betrag. Schreibe `verletzungen(winkel, limits)`, die eine **Liste der Namen** liefert, deren Winkel **betragsmäßig größer** als ihr Limit ist. Fehlt ein Gelenk in `limits`, gilt das Limit `3.14`.
+
+      Den Betrag liefert `abs(x)`, z. B. `abs(-2.0)` → `2.0`.
+    starter: |
+      def verletzungen(winkel, limits):
+          ergebnis = []
+          # über winkel.items() laufen
+          return ergebnis
+    solution: |
+      def verletzungen(winkel, limits):
+          ergebnis = []
+          for name, q in winkel.items():
+              if abs(q) > limits.get(name, 3.14):
+                  ergebnis.append(name)
+          return ergebnis
+    tests:
+      - name: Ein Gelenk verletzt
+        code: |
+          r = verletzungen({"schulter": 1.0, "ellbogen": 2.5}, {"schulter": 1.5, "ellbogen": 2.0})
+          assert r == ["ellbogen"], f"Erwartet ['ellbogen'], bekommen {r}"
+      - name: Negative Winkel
+        code: |
+          r = verletzungen({"schulter": -1.8, "ellbogen": 0.0}, {"schulter": 1.5, "ellbogen": 2.0})
+          assert r == ["schulter"], f"-1.8 rad überschreitet das Limit 1.5 – erwartet ['schulter'], bekommen {r}"
+      - name: Fehlendes Limit
+        code: |
+          r = verletzungen({"hand": 3.0, "greifer": 3.5}, {})
+          assert r == ["greifer"], f"Ohne Eintrag gilt 3.14 – erwartet ['greifer'], bekommen {r}"
+      - name: Genau am Limit
+        code: |
+          r = verletzungen({"schulter": 1.5}, {"schulter": 1.5})
+          assert r == [], f"Genau am Limit ist erlaubt – erwartet [], bekommen {r}"
+    mutants:
+      - |
+        def verletzungen(winkel, limits):
+            ergebnis = []
+            for name, q in winkel.items():
+                if q > limits.get(name, 3.14):
+                    ergebnis.append(name)
+            return ergebnis
+      - |
+        def verletzungen(winkel, limits):
+            ergebnis = []
+            for name, q in winkel.items():
+                if abs(q) > limits[name]:
+                    ergebnis.append(name)
+            return ergebnis
+      - |
+        def verletzungen(winkel, limits):
+            ergebnis = []
+            for name, q in winkel.items():
+                if abs(q) >= limits.get(name, 3.14):
+                    ergebnis.append(name)
+            return ergebnis
+    hints:
+      - "Teilziel: über alle Paare (Name, Winkel) laufen, Limit nachschlagen, vergleichen, Namen sammeln."
+      - "`for name, q in winkel.items():` – das Limit holst du mit `limits.get(name, 3.14)`."
+      - "`if abs(q) > limits.get(name, 3.14):` dann `ergebnis.append(name)`"
+  - type: quiz
+    question: |
+      `d = {"a": 1}`. Was passiert bei `print(d["b"])`?
+    options:
+      - text: "Ein `KeyError`."
+        correct: true
+        why: Der Schlüssel `"b"` existiert nicht. Mit `d.get("b")` bekäme man `None`.
+      - text: "Es wird `None` ausgegeben."
+        correct: false
+        why: Das wäre das Verhalten von `d.get("b")`, nicht von `d["b"]`.
+      - text: "Es wird `0` ausgegeben."
+        correct: false
+        why: Python erfindet keine Werte für fehlende Schlüssel.
+cards:
+  - id: m02-c-dict-get
+    concept: m02-dict
+    variants:
+      - type: predict
+        code: |
+          d = {"x": 2}
+          print(d.get("x", 0), d.get("y", 0))
+        options: ["2 0", "2 None", "0 0"]
+        answer: "2 0"
+        explanation: "`get` liefert den Wert, falls vorhanden, sonst den Standardwert."
+      - type: predict
+        code: |
+          d = {"a": 1}
+          d["a"] = 5
+          d["b"] = 2
+          print(d)
+        options: ["{'a': 5, 'b': 2}", "{'a': 1, 'b': 2}", "{'a': 1, 'a': 5, 'b': 2}"]
+        answer: "{'a': 5, 'b': 2}"
+        explanation: Ein Schlüssel kommt nur einmal vor; Zuweisen überschreibt.
+      - type: predict
+        code: |
+          d = {"motor": 3}
+          print("motor" in d, 3 in d)
+        options: ["True False", "True True", "False True"]
+        answer: "True False"
+        explanation: "`in` prüft bei Dicts die Schlüssel, nicht die Werte."
+  - id: m02-c-dict-items
+    concept: m02-dict
+    variants:
+      - type: predict
+        code: |
+          d = {"a": 1, "b": 2}
+          for k, v in d.items():
+              print(k, v * 10)
+        options:
+          - |
+            a 10
+            b 20
+          - |
+            a 1
+            b 2
+          - |
+            10
+            20
+        answer: |
+          a 10
+          b 20
+        explanation: "`items()` liefert Paare (Schlüssel, Wert)."
+      - type: predict
+        code: |
+          d = {"x": 4, "y": 6}
+          s = 0
+          for v in d.values():
+              s = s + v
+          print(s)
+        options: ["10", "xy", "2"]
+        answer: "10"
+        explanation: "`values()` liefert nur die Werte."
+  - id: m02-c-tupel
+    concept: m02-tupel
+    variants:
+      - type: quiz
+        question: Was passiert bei `p = (1, 2)` und danach `p[0] = 5`?
+        options:
+          - text: "`TypeError` – Tupel sind unveränderlich."
+            correct: true
+            why: Einzelne Elemente eines Tupels können nicht ersetzt werden.
+          - text: "`p` wird zu `(5, 2)`."
+            correct: false
+            why: So verhält sich eine Liste, kein Tupel.
+          - text: "`p` wird zu `(5, 1, 2)`."
+            correct: false
+            why: Zuweisen an einen Index fügt nichts ein – und bei Tupeln geht es gar nicht.
+      - type: predict
+        code: |
+          grenzen = (-1.5, 1.5)
+          lo, hi = grenzen
+          print(hi - lo)
+        options: ["3.0", "0.0", "-3.0"]
+        answer: "3.0"
+        explanation: "`lo = -1.5`, `hi = 1.5`, Differenz 3.0."

@@ -1,0 +1,423 @@
+id: m03-tests
+title: Eigene Tests schreiben
+minutes: 10
+goals:
+  - Mit `assert` und Testfunktionen prüfen, ob Code das Erwartete liefert
+  - Kommazahlen mit Toleranz vergleichen
+  - Randfälle und Fehlerfälle gezielt testen
+concepts: [m03-tests-assert, m03-randfaelle]
+steps:
+  - type: text
+    body: |
+      ## Woher weißt du, dass es stimmt?
+
+      Bei einem Roboter merkst du einen Rechenfehler oft erst, wenn der Arm gegen den Tisch fährt. Besser: Du prüfst deine Funktionen mit bekannten Fällen, bevor du sie einsetzt.
+
+      ```python
+      assert bedingung, "Meldung"
+      ```
+
+      Ist die Bedingung wahr, passiert nichts. Ist sie falsch, löst `assert` einen `AssertionError` mit der Meldung aus.
+
+      Eine **Testfunktion** sammelt mehrere solcher Prüfungen: bekannte Eingabe → erwartete Ausgabe. Genau so prüft übrigens diese App deine Lösungen.
+  - type: example
+    code: |
+      def clamp(value, low, high):
+          return max(low, min(value, high))
+
+      def test_clamp():
+          assert clamp(0.5, 0.0, 1.0) == 0.5, "Wert innerhalb bleibt"
+          assert clamp(2.0, 0.0, 1.0) == 1.0, "oben begrenzen"
+          assert clamp(-3.0, 0.0, 1.0) == 0.0, "unten begrenzen"
+          print("test_clamp ok")
+
+      test_clamp()
+    subgoals:
+      - lines: [1, 2]
+        label: Zu testende Funktion
+      - lines: [4, 7]
+        label: Bekannte Fälle mit Erwartung vergleichen
+      - lines: [8, 10]
+        label: Test ausführen und Erfolg melden
+    after: |
+      Jeder Fall prüft eine andere Situation: innerhalb, über und unter dem Intervall. Schlägt eine Prüfung fehl, bricht der Test mit genau dieser Meldung ab – du weißt sofort, welcher Fall kaputt ist.
+  - type: predict
+    code: |
+      print(0.1 + 0.2 == 0.3)
+      print(0.1 + 0.2)
+      print(abs((0.1 + 0.2) - 0.3) < 1e-9)
+    options:
+      - |
+        False
+        0.30000000000000004
+        True
+      - |
+        True
+        0.3
+        True
+      - |
+        False
+        0.3
+        False
+      - |
+        True
+        0.30000000000000004
+        True
+    answer: |
+      False
+      0.30000000000000004
+      True
+    explanation: |
+      Kommazahlen werden binär gespeichert; 0,1 und 0,2 sind darin nicht exakt darstellbar. Deshalb vergleicht man Kommazahlen mit einer **Toleranz**: $|a - b| < \varepsilon$. (`1e-9` ist $10^{-9}$.)
+  - type: explain
+    question: |
+      Welche Prüfung ist für `fk_x = l * math.cos(q)` mit `q = math.pi / 2` sinnvoll?
+    options:
+      - text: "`assert abs(fk_x - 0.0) < 1e-9`"
+        correct: true
+        why: "`math.cos(math.pi / 2)` ist etwa $6 \\cdot 10^{-17}$, nicht exakt 0. Die Toleranz fängt den Rundungsfehler ab."
+      - text: "`assert fk_x == 0.0`"
+        correct: false
+        why: Schlägt wegen des winzigen Rundungsfehlers fehl, obwohl die Rechnung richtig ist.
+      - text: "`assert fk_x < 1e-9`"
+        correct: false
+        why: Ohne Betrag würde auch ein völlig falsches `-5.0` den Test bestehen.
+  - type: text
+    body: |
+      ## Randfälle zuerst
+
+      Fehler verstecken sich an den Rändern. Gute Tests prüfen neben einem typischen Fall:
+
+      - **Grenzen:** genau am Limit, knapp darüber
+      - **Leere oder minimale Eingaben:** `[]`, ein einziges Element, `0`
+      - **Vorzeichen:** negative Werte, Winkel über $\pi$
+      - **Fehlerfälle:** Wird bei ungültiger Eingabe wirklich ein `ValueError` ausgelöst?
+
+      Ein Test, der nie fehlschlagen kann, ist wertlos. Frage dich: *Welcher falsche Code würde diesen Test trotzdem bestehen?*
+  - type: predict
+    code: |
+      def mean(values):
+          return sum(values) / len(values)
+
+      cases = [([1, 2, 3], 2.0), ([5], 5.0), ([], 0.0)]
+      for values, expected in cases:
+          try:
+              assert mean(values) == expected
+              print("ok")
+          except ZeroDivisionError:
+              print("Absturz bei", values)
+    options:
+      - |
+        ok
+        ok
+        Absturz bei []
+      - |
+        ok
+        ok
+        ok
+      - |
+        ok
+        Absturz bei [5]
+        Absturz bei []
+      - |
+        ok
+        ok
+    answer: |
+      ok
+      ok
+      Absturz bei []
+    explanation: |
+      Die typischen Fälle bestehen. Erst der Randfall `[]` zeigt, dass `mean` mit einer leeren Liste durch null teilt. Jetzt musst du entscheiden: `ValueError` auslösen oder einen Ersatzwert definieren.
+  - type: quiz
+    multi: true
+    question: |
+      `argmax(values)` soll den Index des größten Werts liefern (bei Gleichstand den ersten). Welche Eingaben sind **Randfälle**, die ein guter Test abdecken sollte?
+    options:
+      - text: "`[5]` – nur ein Element"
+        correct: true
+        why: Minimale Eingabe; hier fallen z. B. falsch gesetzte Startwerte auf.
+      - text: "`[4, 9, 9]` – Gleichstand beim Maximum"
+        correct: true
+        why: Prüft die Regel „erster Index“ – ein `>=` statt `>` fällt sofort auf.
+      - text: "`[-3, -1, -2]` – nur negative Werte"
+        correct: true
+        why: Ein Startwert `0` statt `values[0]` liefert hier ein falsches Ergebnis.
+      - text: "`[3, 7, 2]` – gemischte positive Werte"
+        correct: false
+        why: Das ist ein typischer Fall, kein Randfall. Wichtig, aber er findet die oben genannten Fehler nicht.
+  - type: fill
+    fading: true
+    prompt: |
+      Vervollständige den Test für `in_range`: einen typischen Fall, die Grenze und einen Wert außerhalb. Erwartet: `alle Tests ok`.
+    code: |
+      def in_range(q, low, high):
+          return low <= q and q <= high
+
+      def test_in_range():
+          assert in_range(0.5, 0.0, 1.0) == ___, "typischer Fall"
+          assert in_range(1.0, 0.0, 1.0) == True, "Grenze gehört dazu"
+          assert in_range(___, 0.0, 1.0) == False, "außerhalb"
+          print("alle Tests ok")
+
+      test_in_range()
+    blanks:
+      - answer: "True"
+        options: ["True", "False", "0.5"]
+      - answer: "1.5"
+        options: ["1.5", "0.5", "1.0"]
+    expect_output: alle Tests ok
+  - type: parsons
+    fading: true
+    prompt: |
+      Schreibe einen Test, der prüft, dass `safe_sqrt` bei negativen Zahlen einen `ValueError` auslöst. Ausgabe: `ok: Fehler erkannt`.
+    lines:
+      - "def safe_sqrt(x):"
+      - "    if x < 0:"
+      - '        raise ValueError("x < 0")'
+      - "    return x ** 0.5"
+      - "def test_negative():"
+      - "    try:"
+      - "        safe_sqrt(-1.0)"
+      - '        assert False, "ValueError erwartet"'
+      - "    except ValueError:"
+      - '        print("ok: Fehler erkannt")'
+      - "test_negative()"
+    distractors:
+      - "    except AssertionError:"
+    expect_output: "ok: Fehler erkannt"
+    explanation: |
+      `assert False` wird nur erreicht, wenn **kein** `ValueError` kam – dann schlägt der Test zu Recht fehl.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Der Test unten schlägt fehl. Finde den Fehler in `count_in_range` und behebe ihn – die Grenzen sollen mitgezählt werden. Ändere den Test nicht.
+    starter: |
+      def count_in_range(values, low, high):
+          n = 0
+          for v in values:
+              if low < v and v < high:
+                  n = n + 1
+          return n
+
+      def test_count():
+          assert count_in_range([0.0, 0.5, 1.0], 0.0, 1.0) == 3, "Grenzen zählen mit"
+          assert count_in_range([], 0.0, 1.0) == 0, "leere Liste"
+          print("ok")
+
+      test_count()
+    solution: |
+      def count_in_range(values, low, high):
+          n = 0
+          for v in values:
+              if low <= v and v <= high:
+                  n = n + 1
+          return n
+
+      def test_count():
+          assert count_in_range([0.0, 0.5, 1.0], 0.0, 1.0) == 3, "Grenzen zählen mit"
+          assert count_in_range([], 0.0, 1.0) == 0, "leere Liste"
+          print("ok")
+
+      test_count()
+    tests:
+      - name: Grenzen
+        code: |
+          r = count_in_range([0.0, 0.5, 1.0], 0.0, 1.0)
+          assert r == 3, f"Erwartet 3, bekommen {r}"
+          r = count_in_range([-1.0, 2.0], -1.0, 1.0)
+          assert r == 1, f"Die untere Grenze -1.0 zählt mit – erwartet 1, bekommen {r}"
+      - name: Außerhalb
+        code: |
+          r = count_in_range([-0.1, 1.1, 0.3], 0.0, 1.0)
+          assert r == 1, f"Erwartet 1, bekommen {r}"
+      - name: Eigener Test läuft
+        code: |
+          assert lines() == ["ok"], f"test_count() sollte ok ausgeben, Ausgabe war {lines()}"
+    mutants:
+      - |
+        def count_in_range(values, low, high):
+            n = 0
+            for v in values:
+                if low <= v and v < high:
+                    n = n + 1
+            return n
+
+        def test_count():
+            assert count_in_range([0.0, 0.5, 1.0], 0.0, 1.0) == 3, "Grenzen zählen mit"
+            assert count_in_range([], 0.0, 1.0) == 0, "leere Liste"
+            print("ok")
+
+        test_count()
+      - |
+        def count_in_range(values, low, high):
+            n = 0
+            for v in values:
+                if low <= v or v <= high:
+                    n = n + 1
+            return n
+
+        def test_count():
+            assert count_in_range([0.0, 0.5, 1.0], 0.0, 1.0) == 3, "Grenzen zählen mit"
+            assert count_in_range([], 0.0, 1.0) == 0, "leere Liste"
+            print("ok")
+
+        test_count()
+    hints:
+      - "Teilziel: herausfinden, welcher Fall im Test scheitert – dann die Bedingung anpassen."
+      - Die Werte 0.0 und 1.0 liegen genau auf den Grenzen. `<` schließt Gleichheit aus.
+      - "`if low <= v and v <= high:`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Jetzt schreibst **du** den Test. `pruefe(clamp)` bekommt eine clamp-Funktion als Argument und soll sie mit `assert` prüfen. Ist die Funktion richtig, darf nichts passieren; ist sie falsch, soll ein `AssertionError` entstehen.
+
+      Die App prüft deinen Test mit einer richtigen und mehreren **fehlerhaften** Versionen von `clamp` (z. B. ohne obere oder ohne untere Grenze). Dein Test muss alle Fehler finden.
+    starter: |
+      def pruefe(clamp):
+          # Prüfe clamp(value, low, high) mit mehreren Fällen
+          pass
+    solution: |
+      def pruefe(clamp):
+          assert clamp(0.5, 0.0, 1.0) == 0.5, "Wert innerhalb bleibt"
+          assert clamp(2.0, 0.0, 1.0) == 1.0, "oben begrenzen"
+          assert clamp(-1.0, 0.0, 1.0) == 0.0, "unten begrenzen"
+    tests:
+      - name: Richtige Version besteht
+        code: |
+          def gut(v, lo, hi):
+              return max(lo, min(v, hi))
+          try:
+              pruefe(gut)
+          except AssertionError as e:
+              assert False, f"Dein Test lehnt eine richtige clamp-Funktion ab: {e}"
+      - name: Findet fehlende obere Grenze
+        code: |
+          def ohne_oben(v, lo, hi):
+              return max(lo, v)
+          try:
+              pruefe(ohne_oben)
+              gefunden = False
+          except AssertionError:
+              gefunden = True
+          assert gefunden, "Dein Test hat eine clamp-Version ohne obere Grenze nicht erkannt"
+      - name: Findet fehlende untere Grenze
+        code: |
+          def ohne_unten(v, lo, hi):
+              return min(v, hi)
+          try:
+              pruefe(ohne_unten)
+              gefunden = False
+          except AssertionError:
+              gefunden = True
+          assert gefunden, "Dein Test hat eine clamp-Version ohne untere Grenze nicht erkannt"
+      - name: Findet Fehler im Inneren
+        code: |
+          def nur_grenzen(v, lo, hi):
+              if v > hi:
+                  return hi
+              return lo
+          try:
+              pruefe(nur_grenzen)
+              gefunden = False
+          except AssertionError:
+              gefunden = True
+          assert gefunden, "Dein Test hat eine clamp-Version nicht erkannt, die Werte innerhalb des Intervalls falsch behandelt"
+    mutants:
+      - |
+        def pruefe(clamp):
+            assert clamp(0.5, 0.0, 1.0) == 0.5
+      - |
+        def pruefe(clamp):
+            assert clamp(0.5, 0.0, 1.0) == 0.5
+            assert clamp(2.0, 0.0, 1.0) == 1.0
+      - |
+        def pruefe(clamp):
+            assert clamp(0.5, 0.0, 1.0) == 0.5
+            assert clamp(2.0, 0.0, 1.0) == 2.0
+            assert clamp(-1.0, 0.0, 1.0) == 0.0
+      - |
+        def pruefe(clamp):
+            assert clamp(-1.0, 0.0, 1.0) == 0.0
+            assert clamp(2.0, 0.0, 1.0) == 1.0
+    hints:
+      - "Teilziel: drei Situationen prüfen – innerhalb, über und unter dem Intervall."
+      - Ein Test besteht aus `assert clamp(...) == erwartet`. Überlege für jede Situation, was herauskommen **muss**.
+      - "Zum Beispiel: `assert clamp(2.0, 0.0, 1.0) == 1.0, \"oben begrenzen\"`"
+  - type: quiz
+    question: Was passiert bei `assert x > 0, "x muss positiv sein"`, wenn `x = -1` ist?
+    options:
+      - text: "Ein `AssertionError` mit der Meldung `x muss positiv sein`."
+        correct: true
+        why: Die Bedingung ist falsch, also schlägt die Prüfung fehl.
+      - text: "Es wird `x muss positiv sein` ausgegeben, danach läuft das Programm weiter."
+        correct: false
+        why: "`assert` gibt nichts aus, sondern löst eine Ausnahme aus – ohne `try` bricht das Programm ab."
+      - text: "`x` wird auf einen positiven Wert gesetzt."
+        correct: false
+        why: "`assert` prüft nur, es verändert nichts."
+cards:
+  - id: m03-c-float-vergleich
+    concept: m03-randfaelle
+    variants:
+      - type: predict
+        code: |
+          a = 0.1 * 3
+          print(a == 0.3, abs(a - 0.3) < 1e-9)
+        options: ["False True", "True True", "False False"]
+        answer: "False True"
+        explanation: "`0.1 * 3` ist `0.30000000000000004` – Kommazahlen mit Toleranz vergleichen."
+      - type: predict
+        code: |
+          import math
+          x = math.sin(math.pi)
+          print(x == 0.0, abs(x) < 1e-9)
+        options: ["False True", "True True", "True False"]
+        answer: "False True"
+        explanation: "`math.sin(math.pi)` ist etwa $1{,}2 \\cdot 10^{-16}$, nicht exakt 0."
+  - id: m03-c-assert
+    concept: m03-tests-assert
+    variants:
+      - type: predict
+        code: |
+          try:
+              assert 2 + 2 == 5, "Rechnung falsch"
+              print("bestanden")
+          except AssertionError as e:
+              print("Fehler:", e)
+        options: ["Fehler: Rechnung falsch", "bestanden", "Rechnung falsch"]
+        answer: "Fehler: Rechnung falsch"
+        explanation: Die Bedingung ist falsch → `AssertionError` mit der Meldung.
+      - type: predict
+        code: |
+          assert 3 > 1, "nie sichtbar"
+          print("weiter")
+        options: ["weiter", "nie sichtbar", "nie sichtbar weiter"]
+        answer: "weiter"
+        explanation: Ist die Bedingung wahr, macht `assert` gar nichts.
+  - id: m03-c-randfall
+    concept: m03-randfaelle
+    variants:
+      - type: quiz
+        question: "Welcher Test findet am ehesten den Fehler in `def first(xs): return xs[1]` (soll das erste Element liefern)?"
+        options:
+          - text: "`assert first([7, 8]) == 7`"
+            correct: true
+            why: Liefert 8 statt 7 – der Off-by-one fällt auf.
+          - text: "`assert first([7, 7]) == 7`"
+            correct: false
+            why: Bei gleichen Elementen ist Index 0 und 1 dasselbe – der Test besteht trotz Fehler.
+          - text: "`assert len([7, 8]) == 2`"
+            correct: false
+            why: Dieser Test ruft `first` gar nicht auf.
+      - type: quiz
+        question: Welche Eingabe ist für `mean(values)` der wichtigste Randfall?
+        options:
+          - text: "`[]` – die leere Liste"
+            correct: true
+            why: Hier wird durch `len(values) == 0` geteilt; das Verhalten muss festgelegt werden.
+          - text: "`[1, 2, 3]`"
+            correct: false
+            why: Ein typischer Fall – wichtig, aber kein Randfall.
+          - text: "`[10, 20, 30]`"
+            correct: false
+            why: Nur ein weiterer typischer Fall.

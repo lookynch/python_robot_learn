@@ -1,0 +1,350 @@
+id: m12-overfitting
+title: Overfitting und Regularisierung
+minutes: 10
+goals:
+  - Daten in Trainings- und Testmenge trennen und beide Fehler messen
+  - Overfitting an der Lernkurve über die Modellgröße erkennen
+  - Ridge-Regression geschlossen implementieren
+concepts: [ml-train-test, ml-overfitting, ml-regularisierung]
+steps:
+  - type: text
+    body: |
+      ## Auswendig lernen ist nicht verstehen
+
+      Ein Modell soll auf **neuen** Daten gut sein, nicht nur auf denen, mit denen es angepasst wurde. Deshalb teilt man die Daten:
+
+      - **Trainingsdaten** (training set): daran werden die Parameter angepasst.
+      - **Testdaten** (test set): nur zum Messen, nie zum Anpassen.
+
+      Als Versuchsobjekt dient eine Polynom-Regression. Die Merkmale sind Potenzen von $x$:
+
+      $$\hat y = w_k x^k + \dots + w_1 x + w_0$$
+
+      Das Modell ist nichtlinear in $x$, aber **linear in den Parametern** – also löst `lstsq` es weiterhin exakt. `np.vander(x, k + 1)` baut die Merkmalsmatrix.
+  - type: predict
+    code: |
+      import numpy as np
+      print(np.vander(np.array([2.0, 3.0]), 3))
+    options:
+      - |
+        [[4. 2. 1.]
+         [9. 3. 1.]]
+      - |
+        [[1. 2. 4.]
+         [1. 3. 9.]]
+      - |
+        [[2. 4. 8.]
+         [3. 9. 27.]]
+      - |
+        [[4. 9.]
+         [2. 3.]
+         [1. 1.]]
+    answer: |
+      [[4. 2. 1.]
+       [9. 3. 1.]]
+    explanation: |
+      `np.vander(x, 3)` liefert pro Beispiel eine Zeile $[x^2, x^1, x^0]$ – **absteigende** Potenzen, Shape `(N, 3)`. Die letzte Spalte Einsen ist der Bias.
+  - type: example
+    intro: |
+      15 verrauschte Messungen einer Sinuskurve, drei Polynomgrade:
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      x_tr = rng.uniform(-1, 1, 15)
+      y_tr = np.sin(np.pi * x_tr) + rng.normal(0, 0.2, 15)
+      x_te = rng.uniform(-1, 1, 100)
+      y_te = np.sin(np.pi * x_te) + rng.normal(0, 0.2, 100)
+
+      xs = np.linspace(-1, 1, 100)
+      fig = lab.Figure(title="Polynom-Fits", xlabel="x", ylabel="y")
+      fig.scatter(x_tr, y_tr, label="Training")
+      for deg in [1, 3, 9]:
+          w = np.linalg.lstsq(np.vander(x_tr, deg + 1), y_tr, rcond=None)[0]
+          test_mse = np.mean((np.vander(x_te, deg + 1) @ w - y_te) ** 2)
+          print(f"Grad {deg}: Test-MSE {test_mse:.3f}")
+          fig.line(np.vander(xs, deg + 1) @ w, x=xs, label=f"Grad {deg}")
+      fig.show()
+    subgoals:
+      - lines: [4, 8]
+        label: Trainings- und Testdaten erzeugen
+      - lines: [14, 14]
+        label: Auf Trainingsdaten anpassen
+      - lines: [15, 16]
+        label: Auf Testdaten messen
+      - lines: [17, 18]
+        label: Fits zeichnen
+    after: |
+      Grad 1 ist zu starr (**Underfitting**). Grad 9 schlängelt sich durch die Trainingspunkte und schießt am Rand weit daneben (**Overfitting**): Er hat das Rauschen mitgelernt.
+  - type: example
+    intro: |
+      Systematisch: Trainings- und Testfehler über alle Grade 0 bis 12.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      x_tr = rng.uniform(-1, 1, 15)
+      y_tr = np.sin(np.pi * x_tr) + rng.normal(0, 0.2, 15)
+      x_te = rng.uniform(-1, 1, 100)
+      y_te = np.sin(np.pi * x_te) + rng.normal(0, 0.2, 100)
+
+      degrees = range(13)
+      train_err, test_err = [], []
+      for deg in degrees:
+          w = np.linalg.lstsq(np.vander(x_tr, deg + 1), y_tr, rcond=None)[0]
+          train_err.append(np.mean((np.vander(x_tr, deg + 1) @ w - y_tr) ** 2))
+          test_err.append(np.mean((np.vander(x_te, deg + 1) @ w - y_te) ** 2))
+
+      fig = lab.Figure(title="Fehler über Modellgröße", xlabel="Polynomgrad", ylabel="MSE", logy=True)
+      fig.line(train_err, x=list(degrees), label="Training")
+      fig.line(test_err, x=list(degrees), label="Test")
+      fig.show()
+      print("bester Grad laut Test:", int(np.argmin(test_err)))
+    subgoals:
+      - lines: [10, 11]
+        label: Ergebnislisten anlegen
+      - lines: [12, 15]
+        label: Pro Grad anpassen und messen
+      - lines: [17, 21]
+        label: Beide Kurven zeichnen
+    after: |
+      Der Trainingsfehler fällt monoton – ein größeres Modell kann die Trainingspunkte immer besser treffen. Der Testfehler fällt erst und steigt dann stark. Dazwischen liegt der sinnvolle Bereich. (Streng genommen nutzt du die Testdaten schon zum Anpassen, sobald du den Grad nach ihnen auswählst – dafür nimmt man eine eigene Validierungsmenge.)
+  - type: explain
+    question: |
+      Warum steigt der Testfehler bei hohem Grad, obwohl der Trainingsfehler weiter sinkt?
+    options:
+      - text: Das Modell nutzt seine zusätzliche Flexibilität, um das Rauschen der 15 Trainingspunkte nachzubilden – dieses Rauschen ist in den Testdaten anders.
+        correct: true
+        why: Genau das ist Overfitting. Die zusätzlichen Parameter passen sich an Zufall statt an Struktur an.
+      - text: "`lstsq` wird bei hohem Grad numerisch ungenau und rechnet falsch."
+        correct: false
+        why: Die Trainingsfehler zeigen, dass das Optimum gefunden wird. Das Problem ist das Optimierungsziel, nicht die Rechnung.
+      - text: Die Testdaten stammen aus einer anderen Funktion.
+        correct: false
+        why: Beide kommen aus derselben Sinuskurve mit gleichem Rauschen.
+      - text: Mehr Parameter machen ein Modell immer schlechter.
+        correct: false
+        why: Von Grad 0 bis 3 wird der Testfehler mit mehr Parametern deutlich besser.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den Test-Fehler für ein Polynom vom Grad 3, das auf den Trainingsdaten angepasst wurde.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      x_tr = rng.uniform(-1, 1, 15)
+      y_tr = np.sin(np.pi * x_tr) + rng.normal(0, 0.2, 15)
+      x_te = rng.uniform(-1, 1, 100)
+      y_te = np.sin(np.pi * x_te) + rng.normal(0, 0.2, 100)
+      deg = 3
+      w = np.linalg.lstsq(np.vander(x_tr, deg + 1), y_tr, rcond=None)[0]
+      A_te = np.vander(x_te, ___)
+      test_mse = np.mean((A_te @ w - ___) ** 2)
+      print(round(test_mse, 3))
+    blanks:
+      - answer: deg + 1
+        options: [deg + 1, deg, len(x_te)]
+      - answer: y_te
+        options: [y_te, y_tr, w]
+    expect_output: "0.049"
+    explanation: |
+      Ein Polynom vom Grad 3 hat 4 Koeffizienten, also 4 Spalten. Verglichen wird mit den Zielwerten **derselben** Punkte (`y_te`).
+  - type: exercise
+    mode: make
+    prompt: |
+      **Ridge-Regression** bestraft große Gewichte:
+
+      $$L(\mathbf w) = \|A\mathbf w - \mathbf y\|^2 + \lambda \|\mathbf w\|^2 \quad\Rightarrow\quad (A^\top A + \lambda I)\,\mathbf w = A^\top \mathbf y$$
+
+      Schreibe `ridge_fit(A, y, lam)`, die dieses Gleichungssystem mit `np.linalg.solve` löst. `A` hat Shape `(N, p)`, das Ergebnis Shape `(p,)`.
+    starter: |
+      import numpy as np
+
+      def ridge_fit(A, y, lam):
+          p = A.shape[1]
+          # löse (A^T A + lam I) w = A^T y
+          return w
+    solution: |
+      import numpy as np
+
+      def ridge_fit(A, y, lam):
+          p = A.shape[1]
+          return np.linalg.solve(A.T @ A + lam * np.eye(p), A.T @ y)
+    tests:
+      - name: lam = 0 entspricht lstsq
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(4)
+          At, yt = rng.normal(size=(12, 4)), rng.normal(size=12)
+          ref = np.linalg.lstsq(At, yt, rcond=None)[0]
+          got = ridge_fit(At, yt, 0.0)
+          assert np.shape(got) == (4,), f"Ergebnis sollte Shape (4,) haben, hat {np.shape(got)}"
+          assert close(got, ref), f"Mit lam=0 erwartet {np.round(ref, 3)}, bekommen {np.round(got, 3)}"
+      - name: Werte für lam > 0
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(4)
+          At, yt = rng.normal(size=(12, 4)), rng.normal(size=12)
+          for lam in [0.1, 2.0]:
+              # Ridge = kleinste Quadrate mit angehängten Zeilen sqrt(lam) * I
+              big = np.vstack([At, np.sqrt(lam) * np.eye(4)])
+              ref = np.linalg.lstsq(big, np.concatenate([yt, np.zeros(4)]), rcond=None)[0]
+              got = ridge_fit(At, yt, lam)
+              assert close(got, ref), f"Für lam={lam} erwartet {np.round(ref, 3)}, bekommen {np.round(got, 3)}"
+      - name: Größeres lam, kleinere Gewichte
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(4)
+          At, yt = rng.normal(size=(12, 4)), rng.normal(size=12)
+          norms = [np.linalg.norm(ridge_fit(At, yt, lam)) for lam in [0.0, 1.0, 10.0, 100.0]]
+          assert all(a > b for a, b in zip(norms, norms[1:])), f"‖w‖ sollte mit lam fallen, ist {np.round(norms, 3)}"
+    mutants:
+      - |
+        import numpy as np
+        def ridge_fit(A, y, lam):
+            return np.linalg.solve(A.T @ A + lam, A.T @ y)
+      - |
+        import numpy as np
+        def ridge_fit(A, y, lam):
+            p = A.shape[1]
+            return np.linalg.solve(A.T @ A - lam * np.eye(p), A.T @ y)
+      - |
+        import numpy as np
+        def ridge_fit(A, y, lam):
+            p = A.shape[1]
+            return np.linalg.solve(A.T @ A + lam ** 2 * np.eye(p), A.T @ y)
+      - |
+        import numpy as np
+        def ridge_fit(A, y, lam):
+            p = A.shape[1]
+            return np.linalg.solve(A.T @ A + lam * np.eye(p), y)
+    hints:
+      - "Teilziel: Gleichungssystem aufstellen und lösen."
+      - "Die Matrix ist `A.T @ A + lam * I` mit der Einheitsmatrix `np.eye(p)`; die rechte Seite ist `A.T @ y`."
+      - "`np.linalg.solve(M, rhs)` löst $M\\mathbf w = \\text{rhs}$."
+      - "`return np.linalg.solve(A.T @ A + lam * np.eye(p), A.T @ y)`"
+    explanation: |
+      Ohne `np.eye` würde `+ lam` auf **jeden** Eintrag addiert statt nur auf die Diagonale. Der Test „Werte für lam > 0“ nutzt eine Identität: Ridge ist gewöhnliche kleinste Quadrate mit $p$ zusätzlichen Zeilen $\sqrt{\lambda}\,I$ und Zielwert 0 – „Gewichte sollen nahe 0 sein“. Vereinfachung: Hier wird auch der Bias bestraft; in der Praxis lässt man ihn oft aus.
+  - type: quiz
+    question: |
+      Trainings-MSE 0,001, Test-MSE 4,7. Was hilft am ehesten?
+    options:
+      - text: Kleineres Modell oder größeres $\lambda$.
+        correct: true
+        why: Das ist klassisches Overfitting – die Flexibilität muss runter.
+      - text: Länger trainieren.
+        correct: false
+        why: Der Trainingsfehler ist schon winzig; mehr Anpassung an die Trainingsdaten verschärft das Problem.
+      - text: Den Polynomgrad erhöhen.
+        correct: false
+        why: Mehr Flexibilität vergrößert die Lücke zwischen Training und Test.
+      - text: Die Testdaten mit ins Training nehmen und dann erneut auf ihnen testen.
+        correct: false
+        why: Dann misst der Test nichts mehr – das Ergebnis wäre geschönt.
+cards:
+  - id: m12-c-overfitting-erkennen
+    concept: ml-overfitting
+    variants:
+      - type: quiz
+        question: |
+          Welches Fehlerpaar (Training / Test) zeigt Overfitting?
+        options:
+          - text: 0,01 / 0,90
+            correct: true
+            why: Sehr gut auf Bekanntem, schlecht auf Neuem.
+          - text: 0,85 / 0,90
+            correct: false
+            why: Beide hoch – das ist Underfitting.
+          - text: 0,05 / 0,06
+            correct: false
+            why: Beide niedrig und nah beieinander – das Modell verallgemeinert.
+      - type: quiz
+        question: |
+          Der Trainingsfehler fällt mit wachsendem Polynomgrad stetig. Was folgt daraus?
+        options:
+          - text: Nichts über die Qualität auf neuen Daten – dafür braucht man den Testfehler.
+            correct: true
+            why: Ein flexibleres Modell kann die Trainingspunkte immer besser treffen, auch durch Auswendiglernen.
+          - text: Der höchste Grad ist der beste.
+            correct: false
+            why: Genau dort ist der Testfehler im Beispiel am größten.
+          - text: Das Modell ist fehlerhaft implementiert.
+            correct: false
+            why: Monoton fallender Trainingsfehler ist das erwartete Verhalten.
+  - id: m12-c-vander
+    concept: ml-overfitting
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.vander(np.array([1.0, 2.0, 3.0]), 4).shape)
+        options: ["(3, 4)", "(4, 3)", "(3, 3)", "(3, 5)"]
+        answer: "(3, 4)"
+        explanation: Eine Zeile pro Beispiel, 4 Spalten für $x^3, x^2, x, 1$ – Polynomgrad 3.
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.vander(np.array([2.0]), 4))
+        options: ["[[8. 4. 2. 1.]]", "[[1. 2. 4. 8.]]", "[[16. 8. 4. 2.]]"]
+        answer: "[[8. 4. 2. 1.]]"
+        explanation: Absteigende Potenzen $2^3, 2^2, 2^1, 2^0$.
+  - id: m12-c-lambda
+    concept: ml-regularisierung
+    variants:
+      - type: quiz
+        question: |
+          Was passiert bei Ridge-Regression, wenn $\lambda$ sehr groß wird?
+        options:
+          - text: Die Gewichte gehen gegen 0, das Modell wird zu starr.
+            correct: true
+            why: Der Strafterm dominiert den Datenterm.
+          - text: Das Modell overfittet stärker.
+            correct: false
+            why: Größeres $\lambda$ wirkt gegen Overfitting.
+          - text: Die Lösung entspricht `lstsq` ohne Regularisierung.
+            correct: false
+            why: Das gilt für $\lambda = 0$.
+      - type: quiz
+        question: |
+          Wie wählt man $\lambda$ sinnvoll?
+        options:
+          - text: Mehrere Werte probieren und den mit dem kleinsten Fehler auf zurückgehaltenen Daten nehmen.
+            correct: true
+            why: "$\\lambda$ ist ein Hyperparameter; er wird an Daten gewählt, die nicht zum Anpassen der Gewichte dienen."
+          - text: Den Wert mit dem kleinsten Trainingsfehler nehmen.
+            correct: false
+            why: Das wäre immer $\lambda = 0$ – Regularisierung erhöht den Trainingsfehler.
+          - text: Immer $\lambda = 1$.
+            correct: false
+            why: Die passende Stärke hängt von Daten und Skalierung der Merkmale ab.
+  - id: m12-c-testdaten
+    concept: ml-train-test
+    variants:
+      - type: quiz
+        question: |
+          Wofür dürfen Testdaten verwendet werden?
+        options:
+          - text: Nur zum Messen des Fehlers eines fertig angepassten Modells.
+            correct: true
+            why: Sonst wird der Testfehler zu optimistisch.
+          - text: Zum Anpassen der Gewichte, wenn die Trainingsdaten knapp sind.
+            correct: false
+            why: Dann sind es Trainingsdaten, und es bleibt nichts zum ehrlichen Messen.
+          - text: Zum Berechnen des Gradienten.
+            correct: false
+            why: Der Gradient kommt ausschließlich von den Trainingsdaten.
+      - type: quiz
+        question: |
+          Du probierst 20 Polynomgrade aus und wählst den mit dem kleinsten **Test**fehler. Was ist das Problem?
+        options:
+          - text: Der Testfehler wurde zum Auswählen benutzt und ist danach zu optimistisch – für eine ehrliche Messung braucht man eine dritte, unberührte Datenmenge.
+            correct: true
+            why: Darum trennt man oft Training, Validierung (zum Auswählen) und Test (zum Messen).
+          - text: Es gibt kein Problem, solange die Gewichte nur auf Trainingsdaten angepasst wurden.
+            correct: false
+            why: Auch die Wahl des Grads ist eine Anpassung an die Testdaten.
+          - text: Polynomgrade darf man gar nicht vergleichen.
+            correct: false
+            why: Vergleichen ist richtig – nur nicht auf den Daten, mit denen man am Ende misst.

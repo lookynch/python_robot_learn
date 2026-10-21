@@ -1,0 +1,61 @@
+id: m12
+number: 12
+title: Machine Learning von Grund auf
+summary: |
+  Lineare und logistische Regression, Overfitting und ein kleines neuronales Netz mit Backpropagation – alles selbst in NumPy gebaut, mit Lernkurven und Gradient-Check.
+depth: voll
+lessons:
+  - m12-lineare-regression
+  - m12-overfitting
+  - m12-logistische-regression
+  - m12-mlp-forward
+  - m12-backprop
+  - m12-training
+  - m12-gradient-check
+  - m12-checkpoint
+concepts:
+  - id: ml-lineare-regression
+    name: Lineare Regression
+    description: Modell ŷ = X w + b (eine Zeile von X = ein Beispiel), Verlust = mittlerer quadratischer Fehler (MSE), geschlossen lösbar mit lstsq.
+  - id: ml-mse-gradient
+    name: Gradient des MSE
+    description: ∇w L = 2/N · Xᵀ(ŷ − y), ∂L/∂b = 2·mean(ŷ − y); Update w ← w − lr · Gradient. Der Gradient hat die Shape des Parameters.
+  - id: ml-train-test
+    name: Trainings- und Testdaten
+    description: Parameter werden nur auf Trainingsdaten angepasst; der Fehler auf ungesehenen Testdaten misst, wie gut das Modell verallgemeinert.
+  - id: ml-overfitting
+    name: Overfitting
+    description: Ein zu flexibles Modell lernt das Rauschen mit – Trainingsfehler sinkt weiter, Testfehler steigt.
+  - id: ml-regularisierung
+    name: Regularisierung (Ridge)
+    description: Strafterm λ‖w‖² hält Gewichte klein; geschlossene Lösung (AᵀA + λI) w = Aᵀy.
+  - id: ml-sigmoid
+    name: Sigmoid und Klassifikation
+    description: σ(z) = 1/(1 + e^(−z)) macht aus einem Score eine Wahrscheinlichkeit; Entscheidungsgrenze bei z = 0.
+  - id: ml-kreuzentropie
+    name: Binäre Kreuzentropie
+    description: L = −mean(y log p + (1 − y) log(1 − p)); bestraft sichere Fehlentscheidungen stark.
+  - id: ml-logreg-gradient
+    name: Gradient der logistischen Regression
+    description: Mit Sigmoid + Kreuzentropie ist der Gradient nach den Scores einfach p − y, also ∇w L = Xᵀ(p − y)/N.
+  - id: ml-dense-layer
+    name: Vollverbundene Schicht
+    description: H = X @ W + b mit W.shape == (d_in, d_out); Batch-Achse vorne, Parameterzahl d_in·d_out + d_out.
+  - id: ml-aktivierung
+    name: Aktivierungsfunktionen
+    description: Nichtlinearitäten wie ReLU oder tanh zwischen den Schichten; ohne sie wäre ein MLP nur eine lineare Abbildung.
+  - id: ml-backprop
+    name: Backpropagation
+    description: Kettenregel rückwärts durch den Rechengraph – für Y = X @ W gilt dW = Xᵀ @ dY und dX = dY @ Wᵀ; Bias-Gradient = Summe über die Batch-Achse.
+  - id: ml-minibatch
+    name: Minibatches und Epochen
+    description: Pro Update nur B zufällig gezogene Beispiele; eine Epoche = einmal durch alle Daten in gemischter Reihenfolge.
+  - id: ml-normalisierung
+    name: Normalisierung der Eingaben
+    description: Merkmale mit Mittelwert und Standardabweichung der Trainingsdaten standardisieren – dieselben Werte auch für Testdaten verwenden.
+  - id: ml-adam
+    name: Adam-Optimierer
+    description: Gleitende Mittel von Gradient (m) und Gradientenquadrat (v) mit Bias-Korrektur; Schrittweite pro Parameter skaliert.
+  - id: ml-gradient-check
+    name: Gradient-Check
+    description: Analytischen Gradienten mit zentraler Differenz vergleichen; relativer Fehler um 1e-7 ist gut, ab etwa 1e-3 liegt meist ein Fehler vor.

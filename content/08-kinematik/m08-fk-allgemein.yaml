@@ -1,0 +1,323 @@
+id: m08-fk-allgemein
+title: FK für beliebig viele Gelenke
+minutes: 10
+goals:
+  - FK für n Gelenke mit einer Schleife berechnen (Winkel aufsummieren)
+  - Dieselbe FK als Kette homogener Transformationen schreiben
+  - Einen Arm mit vielen Gliedern animieren
+concepts: [fk-kette]
+steps:
+  - type: text
+    body: |
+      ## Von 2 auf n Gelenke
+
+      Mit relativen Winkeln hat Glied $i$ die absolute Richtung $\varphi_i = q_1 + \dots + q_i$. Die Spitze ist die Summe aller Gliedvektoren:
+
+      $$
+      p = \sum_{i=1}^{n} l_i \begin{pmatrix}\cos\varphi_i\\ \sin\varphi_i\end{pmatrix}
+      $$
+
+      Im Code heißt das: eine Schleife über die Gelenke, die einen **laufenden Winkel** (Akkumulator) und eine **laufende Position** mitführt. Jede Zwischenposition ist ein Gelenk – die brauchst du zum Zeichnen.
+  - type: trace
+    intro: |
+      Der Kern der Schleife: den Winkel aufsummieren.
+    code: |
+      q = [0.5, 0.25, -0.75]
+      angle = 0.0
+      for qi in q:
+          angle = angle + qi
+          print(angle)
+    questions:
+      - line: 4
+        hit: 2
+        var: angle
+        answer: "0.75"
+        prompt: Welchen absoluten Winkel hat das **zweite** Glied?
+      - line: 4
+        hit: 3
+        var: angle
+        answer: "0.0"
+        prompt: Und das dritte Glied?
+    after: |
+      Das dritte Glied zeigt wieder genau in x-Richtung, obwohl $q_3 = -0.75 \neq 0$ ist – die Knicke heben sich auf.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def fk_chain(q, links):
+          pts = [(0.0, 0.0)]
+          angle, x, y = 0.0, 0.0, 0.0
+          for qi, li in zip(q, links):
+              angle += qi
+              x += li * np.cos(angle)
+              y += li * np.sin(angle)
+              pts.append((x, y))
+          return np.array(pts)
+
+      links = [1.0, 0.8, 0.6, 0.4]
+      ts = np.linspace(0, 2 * np.pi, 120)
+      frames = [fk_chain([0.8 + 0.3 * np.sin(t), 0.6 * np.sin(t), 0.6 * np.sin(t + 1), 0.6 * np.sin(t + 2)], links) for t in ts]
+      print(frames[0].shape)
+      lab.chain(frames, title="Schlange mit 4 Gelenken")
+    subgoals:
+      - lines: [5, 6]
+        label: Startwerte festlegen
+      - lines: [7, 11]
+        label: Schleife über alle Gelenke
+      - lines: 12
+        label: Gelenkpositionen zurückgeben
+      - lines: [14, 18]
+        label: Bewegung animieren
+    after: |
+      `fk_chain` liefert ein Array der Form `(n + 1, 2)`: Basis plus ein Punkt pro Gelenk. Die letzte Zeile ist die Spitze.
+  - type: predict
+    code: |
+      import numpy as np
+
+      q = [np.pi / 2, -np.pi / 2, 0.0]
+      angle, x, y = 0.0, 0.0, 0.0
+      for qi in q:
+          angle += qi
+          x += np.cos(angle)
+          y += np.sin(angle)
+      print(f"{x:.2f} {y:.2f}")
+    options: ["2.00 1.00", "1.00 0.00", "0.00 3.00", "1.00 2.00"]
+    answer: "2.00 1.00"
+    explanation: |
+      Absolute Richtungen $\pi/2, 0, 0$: einmal hoch, zweimal nach rechts → $(2, 1)$. `1.00 0.00` entsteht, wenn man die Winkel als **absolut** liest (hoch, runter, rechts).
+  - type: text
+    title: Dasselbe mit homogenen Transformationen
+    body: |
+      Aus Modul 5: Ein Glied ist „drehe um $q_i$, dann schiebe um $l_i$ entlang der **neuen** x-Achse“:
+
+      $$
+      T_i = \begin{pmatrix}\cos q_i & -\sin q_i & l_i\cos q_i\\ \sin q_i & \cos q_i & l_i\sin q_i\\ 0&0&1\end{pmatrix}
+      $$
+
+      Die ganze Kette ist das Produkt $T = T_1 T_2 \cdots T_n$, **von links nach rechts**. Die Spitze steht in der letzten Spalte: `T[:2, 2]`. Das ist dieselbe Rechnung wie die Schleife – aber sie verallgemeinert sich direkt auf 3D und liefert zusätzlich die Orientierung der Spitze.
+  - type: example
+    code: |
+      import numpy as np
+
+      def link_T(qi, li):
+          c, s = np.cos(qi), np.sin(qi)
+          return np.array([[c, -s, li * c],
+                           [s,  c, li * s],
+                           [0.0, 0.0, 1.0]])
+
+      q = [0.4, -0.9, 1.3]
+      links = [1.0, 0.8, 0.5]
+      T = np.eye(3)
+      for qi, li in zip(q, links):
+          T = T @ link_T(qi, li)
+
+      print("Spitze:", np.round(T[:2, 2], 3))
+      print("Richtung der Spitze:", round(float(np.arctan2(T[1, 0], T[0, 0])), 3), "rad")
+    subgoals:
+      - lines: [3, 7]
+        label: Transformation eines Glieds
+      - lines: [11, 13]
+        label: Kette von links nach rechts multiplizieren
+      - lines: [15, 16]
+        label: Position und Orientierung ablesen
+    after: |
+      Die Richtung der Spitze ist $0.4 - 0.9 + 1.3 = 0.8$ rad – die Summe der Winkel, wie erwartet. Die Reihenfolge `T @ link_T(...)` ist wichtig: Jedes neue Glied wird im Koordinatensystem des vorherigen angehängt.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Schleife, sodass `fk_chain` die Gelenkpositionen liefert.
+    code: |
+      import numpy as np
+
+      def fk_chain(q, links):
+          pts = [(0.0, 0.0)]
+          angle, x, y = 0.0, 0.0, 0.0
+          for qi, li in zip(q, links):
+              ___
+              x += ___
+              y += li * np.sin(angle)
+              pts.append((x, y))
+          return np.array(pts)
+    blanks:
+      - answer: "angle += qi"
+        options: ["angle += qi", "angle = qi", "angle += li"]
+      - answer: "li * np.cos(angle)"
+        options: ["li * np.cos(angle)", "li * np.cos(qi)", "np.cos(angle)"]
+    tests:
+      - name: Vergleich mit lab.arm_points
+        code: |
+          import numpy as np
+          import lab
+          for q, links in [([0.3, 0.5, -0.4], [1.0, 0.7, 0.5]), ([1.0, -2.0], [0.6, 1.4])]:
+              ref = np.array(lab.arm_points(q, links))
+              assert close(fk_chain(q, links), ref), f"Für q={q}: erwartet {np.round(ref, 3).tolist()}, bekommen {np.round(fk_chain(q, links), 3).tolist()}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `fk_chain(q, links)` jetzt selbst – diesmal mit **homogenen Transformationen**. Rückgabe: Array der Form `(n + 1, 2)` mit Basis und allen Gelenkpositionen (die letzte Zeile ist die Spitze). `link_T` ist gegeben.
+    starter: |
+      import numpy as np
+
+      def link_T(qi, li):
+          c, s = np.cos(qi), np.sin(qi)
+          return np.array([[c, -s, li * c], [s, c, li * s], [0.0, 0.0, 1.0]])
+
+      def fk_chain(q, links):
+          T = np.eye(3)
+          pts = [T[:2, 2].copy()]
+          # Schleife über alle Gelenke
+          return np.array(pts)
+    solution: |
+      import numpy as np
+
+      def link_T(qi, li):
+          c, s = np.cos(qi), np.sin(qi)
+          return np.array([[c, -s, li * c], [s, c, li * s], [0.0, 0.0, 1.0]])
+
+      def fk_chain(q, links):
+          T = np.eye(3)
+          pts = [T[:2, 2].copy()]
+          for qi, li in zip(q, links):
+              T = T @ link_T(qi, li)
+              pts.append(T[:2, 2].copy())
+          return np.array(pts)
+    tests:
+      - name: Form (n + 1, 2)
+        code: |
+          import numpy as np
+          P = np.asarray(fk_chain([0.1, 0.2, 0.3], [1.0, 1.0, 1.0]))
+          assert P.shape == (4, 2), f"Bei 3 Gelenken erwartet Form (4, 2), bekommen {P.shape}"
+          assert close(P[0], [0.0, 0.0]), f"Erste Zeile sollte die Basis (0, 0) sein, ist {P[0]}"
+      - name: Bekannte Stellung
+        code: |
+          import numpy as np
+          P = np.asarray(fk_chain([np.pi / 2, -np.pi / 2, 0.0], [1.0, 1.0, 1.0]))
+          assert close(P[-1], [2.0, 1.0]), f"Spitze bei q=(π/2, -π/2, 0) sollte (2, 1) sein, ist {np.round(P[-1], 3)}"
+      - name: Zufällige Arme
+        code: |
+          import numpy as np
+          import lab
+          rng = np.random.default_rng(7)
+          for n in (2, 3, 5):
+              q = rng.uniform(-np.pi, np.pi, n)
+              links = rng.uniform(0.3, 1.5, n)
+              ref = np.array(lab.arm_points(q, links))
+              got = np.asarray(fk_chain(q, links))
+              assert got.shape == ref.shape and close(got, ref), f"n={n}: Gelenkpositionen stimmen nicht. Erwartet {np.round(ref, 2).tolist()}, bekommen {np.round(got, 2).tolist()}"
+    mutants:
+      - |
+        import numpy as np
+        def link_T(qi, li):
+            c, s = np.cos(qi), np.sin(qi)
+            return np.array([[c, -s, li * c], [s, c, li * s], [0.0, 0.0, 1.0]])
+        def fk_chain(q, links):
+            T = np.eye(3)
+            pts = [T[:2, 2].copy()]
+            for qi, li in zip(q, links):
+                T = link_T(qi, li) @ T
+                pts.append(T[:2, 2].copy())
+            return np.array(pts)
+      - |
+        import numpy as np
+        def link_T(qi, li):
+            c, s = np.cos(qi), np.sin(qi)
+            return np.array([[c, -s, li * c], [s, c, li * s], [0.0, 0.0, 1.0]])
+        def fk_chain(q, links):
+            pts = [np.zeros(2)]
+            for qi, li in zip(q, links):
+                T = link_T(qi, li)
+                pts.append(pts[-1] + T[:2, 2])
+            return np.array(pts)
+      - |
+        import numpy as np
+        def link_T(qi, li):
+            c, s = np.cos(qi), np.sin(qi)
+            return np.array([[c, -s, li * c], [s, c, li * s], [0.0, 0.0, 1.0]])
+        def fk_chain(q, links):
+            T = np.eye(3)
+            pts = []
+            for qi, li in zip(q, links):
+                T = T @ link_T(qi, li)
+                pts.append(T[:2, 2].copy())
+            return np.array(pts)
+    hints:
+      - "Teilziel: Kette von links nach rechts multiplizieren und nach jedem Glied die Position merken."
+      - Nach jedem Glied ist `T` die Transformation von der Basis bis zu diesem Gelenk; dessen Position steht in `T[:2, 2]`.
+      - |
+        ```python
+        for qi, li in zip(q, links):
+            T = T @ link_T(qi, li)
+            ...
+        ```
+      - "`pts.append(T[:2, 2].copy())` in der Schleife – `.copy()`, damit nicht alle Einträge auf dasselbe Array zeigen."
+    explanation: |
+      Mit `link_T(qi, li) @ T` (falsche Reihenfolge) würde das neue Glied **vor** die bisherige Kette gesetzt und die ganze bisherige Kette mitgedreht – die Positionen stimmen dann nicht mehr. Die Orientierung (Winkelsumme) bliebe trotzdem richtig, weil 2D-Drehungen vertauschbar sind; Translationen sind es nicht – deshalb fallen nur die Positionen falsch aus.
+  - type: quiz
+    question: |
+      Ein 5-Gelenk-Arm hat $q = (0.2, 0.1, -0.4, 0.3, 0.5)$. In welche absolute Richtung zeigt das letzte Glied?
+    options:
+      - text: 0.7 rad
+        correct: true
+        why: Summe aller relativen Winkel.
+      - text: 0.5 rad
+        correct: false
+        why: Das ist nur der letzte relative Winkel.
+      - text: 0.14 rad
+        correct: false
+        why: Das ist der Mittelwert – Richtungen addieren sich aber.
+cards:
+  - id: m08-c-winkel-akku
+    concept: fk-kette
+    variants:
+      - type: predict
+        code: |
+          q = [0.5, -0.25, 1.0]
+          angle = 0.0
+          for qi in q:
+              angle += qi
+          print(angle)
+        options: ["1.25", "1.0", "0.4166666666666667", "0.5"]
+        answer: "1.25"
+        explanation: Der Akkumulator summiert alle relativen Winkel.
+      - type: predict
+        code: |
+          q = [1.0, 0.5, -1.5]
+          angles = []
+          a = 0.0
+          for qi in q:
+              a += qi
+              angles.append(a)
+          print(angles)
+        options: ["[1.0, 1.5, 0.0]", "[1.0, 0.5, -1.5]", "[0.0, 1.0, 1.5]", "[1.5, 0.0, 0.0]"]
+        answer: "[1.0, 1.5, 0.0]"
+        explanation: Nach jedem Gelenk wird der laufende (absolute) Winkel gespeichert.
+  - id: m08-c-homogen-reihenfolge
+    concept: fk-kette
+    variants:
+      - type: quiz
+        question: |
+          Wie setzt man die Transformation eines 3-Gelenk-Arms aus $T_1, T_2, T_3$ zusammen?
+        options:
+          - text: $T = T_1 T_2 T_3$
+            correct: true
+            why: Jedes Glied wird im Koordinatensystem des vorherigen angehängt – von links nach rechts.
+          - text: $T = T_3 T_2 T_1$
+            correct: false
+            why: Matrixprodukte sind nicht vertauschbar – Drehungen und Verschiebungen zusammen ergeben in umgekehrter Reihenfolge eine andere (falsche) Spitzenposition.
+          - text: $T = T_1 + T_2 + T_3$
+            correct: false
+            why: Transformationen werden verkettet (multipliziert), nicht addiert.
+      - type: quiz
+        question: |
+          Wo steht in der homogenen 3×3-Matrix `T` die Position der Spitze?
+        options:
+          - text: "`T[:2, 2]` (letzte Spalte, obere zwei Einträge)"
+            correct: true
+            why: Die Translation steht in der letzten Spalte.
+          - text: "`T[2, :2]` (letzte Zeile)"
+            correct: false
+            why: Die letzte Zeile ist immer `[0, 0, 1]`.
+          - text: "`T[:2, :2]`"
+            correct: false
+            why: Das ist der Rotationsanteil (Orientierung).

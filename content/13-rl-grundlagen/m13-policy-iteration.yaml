@@ -1,0 +1,443 @@
+id: m13-policy-iteration
+title: Policy Iteration
+minutes: 11
+goals:
+  - Policy Evaluation und greedy Verbesserung zu Policy Iteration verbinden
+  - Policy Iteration implementieren und mit Value Iteration vergleichen
+  - Begründen, warum Policy Iteration nach endlich vielen Schritten endet
+concepts: [dp-policy-iteration, dp-greedy-policy]
+steps:
+  - type: text
+    body: |
+      ## Bewerten, verbessern, wiederholen
+
+      **Policy Iteration** wechselt zwei Schritte ab:
+
+      1. **Bewerten:** $V^\pi$ der aktuellen Policy berechnen (Lektion Bellman).
+      2. **Verbessern:** $\pi'(s) = \arg\max_a Q^\pi(s, a)$ – greedy bezüglich $V^\pi$.
+
+      Ändert sich die Policy nicht mehr, ist sie optimal.
+
+      **Verbesserungssatz** (policy improvement theorem): Die greedy Policy $\pi'$ ist in **jedem** Zustand mindestens so gut wie $\pi$. Weil es nur endlich viele deterministische Policies gibt ($4^{16}$ hier) und keine zweimal vorkommt, endet das Verfahren.
+
+      Zum Bewerten nehmen wir hier die exakte Lösung $(I - \gamma P_\pi)V = r_\pi$.
+  - type: predict
+    intro: |
+      Start-Policy: überall „hoch“. Vom Startfeld oben links läuft der Agent damit immer gegen den Rand.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def evaluate_exact(env, pi, gamma):
+          n = env.n_states
+          P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+          for s in range(n):
+              for p, s2, r, done in env.P[s][pi[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+
+      env = GridWorld()
+      V = evaluate_exact(env, np.zeros(16, dtype=int), 0.9)
+      print(round(V[0], 2), round(V[15], 2))
+    options: ["-10.0 0.0", "-1.0 0.0", "-inf 0.0", "-9.0 -10.0"]
+    answer: "-10.0 0.0"
+    explanation: |
+      Endlos −1 mit $\gamma = 0{,}9$: $-1/(1 - 0{,}9) = -10$. Mit $\gamma = 1$ wäre das Gleichungssystem singulär – dieser Wert wäre $-\infty$. Das Ziel ist Endzustand, Wert 0.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def evaluate_exact(env, pi, gamma):
+          n = env.n_states
+          P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+          for s in range(n):
+              for p, s2, r, done in env.P[s][pi[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+
+      env, gamma = GridWorld(slip=0.2), 0.9
+      pi = np.zeros(env.n_states, dtype=int)            # Start: überall hoch
+      for it in range(100):
+          V = evaluate_exact(env, pi, gamma)            # 1. bewerten
+          new_pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+          print(f"Iteration {it + 1}: V(Start) = {V[0]:.3f}, geänderte Zustände: {np.sum(new_pi != pi)}")
+          if np.array_equal(new_pi, pi):                # stabil -> optimal
+              break
+          pi = new_pi                                   # 2. verbessern
+      env.render(values=V, policy=pi, title="Policy Iteration: Ergebnis")
+    subgoals:
+      - lines: [21, 22]
+        label: Welt und Start-Policy
+      - lines: [24, 24]
+        label: Policy bewerten
+      - lines: [25, 25]
+        label: Greedy verbessern
+      - lines: [27, 29]
+        label: Auf Stabilität prüfen
+    after: |
+      Vier Bewertungen genügen. In den ersten Iterationen bleibt $V(\text{Start})$ bei −10: Die Verbesserung beginnt bei den Feldern nahe am Ziel und erreicht den Start erst, wenn eine Kette guter Aktionen bis dorthin existiert.
+  - type: explain
+    question: |
+      Value Iteration braucht hier Dutzende Sweeps, Policy Iteration nur 4 Iterationen. Ist Policy Iteration also immer schneller?
+    options:
+      - text: Nicht unbedingt – jede Iteration enthält eine vollständige Bewertung (Gleichungssystem oder viele Sweeps), die viel teurer ist als ein einzelner Sweep.
+        correct: true
+        why: Wenige teure Schritte gegen viele billige. Was schneller ist, hängt von der Größe des Problems ab.
+      - text: Ja, weil weniger Iterationen immer weniger Rechenzeit bedeuten.
+        correct: false
+        why: Eine PI-Iteration ist kein Sweep – sie löst ein ganzes lineares System.
+      - text: Nein, Policy Iteration findet oft nur eine fast optimale Policy.
+        correct: false
+        why: Wenn sie stabil wird, ist die Policy exakt optimal.
+      - text: Die beiden Verfahren sind identisch.
+        correct: false
+        why: VI optimiert die Werte direkt, PI wechselt zwischen expliziter Policy und ihrer Bewertung.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze Verbesserung und Abbruchbedingung. Der Test lässt die Policy vom Start laufen.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def evaluate_exact(env, pi, gamma):
+          n = env.n_states
+          P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+          for s in range(n):
+              for p, s2, r, done in env.P[s][pi[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+
+      env, gamma = GridWorld(), 0.9
+      pi = np.zeros(16, dtype=int)
+      for it in range(100):
+          V = evaluate_exact(env, pi, gamma)
+          new_pi = np.array([np.___(q_values(env, V, s, gamma)) for s in range(16)])
+          if np.array_equal(new_pi, ___):
+              break
+          pi = new_pi
+    blanks:
+      - answer: argmax
+        options: [argmax, max, argmin]
+      - answer: pi
+        options: [pi, new_pi, V]
+    tests:
+      - name: Policy erreicht das Ziel auf kürzestem Weg
+        code: |
+          s, steps, done = env.reset(), 0, False
+          while not done and steps < 50:
+              s, r, done = env.step(pi[s])
+              steps += 1
+          assert s == 15 and steps == 6, f"Erwartet: Ziel 15 nach 6 Schritten, bekommen: Feld {s} nach {steps} Schritten"
+      - name: Bricht ab, sobald die Policy stabil ist
+        code: |
+          assert it + 1 <= 10, f"Policy Iteration sollte hier nach höchstens 10 Iterationen stoppen, lief {it + 1}"
+    explanation: |
+      Verglichen wird die neue mit der **alten** Policy. `new_pi` mit sich selbst ist immer gleich – die Schleife bräche sofort ab, mit der schlechten Start-Policy.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `policy_iteration(env, gamma)`. Start: überall Aktion 0. Rückgabe: `(pi, V)` – die stabile Policy und ihre Werte. `q_values` und `evaluate_exact` sind gegeben.
+    starter: |
+      import numpy as np
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def evaluate_exact(env, pi, gamma):
+          n = env.n_states
+          P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+          for s in range(n):
+              for p, s2, r, done in env.P[s][pi[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+
+      def policy_iteration(env, gamma):
+          pi = np.zeros(env.n_states, dtype=int)
+          for it in range(100):
+              V = evaluate_exact(env, pi, gamma)
+              # verbessern, Stabilität prüfen
+          return pi, V
+    solution: |
+      import numpy as np
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def evaluate_exact(env, pi, gamma):
+          n = env.n_states
+          P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+          for s in range(n):
+              for p, s2, r, done in env.P[s][pi[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+
+      def policy_iteration(env, gamma):
+          pi = np.zeros(env.n_states, dtype=int)
+          for it in range(100):
+              V = evaluate_exact(env, pi, gamma)
+              new_pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+              if np.array_equal(new_pi, pi):
+                  break
+              pi = new_pi
+          return pi, V
+    tests:
+      - name: Deterministische Welt
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          pi_t, V_t = policy_iteration(GridWorld(), 0.9)
+          assert close(V_t[0], -4.0951, 1e-4), f"V(Start) sollte -(1 + 0.9 + … + 0.9⁴) ≈ -4.0951 sein, ist {V_t[0]:.4f}"
+      - name: Gleiche Werte wie Value Iteration (rutschig)
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld(slip=0.2)
+          pi_t, V_t = policy_iteration(env_t, 0.9)
+          V_ref = np.zeros(16)
+          for _ in range(400):
+              V_ref = np.array([max(sum(p * (r + 0.9 * V_ref[s2] * (not d)) for p, s2, r, d in env_t.P[s][a]) for a in range(4)) for s in range(16)])
+          assert close(V_t, V_ref, 1e-6), f"V(Start) erwartet {V_ref[0]:.3f}, bekommen {V_t[0]:.3f}"
+          assert len(pi_t) == 16 and all(0 <= int(a) < 4 for a in pi_t), f"pi sollte 16 Aktionen 0…3 enthalten, ist {pi_t}"
+    mutants:
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def evaluate_exact(env, pi, gamma):
+            n = env.n_states
+            P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+            for s in range(n):
+                for p, s2, r, done in env.P[s][pi[s]]:
+                    r_pi[s] += p * r
+                    if not done:
+                        P_pi[s, s2] += p
+            return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+        def policy_iteration(env, gamma):
+            pi = np.zeros(env.n_states, dtype=int)
+            V = evaluate_exact(env, pi, gamma)
+            pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+            return pi, evaluate_exact(env, pi, gamma)
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def evaluate_exact(env, pi, gamma):
+            n = env.n_states
+            P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+            for s in range(n):
+                for p, s2, r, done in env.P[s][pi[s]]:
+                    r_pi[s] += p * r
+                    if not done:
+                        P_pi[s, s2] += p
+            return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+        def policy_iteration(env, gamma):
+            pi = np.zeros(env.n_states, dtype=int)
+            for it in range(100):
+                V = evaluate_exact(env, pi, gamma)
+                new_pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+                if np.array_equal(new_pi, pi):
+                    break
+            return pi, V
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def evaluate_exact(env, pi, gamma):
+            n = env.n_states
+            P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+            for s in range(n):
+                for p, s2, r, done in env.P[s][pi[s]]:
+                    r_pi[s] += p * r
+                    if not done:
+                        P_pi[s, s2] += p
+            return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+        def policy_iteration(env, gamma):
+            pi = np.zeros(env.n_states, dtype=int)
+            for it in range(100):
+                V = evaluate_exact(env, pi, gamma)
+                new_pi = np.array([np.argmin(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+                if np.array_equal(new_pi, pi):
+                    break
+                pi = new_pi
+            return pi, V
+    hints:
+      - "Teilziel: greedy verbessern, mit der alten Policy vergleichen, ggf. übernehmen."
+      - "Neue Aktion je Zustand: `np.argmax(q_values(env, V, s, gamma))`."
+      - "Abbruch, wenn `np.array_equal(new_pi, pi)`; sonst `pi = new_pi`."
+      - |
+        ```python
+        new_pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+        if np.array_equal(new_pi, pi):
+            break
+        pi = new_pi
+        ```
+    explanation: |
+      Der Test vergleicht mit einer unabhängig gerechneten Value Iteration: Beide Verfahren müssen bei derselben optimalen Wertfunktion $V^*$ ankommen – auch wenn die Policies bei gleich guten Aktionen verschieden sein dürfen.
+  - type: example
+    intro: |
+      Vergleich auf der rutschigen Welt: $V(\text{Start})$ über VI-Sweeps und PI-Iterationen.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def evaluate_exact(env, pi, gamma):
+          n = env.n_states
+          P_pi, r_pi = np.zeros((n, n)), np.zeros(n)
+          for s in range(n):
+              for p, s2, r, done in env.P[s][pi[s]]:
+                  r_pi[s] += p * r
+                  if not done:
+                      P_pi[s, s2] += p
+          return np.linalg.solve(np.eye(n) - gamma * P_pi, r_pi)
+
+      env, gamma = GridWorld(slip=0.2), 0.9
+      V, vi_curve = np.zeros(16), []
+      for sweep in range(60):
+          V = np.array([np.max(q_values(env, V, s, gamma)) for s in range(16)])
+          vi_curve.append(V[0])
+
+      pi, pi_curve = np.zeros(16, dtype=int), []
+      for it in range(100):
+          V = evaluate_exact(env, pi, gamma)
+          pi_curve.append(V[0])
+          new_pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(16)])
+          if np.array_equal(new_pi, pi):
+              break
+          pi = new_pi
+
+      print(f"VI nach 60 Sweeps: {vi_curve[-1]:.3f}, PI nach {len(pi_curve)} Iterationen: {pi_curve[-1]:.3f}")
+      fig = lab.Figure(title="V(Start) während der Optimierung", xlabel="Sweep bzw. Iteration", ylabel="V(Start)")
+      fig.line(vi_curve, label="Value Iteration (Sweeps)")
+      fig.line(pi_curve, label="Policy Iteration (Iterationen)")
+      fig.show()
+    subgoals:
+      - lines: [22, 26]
+        label: Value Iteration mitschreiben
+      - lines: [28, 35]
+        label: Policy Iteration mitschreiben
+      - lines: [37, 41]
+        label: Beide Kurven zeigen
+    after: |
+      Beide landen beim selben Wert. VI nähert sich von oben an (Startwert 0 ist zu optimistisch), PI springt von unten in wenigen großen Stufen auf das Optimum. Das allgemeine Muster „bewerten ↔ verbessern“ heißt **verallgemeinerte Policy Iteration** (GPI) – es steckt in fast jedem RL-Algorithmus, auch in Actor-Critic (Modul 15).
+  - type: quiz
+    question: |
+      Policy Iteration liefert in einer Iteration `new_pi`, das identisch mit `pi` ist. Was folgt?
+    options:
+      - text: "`pi` ist optimal – greedy bezüglich der eigenen Werte zu sein heißt, die Bellman-Optimalitätsgleichung zu erfüllen."
+        correct: true
+        why: Wenn keine Aktion besser ist als die gewählte, gilt $V^\pi(s) = \max_a Q^\pi(s,a)$ für alle $s$.
+      - text: Das Verfahren steckt in einem lokalen Optimum fest.
+        correct: false
+        why: Bei endlichen MDPs gibt es dieses Problem nicht – Stabilität bedeutet Optimalität.
+      - text: Man muss mit einer zufälligen Policy neu starten.
+        correct: false
+        why: Unnötig; jede Start-Policy führt zu einer optimalen Policy.
+cards:
+  - id: m13-c-pi-schritte
+    concept: dp-policy-iteration
+    variants:
+      - type: quiz
+        question: |
+          Welche zwei Schritte wechseln sich bei Policy Iteration ab?
+        options:
+          - text: Policy bewerten ($V^\pi$) und greedy bezüglich $V^\pi$ verbessern.
+            correct: true
+            why: Bewerten und Verbessern – das Grundmuster.
+          - text: Zufällig explorieren und Belohnungen mitteln.
+            correct: false
+            why: Das ist ein Bandit-Verfahren; PI nutzt das Modell.
+          - text: Ein Maximum-Backup und einen Mittelwert-Backup.
+            correct: false
+            why: Value Iteration nutzt das Maximum-Backup; PI bewertet und verbessert eine explizite Policy.
+      - type: quiz
+        question: |
+          Warum endet Policy Iteration in einem endlichen MDP immer?
+        options:
+          - text: Jede Iteration liefert eine strikt bessere Policy, bis keine Verbesserung mehr möglich ist – und es gibt nur endlich viele deterministische Policies.
+            correct: true
+            why: Ohne Wiederholung muss die Folge nach höchstens $|A|^{|S|}$ Schritten enden – in der Praxis nach sehr viel weniger.
+          - text: Weil $\gamma < 1$ ist.
+            correct: false
+            why: "$\\gamma < 1$ sichert endliche Werte, nicht das Ende der Policy-Folge."
+          - text: Weil die Schleife auf 100 Iterationen begrenzt ist.
+            correct: false
+            why: Die Grenze ist nur ein Sicherheitsnetz.
+  - id: m13-c-pi-vergleich
+    concept: dp-policy-iteration
+    variants:
+      - type: quiz
+        question: |
+          Was ist eine Iteration der Policy Iteration im Vergleich zu einem Sweep der Value Iteration?
+        options:
+          - text: Deutlich teurer, weil sie die Policy vollständig bewertet.
+            correct: true
+            why: Eine vollständige Bewertung kostet ein Gleichungssystem oder viele Sweeps.
+          - text: Genauso teuer.
+            correct: false
+            why: Ein VI-Sweep ist nur ein Backup pro Zustand.
+          - text: Billiger, weil keine Maximierung nötig ist.
+            correct: false
+            why: Die Verbesserung braucht ebenfalls ein argmax über alle Aktionen.
+      - type: predict
+        code: |
+          import numpy as np
+          old = np.array([1, 2, 2, 0])
+          new = np.array([1, 2, 3, 0])
+          print(np.array_equal(old, new), int(np.sum(old != new)))
+        options: ["False 1", "True 0", "False 3", "True 1"]
+        answer: "False 1"
+        explanation: Ein Zustand hat die Aktion gewechselt – die Policy ist noch nicht stabil.

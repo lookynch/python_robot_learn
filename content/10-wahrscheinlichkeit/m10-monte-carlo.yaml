@@ -1,0 +1,289 @@
+id: m10-monte-carlo
+title: Monte-Carlo-Schätzung
+minutes: 9
+goals:
+  - Erwartungswerte und Integrale als Mittelwert über Stichproben schätzen
+  - Den Fehler einer Monte-Carlo-Schätzung messen und seine $1/\sqrt{N}$-Abnahme erkennen
+  - Erwartete Kosten einer verrauschten Aktion schätzen
+concepts: [wk-monte-carlo, wk-mc-fehler]
+steps:
+  - type: text
+    body: |
+      ## Rechnen durch Würfeln
+
+      Viele Erwartungswerte lassen sich nicht geschlossen ausrechnen – etwa die mittleren Kosten eines Roboters, dessen Motor verrauscht ist. **Monte-Carlo** (MC) ersetzt das Integral durch einen Mittelwert über Stichproben $x_i \sim p$:
+
+      $$
+      E[g(X)] \approx \frac{1}{N} \sum_{i=1}^{N} g(x_i)
+      $$
+
+      Für ein Integral über $[a, b]$ zieht man gleichverteilt: $\int_a^b g(x)\,dx \approx (b-a)\cdot \frac{1}{N}\sum_i g(u_i)$ mit $u_i \sim U(a, b)$.
+
+      Der Fehler fällt wie $\sigma_g / \sqrt{N}$ – unabhängig von der Dimension. Deshalb nutzen Planer und RL-Verfahren so oft Stichproben.
+  - type: example
+    intro: |
+      Klassiker: $\pi$ schätzen. Der Viertelkreis mit Radius 1 hat die Fläche $\pi/4$, das Einheitsquadrat die Fläche 1. Der Anteil zufälliger Punkte im Kreis schätzt also $\pi/4$.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      for n in [100, 10000, 1000000]:
+          P = rng.uniform(0, 1, size=(n, 2))
+          innen = np.sum(P ** 2, axis=1) <= 1
+          print(n, round(4 * np.mean(innen), 4))
+
+      s = lab.Scene(title="Punkte im Viertelkreis", bounds=[0, 1, 0, 1])
+      winkel = np.linspace(0, np.pi / 2, 50)
+      s.line(np.stack([np.cos(winkel), np.sin(winkel)], axis=1), color="muted", static=True)
+      for (x, y), drin in zip(P[:300], innen[:300]):
+          s.circle(x, y, 0.008, color="good" if drin else "bad", fill="good" if drin else "bad")
+      s.show()
+    subgoals:
+      - lines: [5, 6]
+        label: Stichproben ziehen
+      - lines: 7
+        label: Funktion auswerten (im Kreis ja/nein)
+      - lines: 8
+        label: Mittelwert bilden und skalieren
+      - lines: [10, 15]
+        label: Stichprobe zeichnen
+    after: |
+      Mit 100 Punkten liegt die Schätzung bei 2,92 – deutlich daneben. Mit einer Million Punkten stimmen drei Nachkommastellen. Hundertmal mehr Punkte bringen etwa eine Stelle mehr: $\sqrt{100} = 10$.
+  - type: predict
+    intro: |
+      Geschätzt wird $\int_0^2 x^2\,dx$.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      x = rng.uniform(0, 2, size=100000)
+      print(round(2 * np.mean(x ** 2), 1))
+    options: ["2.7", "1.3", "8.0", "4.0"]
+    answer: "2.7"
+    explanation: |
+      Exakt ist $\int_0^2 x^2\,dx = 8/3 \approx 2.67$. Der Mittelwert allein (≈ 1,33) wäre $E[X^2]$ für $X \sim U(0, 2)$ – erst der Faktor $b - a = 2$ macht daraus das Integral.
+  - type: explain
+    question: |
+      Warum steht beim MC-Integral der Faktor $(b - a)$ vor dem Mittelwert?
+    options:
+      - text: "Die Dichte von $U(a, b)$ ist $1/(b-a)$, also ist $E[g(U)] = \\frac{1}{b-a}\\int_a^b g(x)\\,dx$. Mit $(b-a)$ multipliziert bleibt das Integral."
+        correct: true
+        why: Der Mittelwert schätzt einen Erwartungswert. Der Faktor wandelt ihn in ein Integral um.
+      - text: Damit sich die Schätzung bei mehr Stichproben nicht verändert.
+        correct: false
+        why: Der Faktor hängt nicht von $N$ ab. Mehr Stichproben machen die Schätzung genauer, nicht größer.
+      - text: Er korrigiert den zufälligen Fehler der Stichprobe.
+        correct: false
+        why: Der Faktor ist eine feste Umrechnung. Gegen den Zufallsfehler hilft nur ein größeres $N$.
+  - type: example
+    intro: |
+      Wie genau ist eine Schätzung mit $N$ Stichproben? Wir wiederholen sie 100-mal (für $\int_0^1 x^2\,dx = 1/3$) und messen die **Streuung der Schätzungen**.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(1)
+      Ns = np.array([10, 30, 100, 300, 1000, 3000, 10000])
+      fehler = []
+      for n in Ns:
+          U = rng.uniform(0, 1, size=(100, n))
+          schaetzungen = np.mean(U ** 2, axis=1)
+          fehler.append(np.std(schaetzungen))
+          print(n, round(fehler[-1], 4), round(fehler[-1] * np.sqrt(n), 2))
+
+      fig = lab.Figure(title="MC-Fehler", xlabel="log10(N)", ylabel="Streuung", logy=True)
+      fig.line(fehler, x=np.log10(Ns), label="gemessen")
+      fig.line(0.3 / np.sqrt(Ns), x=np.log10(Ns), label="0.3 / √N")
+      fig.show()
+    subgoals:
+      - lines: [8, 9]
+        label: 100 Schätzungen auf einmal
+      - lines: [10, 11]
+        label: Streuung messen
+      - lines: [13, 16]
+        label: Mit 1/√N vergleichen
+    after: |
+      Die Spalte `fehler · √N` bleibt ungefähr konstant (≈ 0,3 = Standardabweichung von $U^2$). In der logarithmischen Darstellung ist der Fehler eine Gerade mit Steigung $-1/2$.
+  - type: fill
+    fading: true
+    prompt: |
+      Vervollständige die Funktion `mc_integral(g, a, b, n, rng)`, die $\int_a^b g(x)\,dx$ schätzt. `g` ist eine Funktion, die ein ganzes Array auswertet (z. B. `np.sin`).
+    code: |
+      import numpy as np
+
+      def mc_integral(g, a, b, n, rng):
+          x = rng.uniform(a, b, size=n)
+          return ___ * np.___(g(x))
+
+      rng = np.random.default_rng(0)
+      print(round(mc_integral(np.sin, 0, np.pi, 100000, rng), 1))
+    blanks:
+      - answer: "(b - a)"
+        options: ["(b - a)", "b", "1", "(a - b)"]
+      - answer: "mean"
+        options: ["mean", "sum", "max", "std"]
+    tests:
+      - name: Sinus über [0, π]
+        code: |
+          r = mc_integral(np.sin, 0, np.pi, 200000, np.random.default_rng(1))
+          assert close(r, 2.0, tol=0.02), f"∫ sin über [0, π] ist 2, Schätzung {r}"
+      - name: x² über [1, 3]
+        code: |
+          def quadrat(x):
+              return x ** 2
+          r = mc_integral(quadrat, 1, 3, 200000, np.random.default_rng(2))
+          assert close(r, 26 / 3, tol=0.05), f"∫ x² über [1, 3] ist 26/3 ≈ 8.667, Schätzung {r}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Gelenk soll Geschwindigkeit 1 rad/s fahren. Du befiehlst `u`, der Motor setzt aber $u + \varepsilon$ mit $\varepsilon \sim N(0, \sigma^2)$ um. Die Kosten sind $(u + \varepsilon - 1)^2$.
+
+      Schreibe `erwartete_kosten(u, sigma, n, rng)`, die die **erwarteten Kosten** per Monte-Carlo mit `n` Stichproben schätzt.
+    starter: |
+      import numpy as np
+
+      def erwartete_kosten(u, sigma, n, rng):
+          # dein Code
+          pass
+
+      rng = np.random.default_rng(0)
+      print(erwartete_kosten(1.0, 0.5, 100000, rng))
+    solution: |
+      import numpy as np
+
+      def erwartete_kosten(u, sigma, n, rng):
+          eps = rng.normal(0.0, sigma, size=n)
+          return np.mean((u + eps - 1) ** 2)
+
+      rng = np.random.default_rng(0)
+      print(erwartete_kosten(1.0, 0.5, 100000, rng))
+    tests:
+      - name: Perfekter Befehl, nur Rauschen
+        code: |
+          r = erwartete_kosten(1.0, 0.5, 100000, np.random.default_rng(1))
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert close(r, 0.25, tol=0.02), f"Bei u = 1 bleibt nur das Rauschen: erwartet ≈ σ² = 0.25, bekommen {r}"
+      - name: Großes Rauschen
+        code: |
+          r = erwartete_kosten(1.0, 2.0, 100000, np.random.default_rng(2))
+          assert close(r, 4.0, tol=0.1), f"Bei σ = 2 erwartet ≈ 4.0, bekommen {r}"
+      - name: Falscher Befehl plus Rauschen
+        code: |
+          r = erwartete_kosten(3.0, 1.0, 100000, np.random.default_rng(3))
+          assert close(r, 5.0, tol=0.1), f"Bei u = 3, σ = 1 erwartet ≈ (3-1)² + 1 = 5, bekommen {r}"
+    mutants:
+      - |
+        import numpy as np
+        def erwartete_kosten(u, sigma, n, rng):
+            return (u - 1) ** 2
+      - |
+        import numpy as np
+        def erwartete_kosten(u, sigma, n, rng):
+            eps = rng.normal(0.0, sigma ** 2, size=n)
+            return np.mean((u + eps - 1) ** 2)
+      - |
+        import numpy as np
+        def erwartete_kosten(u, sigma, n, rng):
+            eps = rng.normal(0.0, sigma, size=n)
+            return np.sum((u + eps - 1) ** 2)
+      - |
+        import numpy as np
+        def erwartete_kosten(u, sigma, n, rng):
+            eps = rng.normal(0.0, sigma, size=n)
+            return np.mean((u - 1) ** 2 + eps)
+    hints:
+      - "Teilziel: `n` Rauschwerte ziehen, Kosten für jeden auswerten, mitteln."
+      - "Das Rauschen ist $N(0, \\sigma^2)$ – `rng.normal` erwartet die Standardabweichung."
+      - "`eps = rng.normal(0.0, sigma, size=n)`"
+      - "`return np.mean((u + eps - 1) ** 2)`"
+    explanation: |
+      Hier kennt man das exakte Ergebnis $(u-1)^2 + \sigma^2$ – so konnten die Tests prüfen. Für die Kosten eines simulierten Pendels gibt es keine Formel mehr, MC funktioniert trotzdem.
+  - type: quiz
+    question: |
+      Eine MC-Schätzung mit $N = 1000$ hat eine Streuung von $0.02$. Wie viele Stichproben brauchst du ungefähr für $0.01$?
+    options:
+      - text: "4000"
+        correct: true
+        why: Der Fehler fällt mit $1/\sqrt{N}$. Halber Fehler heißt $\sqrt{N}$ verdoppeln, also $N$ vervierfachen.
+      - text: "2000"
+        correct: false
+        why: Das würde gelten, wenn der Fehler mit $1/N$ fiele. Er fällt aber nur mit $1/\sqrt{N}$.
+      - text: "1 000 000"
+        correct: false
+        why: Viel zu viele – das wäre etwa $0.02/\sqrt{1000} \approx 0.0006$.
+cards:
+  - id: m10-c-mc-wurzel
+    concept: wk-mc-fehler
+    variants:
+      - type: quiz
+        question: Wie ändert sich die Streuung einer MC-Schätzung, wenn man $N$ verhundertfacht?
+        options:
+          - text: Sie wird etwa zehnmal kleiner.
+            correct: true
+            why: $1/\sqrt{100} = 1/10$.
+          - text: Sie wird etwa hundertmal kleiner.
+            correct: false
+            why: Das wäre $1/N$ – MC konvergiert langsamer, mit $1/\sqrt{N}$.
+          - text: Sie bleibt gleich; nur der Mittelwert wird genauer.
+            correct: false
+            why: Die Streuung der Schätzung ist genau das Maß ihrer Genauigkeit – sie sinkt.
+      - type: quiz
+        question: Eine Schätzung mit $N = 400$ streut um $0.05$. Was erwartest du bei $N = 100$?
+        options:
+          - text: etwa 0.1
+            correct: true
+            why: Ein Viertel der Stichproben verdoppelt die Streuung, $\sqrt{4} = 2$.
+          - text: etwa 0.2
+            correct: false
+            why: Das wäre ein Fehler proportional zu $1/N$.
+          - text: etwa 0.0125
+            correct: false
+            why: Weniger Stichproben machen die Schätzung ungenauer, nicht genauer.
+  - id: m10-c-mc-integral
+    concept: wk-monte-carlo
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          x = rng.uniform(0, 3, size=100000)
+          print(round(3 * np.mean(x), 1))
+        options: ["4.5", "1.5", "9.0", "3.0"]
+        answer: "4.5"
+        explanation: $\int_0^3 x\,dx = 4.5$; der Mittelwert allein (≈ 1,5) ist $E[X]$, erst $(b-a) = 3$ macht daraus das Integral.
+      - type: predict
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          x = rng.uniform(0, 1, size=100000)
+          print(round(np.mean(x ** 2), 2))
+        options: ["0.33", "0.5", "0.25", "1.0"]
+        answer: "0.33"
+        explanation: Auf $[0, 1]$ ist $b - a = 1$, der Mittelwert schätzt direkt $\int_0^1 x^2\,dx = 1/3$.
+  - id: m10-c-mc-idee
+    concept: wk-monte-carlo
+    variants:
+      - type: quiz
+        question: Was braucht man für eine Monte-Carlo-Schätzung von $E[g(X)]$ **nicht**?
+        options:
+          - text: Eine geschlossene Formel für $E[g(X)]$
+            correct: true
+            why: Genau die ersetzt MC – es reicht, Stichproben von $X$ zu ziehen und $g$ auszuwerten.
+          - text: Stichproben von $X$
+            correct: false
+            why: Ohne Stichproben gibt es nichts zu mitteln.
+          - text: Die Möglichkeit, $g$ an einzelnen Punkten auszuwerten
+            correct: false
+            why: Jede Stichprobe wird in $g$ eingesetzt – das muss gehen (z. B. per Simulation).
+      - type: quiz
+        question: Wie schätzt man die erwarteten Kosten eines Roboters mit verrauschtem Motor per Monte-Carlo?
+        options:
+          - text: Viele Rauschwerte ziehen, für jeden die Kosten simulieren, die Kosten mitteln
+            correct: true
+            why: Das ist genau $E[g(X)] \approx \frac{1}{N}\sum_i g(x_i)$ mit $g$ = Kosten der Simulation.
+          - text: Einmal mit dem mittleren Rauschen 0 simulieren
+            correct: false
+            why: Das liefert $g(E[X])$, nicht $E[g(X)]$ – bei nichtlinearen Kosten ist das etwas anderes.
+          - text: Die Kosten des schlechtesten Rauschwerts nehmen
+            correct: false
+            why: Das wäre eine Worst-Case-Abschätzung, kein Erwartungswert.

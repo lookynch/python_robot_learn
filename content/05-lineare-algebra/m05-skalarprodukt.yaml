@@ -1,0 +1,252 @@
+id: m05-skalarprodukt
+title: Skalarprodukt, Winkel und Projektion
+minutes: 8
+goals:
+  - Das Skalarprodukt mit `@` berechnen und von `*` unterscheiden
+  - Winkel zwischen Vektoren und Orthogonalität prüfen
+  - Einen Vektor auf eine Richtung projizieren
+concepts: [la-skalarprodukt]
+steps:
+  - type: text
+    body: |
+      ## Auffrischung
+
+      $$ \vec a \cdot \vec b = \sum_i a_i b_i = \|\vec a\|\,\|\vec b\|\cos\theta $$
+
+      In NumPy: `a @ b` (oder `np.dot(a, b)`). **Nicht** `a * b` – das ist elementweise und liefert wieder einen Vektor.
+
+      - $\vec a \cdot \vec b = 0$ ⇔ orthogonal (für Vektoren ungleich null)
+      - Projektion von $\vec b$ auf die Einheitsrichtung $\vec e$: $(\vec b \cdot \vec e)\,\vec e$
+
+      **Robotik-Bild:** Welcher Teil einer Kraft wirkt in Bewegungsrichtung? Das ist die Projektion. Die mechanische Arbeit ist $W = \vec F \cdot \vec s$.
+  - type: example
+    code: |
+      import numpy as np
+      a = np.array([1.0, 0.0])
+      b = np.array([1.0, 1.0])
+      cos_theta = (a @ b) / (np.linalg.norm(a) * np.linalg.norm(b))
+      theta = np.arccos(cos_theta)
+      print(round(theta, 4), "rad")
+      print(np.round(np.degrees(theta), 2), "Grad")
+    subgoals:
+      - lines: [1, 3]
+        label: Vektoren anlegen
+      - lines: 4
+        label: Kosinus aus Skalarprodukt und Längen
+      - lines: [5, 7]
+        label: Winkel berechnen und ausgeben
+    after: |
+      $\theta = \pi/4 \approx 0.7854$ rad $= 45°$. `np.degrees` rechnet nur für die Anzeige in Grad um; gerechnet wird in Radiant. Ohne Runden stünde dort `45.00000000000001` – ein Rundungsrest.
+
+      Solche Reste können bei fast parallelen Vektoren `cos_theta` knapp über 1 schieben; dann liefert `np.arccos` `nan`. Robust ist `np.arccos(np.clip(cos_theta, -1.0, 1.0))`.
+  - type: predict
+    code: |
+      import numpy as np
+      a = np.array([1, 2, 3])
+      b = np.array([4, 5, 6])
+      print(a * b)
+      print(a @ b)
+    options:
+      - |
+        [ 4 10 18]
+        32
+      - |
+        32
+        32
+      - |
+        [ 4 10 18]
+        [ 4 10 18]
+      - |
+        32
+        [ 4 10 18]
+    answer: |
+      [ 4 10 18]
+      32
+    explanation: |
+      `*` multipliziert paarweise, `@` summiert diese Produkte zusätzlich: $4 + 10 + 18 = 32$.
+  - type: explain
+    question: |
+      $(2, 1) \cdot (-1, 2) = -2 + 2 = 0$. Was bedeutet das geometrisch?
+    options:
+      - text: Die Vektoren stehen senkrecht aufeinander (90°).
+        correct: true
+        why: "$\\cos\\theta = 0$ bei Längen ungleich null heißt $\\theta = \\pi/2$."
+      - text: Einer der Vektoren hat die Länge 0.
+        correct: false
+        why: Beide haben die Länge $\sqrt 5$. Das Produkt ist trotzdem 0 – wegen des Winkels.
+      - text: Die Vektoren zeigen in entgegengesetzte Richtungen.
+        correct: false
+        why: Dann wäre $\cos\theta = -1$ und das Skalarprodukt negativ ($-\|a\|\|b\|$).
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      F = np.array([2.0, 1.5])     # Kraft in N
+      e = np.array([1.0, 0.0])     # Bewegungsrichtung (Einheitsvektor)
+      F_par = (F @ e) * e
+      F_senk = F - F_par
+      print(F_par, F_senk, F_par @ F_senk)
+      lab.vectors([F, F_par, F_senk], labels=["F", "F parallel", "F senkrecht"])
+    subgoals:
+      - lines: [1, 4]
+        label: Kraft und Richtung festlegen
+      - lines: [5, 6]
+        label: In parallelen und senkrechten Anteil zerlegen
+      - lines: [7, 8]
+        label: Prüfen und zeichnen
+    after: |
+      Nur der parallele Anteil $(2, 0)$ N verrichtet Arbeit entlang $\vec e$. Der Rest steht senkrecht dazu – das Skalarprodukt der beiden Anteile ist 0.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne den Winkel zwischen `a` und `b` in Grad.
+    code: |
+      import numpy as np
+      a = np.array([0.0, 2.0])
+      b = np.array([3.0, 3.0])
+      cos_theta = (a @ b) / (np.linalg.norm(a) * np.linalg.___(b))
+      print(np.round(np.degrees(np.___(cos_theta)), 1))
+    blanks:
+      - answer: norm
+        options: [norm, det, inv]
+      - answer: arccos
+        options: [arccos, cos, arctan]
+    expect_output: "45.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `projektion(b, r)`, die `b` auf die Richtung `r` projiziert. `r` muss **kein** Einheitsvektor sein:
+
+      $$ \text{proj}_{\vec r}(\vec b) = \frac{\vec b \cdot \vec r}{\vec r \cdot \vec r}\,\vec r $$
+    starter: |
+      import numpy as np
+
+      def projektion(b, r):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def projektion(b, r):
+          return (b @ r) / (r @ r) * r
+    tests:
+      - name: Auf die x-Achse
+        code: |
+          import numpy as np
+          p = projektion(np.array([2.0, 1.5]), np.array([1.0, 0.0]))
+          assert close(p, [2.0, 0.0]), f"Erwartet [2, 0], bekommen {p}"
+      - name: Richtung nicht normiert
+        code: |
+          import numpy as np
+          p = projektion(np.array([2.0, 1.5]), np.array([3.0, 0.0]))
+          assert close(p, [2.0, 0.0]), f"Die Länge von r darf das Ergebnis nicht ändern: erwartet [2, 0], bekommen {p}"
+      - name: Schräge Richtung
+        code: |
+          import numpy as np
+          p = projektion(np.array([3.0, 1.0]), np.array([1.0, 1.0]))
+          assert close(p, [2.0, 2.0]), f"Erwartet [2, 2], bekommen {p}"
+      - name: Senkrecht ergibt Nullvektor
+        code: |
+          import numpy as np
+          p = projektion(np.array([0.0, 5.0]), np.array([2.0, 0.0]))
+          assert close(p, [0.0, 0.0]), f"Erwartet [0, 0], bekommen {p}"
+    mutants:
+      - |
+        import numpy as np
+
+        def projektion(b, r):
+            return (b @ r) * r
+      - |
+        import numpy as np
+
+        def projektion(b, r):
+            return (b @ r) / np.linalg.norm(r) * r
+      - |
+        import numpy as np
+
+        def projektion(b, r):
+            return (b * r) / (r @ r) * r
+    hints:
+      - "Teilziel: Skalarprodukt bilden, durch $\\vec r \\cdot \\vec r$ teilen, mit `r` multiplizieren."
+      - "$\\vec r \\cdot \\vec r = \\|\\vec r\\|^2$ – deshalb ist ein Einheitsvektor der Sonderfall mit Nenner 1."
+      - "`return (b @ r) / (r @ r) * r`"
+  - type: quiz
+    question: |
+      Das Skalarprodukt zweier Vektoren (beide ungleich null) ist **negativ**. Was folgt daraus?
+    options:
+      - text: Der Winkel zwischen ihnen ist größer als 90°.
+        correct: true
+        why: "$\\cos\\theta < 0$ für $\\pi/2 < \\theta \\le \\pi$."
+      - text: Einer der Vektoren hat negative Länge.
+        correct: false
+        why: Längen sind nie negativ; das Vorzeichen kommt vom Kosinus.
+      - text: Die Vektoren sind orthogonal.
+        correct: false
+        why: Orthogonal heißt Skalarprodukt genau 0.
+cards:
+  - id: m05-c-dot-vs-mal
+    concept: la-skalarprodukt
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([1, 2])
+          b = np.array([3, 4])
+          print(a @ b)
+        options: ["11", "[3 8]", "10", "[4 6]"]
+        answer: "11"
+        explanation: "$1\\cdot3 + 2\\cdot4 = 11$; `[3 8]` wäre `a * b`."
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([2, 0, 1])
+          b = np.array([1, 5, 3])
+          print(a * b)
+        options: ["[2 0 3]", "5", "[3 5 4]", "15"]
+        answer: "[2 0 3]"
+        explanation: "`*` ist elementweise; das Skalarprodukt wäre $2 + 0 + 3 = 5$."
+  - id: m05-c-orthogonal
+    concept: la-skalarprodukt
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.array([3.0, -1.0]) @ np.array([1.0, 3.0]))
+        options: ["0.0", "6.0", "[ 3. -3.]", "-3.0"]
+        answer: "0.0"
+        explanation: "$3 - 3 = 0$ – die Vektoren stehen senkrecht aufeinander."
+      - type: quiz
+        question: |
+          Welcher Vektor steht senkrecht auf $(1, 2)$?
+        options:
+          - text: "$(-2, 1)$"
+            correct: true
+            why: "$-2 + 2 = 0$. Allgemein steht $(-v_2, v_1)$ senkrecht auf $(v_1, v_2)$."
+          - text: "$(2, 1)$"
+            correct: false
+            why: "$2 + 2 = 4 \\ne 0$."
+          - text: "$(-1, -2)$"
+            correct: false
+            why: Das ist die Gegenrichtung (180°), Skalarprodukt $-5$.
+  - id: m05-c-winkel
+    concept: la-skalarprodukt
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([1.0, 0.0])
+          b = np.array([-1.0, 0.0])
+          print(np.degrees(np.arccos(a @ b)))
+        options: ["180.0", "0.0", "90.0", "-180.0"]
+        answer: "180.0"
+        explanation: "Beide haben Länge 1, also $\\cos\\theta = -1$ und $\\theta = \\pi$."
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([0.0, 1.0])
+          b = np.array([0.0, 4.0])
+          cos_theta = (a @ b) / (np.linalg.norm(a) * np.linalg.norm(b))
+          print(cos_theta)
+        options: ["1.0", "4.0", "0.0", "0.25"]
+        answer: "1.0"
+        explanation: Gleiche Richtung, Winkel 0 – die Längen kürzen sich heraus.

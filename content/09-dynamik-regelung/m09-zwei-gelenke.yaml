@@ -1,0 +1,251 @@
+id: m09-zwei-gelenke
+title: Der dynamische 2-Gelenk-Arm
+minutes: 10
+goals:
+  - Die Bewegungsgleichung $M(q)\ddot q + C\dot q + G = \tau$ lesen und ihre Terme deuten
+  - Mit `lab.envs.TwoLinkArm` simulieren
+  - Jedes Gelenk mit PD plus Schwerkraftkompensation regeln
+concepts: [manipulator-dynamik]
+steps:
+  - type: text
+    body: |
+      ## Zwei Gelenke beeinflussen sich
+
+      Für mehrere Gelenke wird aus $I\ddot q = \dots$ eine Matrixgleichung (die Herleitung über Lagrange sparen wir uns):
+
+      $$M(q)\,\ddot q + C(q,\dot q)\,\dot q + G(q) = \tau - b\,\dot q$$
+
+      - $M(q)$: **Massenmatrix** (2×2, symmetrisch, positiv definit), hängt von $q_2$ ab.
+      - $C\dot q$: Coriolis- und Zentrifugalmomente – entstehen, wenn sich Gelenke bewegen.
+      - $G(q)$: Schwerkraftmomente.
+
+      `lab.envs.TwoLinkArm` (zwei Stäbe, je 1 kg und 1 m) hat das eingebaut: `mass_matrix(q)`, `bias(q, qd)` $= C\dot q + G + b\dot q$, `dynamics(state, tau)` mit Zustand `[q1, q2, q1', q2']`, `fk(q)` und `render(states)`.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      arm = TwoLinkArm()
+      for q2 in [0.0, np.pi / 2]:
+          print("q2 =", round(q2, 2))
+          print(np.round(arm.mass_matrix([0.0, q2]), 3))
+    subgoals:
+      - lines: 4
+        label: Arm anlegen
+      - lines: [5, 7]
+        label: Massenmatrix für zwei Stellungen ausgeben
+    after: |
+      Für diese Stäbe ist $M_{11} = \tfrac{5}{3} + \cos q_2$, $M_{12} = \tfrac13 + \tfrac12\cos q_2$, $M_{22} = \tfrac13$ (in kg·m²). Die Nebendiagonale $M_{12} \neq 0$ heißt: Ein Moment an Gelenk 1 beschleunigt auch Gelenk 2 – und umgekehrt.
+  - type: predict
+    code: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      arm = TwoLinkArm()
+      gestreckt = arm.mass_matrix([0.0, 0.0])[0, 0]
+      gefaltet = arm.mass_matrix([0.0, np.pi])[0, 0]
+      print(round(gestreckt, 2), round(gefaltet, 2))
+    options: ["2.67 0.67", "0.67 2.67", "2.67 2.67", "1.67 1.67"]
+    answer: "2.67 0.67"
+    explanation: |
+      $M_{11}$ ist die Trägheit, die Gelenk 1 „spürt“. Gestreckt ist die Masse von Glied 2 weit von der Basis entfernt – viermal so träge wie gefaltet. Darum lässt sich ein ausgestreckter Arm schwerer schwenken.
+  - type: example
+    title: Ohne Regler unter Schwerkraft
+    intro: |
+      Der Arm startet waagerecht gestreckt, kein Motormoment – ein Doppelpendel.
+    code: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      arm = TwoLinkArm(gravity=9.81, damping=0.05)
+      state = arm.reset(q=(0.0, 0.0))
+      states = [state]
+      for k in range(250):
+          state = arm.dynamics(state, np.zeros(2))
+          states.append(state)
+      arm.render(np.array(states), title="Doppelpendel (τ = 0)")
+    subgoals:
+      - lines: [4, 6]
+        label: Arm mit Schwerkraft anlegen
+      - lines: [7, 9]
+        label: Ohne Moment simulieren
+      - lines: 10
+        label: Animieren
+    after: |
+      Glied 2 klappt ein und schlägt wieder aus – getrieben von Schwerkraft **und** den Koppeltermen. Diese Bewegung ist schon nach kurzer Zeit kaum vorhersehbar (das Doppelpendel ist chaotisch).
+  - type: explain
+    question: |
+      Warum kann man die beiden Gelenke nicht einfach als zwei getrennte Einzelgelenke behandeln?
+    options:
+      - text: Über $M_{12}$ und die Coriolis-/Zentrifugalterme erzeugt die Bewegung des einen Gelenks Momente am anderen.
+        correct: true
+        why: Die Gleichungen sind gekoppelt. Ein unabhängiger PD je Gelenk funktioniert trotzdem oft gut – die Kopplung wirkt dann wie eine Störung, die der Regler ausregelt.
+      - text: Weil beide Motoren dieselbe Stromversorgung haben.
+        correct: false
+        why: Das ist kein Teil des mechanischen Modells.
+      - text: Weil die Schwerkraft nur auf Gelenk 1 wirkt.
+        correct: false
+        why: $G(q)$ hat zwei Einträge – auch Gelenk 2 muss Glied 2 tragen.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `controller(state, q_ref, arm)`: PD je Gelenk mit $K_p = 60$, $K_d = 12$ **plus Schwerkraftkompensation**. Das Schwerkraftmoment bekommst du mit `arm.bias(q, np.zeros(2))` – bei $\dot q = 0$ bleibt von `bias` genau $G(q)$ übrig. Rückgabe: Array mit zwei Momenten.
+    starter: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      def controller(state, q_ref, arm):
+          q, qd = state[:2], state[2:]
+          pass
+
+      arm = TwoLinkArm(gravity=9.81, max_torque=50.0)
+      q_ref = np.array([np.pi / 4, -np.pi / 3])
+      state = arm.reset(q=(-0.5, 0.5))
+      states = [state]
+      for k in range(300):
+          state = arm.dynamics(state, controller(state, q_ref, arm))
+          states.append(state)
+      print("Fehler:", np.round(q_ref - state[:2], 4))
+      arm.render(np.array(states), target=arm.fk(q_ref), title="PD + Schwerkraftkompensation")
+    solution: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      def controller(state, q_ref, arm):
+          q, qd = state[:2], state[2:]
+          return 60.0 * (q_ref - q) - 12.0 * qd + arm.bias(q, np.zeros(2))
+
+      arm = TwoLinkArm(gravity=9.81, max_torque=50.0)
+      q_ref = np.array([np.pi / 4, -np.pi / 3])
+      state = arm.reset(q=(-0.5, 0.5))
+      states = [state]
+      for k in range(300):
+          state = arm.dynamics(state, controller(state, q_ref, arm))
+          states.append(state)
+      print("Fehler:", np.round(q_ref - state[:2], 4))
+      arm.render(np.array(states), target=arm.fk(q_ref), title="PD + Schwerkraftkompensation")
+    tests:
+      - name: Haltemoment im Stillstand
+        code: |
+          import numpy as np
+          from lab.envs import TwoLinkArm
+          _arm = TwoLinkArm(gravity=9.81, max_torque=50.0)
+          qr = np.array([0.3, 0.4])
+          tau = np.asarray(controller(np.array([0.3, 0.4, 0.0, 0.0]), qr, _arm), dtype=float)
+          G = _arm.bias(qr, np.zeros(2))
+          assert tau.shape == (2,), f"Erwartet zwei Momente, bekommen Form {tau.shape}"
+          assert close(tau, G), f"Am Sollwert in Ruhe sollte der Regler genau G(q) = {np.round(G, 3)} liefern, liefert {np.round(tau, 3)}"
+      - name: Erreicht verschiedene Sollwerte
+        code: |
+          import numpy as np
+          from lab.envs import TwoLinkArm
+          _arm = TwoLinkArm(gravity=9.81, max_torque=50.0)
+          for qr in [np.array([np.pi / 4, -np.pi / 3]), np.array([-0.5, 1.2]), np.array([1.4, 0.6])]:
+              s = _arm.reset(q=(0.0, 0.0))
+              for k in range(300):
+                  s = _arm.dynamics(s, controller(s, qr, _arm))
+              err = np.abs(qr - s[:2]).max()
+              assert err < 0.01, f"Soll {np.round(qr, 2)}: nach 3 s Fehler {err:.3f} rad (Kompensation? Vorzeichen?)"
+      - name: D-Anteil bremst
+        code: |
+          import numpy as np
+          from lab.envs import TwoLinkArm
+          _arm = TwoLinkArm(gravity=0.0)
+          tau = np.asarray(controller(np.array([0.0, 0.0, 1.0, -1.0]), np.zeros(2), _arm), dtype=float)
+          assert close(tau, [-12.0, 12.0]), f"Ohne Schwerkraft, am Sollwert, mit q' = (1, -1) erwartet τ = (-12, 12), bekommen {np.round(tau, 3)}"
+    mutants:
+      - |
+        import numpy as np
+        def controller(state, q_ref, arm):
+            q, qd = state[:2], state[2:]
+            return 60.0 * (q_ref - q) - 12.0 * qd
+      - |
+        import numpy as np
+        def controller(state, q_ref, arm):
+            q, qd = state[:2], state[2:]
+            return 60.0 * (q - q_ref) - 12.0 * qd + arm.bias(q, np.zeros(2))
+      - |
+        import numpy as np
+        def controller(state, q_ref, arm):
+            q, qd = state[:2], state[2:]
+            return 60.0 * (q_ref - q) + 12.0 * qd + arm.bias(q, np.zeros(2))
+      - |
+        import numpy as np
+        def controller(state, q_ref, arm):
+            q, qd = state[:2], state[2:]
+            return 60.0 * (q_ref - q) - 12.0 * qd - arm.bias(q, np.zeros(2))
+    hints:
+      - "Teilziel: PD-Moment je Gelenk berechnen und das Schwerkraftmodell dazuaddieren."
+      - "`q_ref - q` und `qd` sind Arrays mit zwei Einträgen – die PD-Formel wirkt elementweise auf beide Gelenke."
+      - "Schwerkraft: `arm.bias(q, np.zeros(2))`."
+      - "`return 60.0 * (q_ref - q) - 12.0 * qd + arm.bias(q, np.zeros(2))`"
+    explanation: |
+      `arm.bias(q, qd)` mit der **echten** Geschwindigkeit würde zusätzlich Coriolis-, Zentrifugal- und Reibmomente kompensieren. Geht man noch weiter und multipliziert auch den PD-Anteil mit $M(q)$, erhält man die **Computed-Torque**-Regelung (inverse Dynamik), die die Gelenke vollständig entkoppelt – sofern das Modell stimmt.
+  - type: quiz
+    question: |
+      Was liefert `arm.bias(q, qd)` in `TwoLinkArm`?
+    options:
+      - text: $C(q,\dot q)\dot q + G(q) + b\dot q$ – alle Momente außer $M\ddot q$
+        correct: true
+        why: Damit lautet die Gleichung $M\ddot q = \tau - \text{bias}$.
+      - text: Nur die Schwerkraft $G(q)$
+        correct: false
+        why: Nur bei $\dot q = 0$ – dann fallen Coriolis- und Reibterme weg.
+      - text: Die Massenmatrix
+        correct: false
+        why: Die liefert `mass_matrix(q)`.
+cards:
+  - id: m09-c-massenmatrix
+    concept: manipulator-dynamik
+    variants:
+      - type: quiz
+        question: Wann ist $M_{11}$ (Trägheit an Gelenk 1) eines 2-Gelenk-Arms am **größten**?
+        options:
+          - text: Wenn der Arm gestreckt ist ($q_2 = 0$)
+            correct: true
+            why: Die Masse von Glied 2 ist dann am weitesten von der Basis entfernt.
+          - text: Wenn der Arm gefaltet ist ($q_2 = \pi$)
+            correct: false
+            why: Dann ist Glied 2 nahe der Basis – $M_{11}$ ist minimal.
+          - text: $M_{11}$ ist konstant
+            correct: false
+            why: $M_{11}$ hängt über $\cos q_2$ von der Stellung ab; konstant ist nur $M_{22}$.
+      - type: quiz
+        question: Was bedeutet $M_{12} \neq 0$?
+        options:
+          - text: Ein Moment an einem Gelenk beschleunigt auch das andere
+            correct: true
+            why: Die Beschleunigungen sind über die Massenmatrix gekoppelt.
+          - text: Gelenk 1 ist schwerer als Gelenk 2
+            correct: false
+            why: Die Diagonaleinträge beschreiben die Trägheiten; $M_{12}$ ist die Kopplung.
+          - text: Der Arm ist singulär
+            correct: false
+            why: Singularitäten betreffen die Jacobi-Matrix; $M$ ist immer invertierbar.
+  - id: m09-c-dynamik-terme
+    concept: manipulator-dynamik
+    variants:
+      - type: quiz
+        question: Der Arm steht still ($\dot q = 0$). Welche Terme der Bewegungsgleichung bleiben übrig?
+        options:
+          - text: $M(q)\ddot q + G(q) = \tau$
+            correct: true
+            why: Coriolis-, Zentrifugal- und Reibterme sind proportional zu $\dot q$ bzw. $\dot q^2$.
+          - text: $C\dot q + G = \tau$
+            correct: false
+            why: $C\dot q$ verschwindet bei $\dot q = 0$.
+          - text: Nur $\tau = 0$
+            correct: false
+            why: Die Schwerkraft wirkt auch im Stillstand.
+      - type: quiz
+        question: Welches Moment muss der Regler aufbringen, damit der Arm in einer Stellung $q$ **ruhig stehen** bleibt?
+        options:
+          - text: $\tau = G(q)$
+            correct: true
+            why: Mit $\dot q = 0$ und $\ddot q = 0$ bleibt nur die Schwerkraft.
+          - text: $\tau = M(q)\,q$
+            correct: false
+            why: $M$ multipliziert Beschleunigungen, nicht Winkel.
+          - text: $\tau = 0$
+            correct: false
+            why: Nur ohne Schwerkraft.

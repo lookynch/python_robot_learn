@@ -1,0 +1,327 @@
+id: m15-baseline
+title: Baseline – weniger Rauschen im Gradienten
+minutes: 12
+goals:
+  - Begründen, warum eine Baseline den Erwartungswert des Gradienten nicht ändert
+  - Die Varianzreduktion an einem Experiment messen
+  - REINFORCE mit Baseline implementieren
+concepts: [baseline-varianz, policy-gradient]
+steps:
+  - type: text
+    body: |
+      ## Alles ist gut – also lerne nichts?
+
+      Bei CartPole ist jeder Return positiv. REINFORCE verstärkt deshalb **jede** gewählte Aktion, gute nur etwas stärker. Ob eine Aktion besser oder schlechter als üblich war, sieht der Gradient nur im Mittel über viele Episoden – die Schätzung ist stark verrauscht.
+
+      Abhilfe: Ziehe vom Return eine **Baseline** $b(s)$ ab, die nicht von der Aktion abhängt:
+
+      $$W \leftarrow W + \alpha \sum_t \big(G_t - b(s_t)\big)\, \nabla \log \pi(a_t \mid s_t)$$
+
+      Dann zählt nur noch, ob es **besser als erwartet** lief. Der Erwartungswert bleibt gleich, denn
+      $$\sum_a \pi(a \mid s)\, \nabla \log \pi(a \mid s) = \sum_a \nabla \pi(a \mid s) = \nabla 1 = 0.$$
+  - type: predict
+    intro: |
+      Die Gleichung $\sum_a \pi(a)\,(e_a - \pi) = 0$ für die Softmax-Policy, nachgerechnet:
+    code: |
+      import numpy as np
+      p = np.array([0.25, 0.75])
+      print(p @ (np.eye(2) - p))
+    options: ["[0. 0.]", "[0.25 0.75]", "[ 0.1875 -0.1875]", "[1. 1.]"]
+    answer: "[0. 0.]"
+    explanation: |
+      Zeile $a$ von `np.eye(2) - p` ist $e_a - \pi$. Gewichtet mit $\pi(a)$ und summiert: $0.25 \cdot [0.75, -0.75] + 0.75 \cdot [-0.25, 0.25] = [0, 0]$. Eine konstante Baseline mal null bleibt null – kein Bias.
+  - type: example
+    intro: |
+      Ein Banditen-Experiment: zwei Arme mit mittlerer Belohnung 10 und 11 (Rauschen $\sigma = 1$), Policy $\pi = [0.5, 0.5]$. Wir ziehen 10 000 einzelne Gradientenschätzungen für den Parameter von Arm 1 – einmal mit $G$, einmal mit $G - b$, $b = 10.5$.
+    code: |
+      import numpy as np
+
+      rng = np.random.default_rng(0)
+      p = np.array([0.5, 0.5])
+      mu = np.array([10.0, 11.0])
+      N = 10000
+      a = rng.integers(2, size=N)                    # Aktionen gemäß pi
+      R = mu[a] + rng.normal(size=N)
+      grad1 = (a == 1) - p[1]                        # Komponente 1 von e_a - pi
+      for b in (0.0, 10.5):
+          g = (R - b) * grad1
+          print(f"b = {b:4.1f}: Mittel {g.mean():.3f}, Standardabweichung {g.std():.2f}")
+      print("wahrer Gradient:", 0.5 * 0.5 * (mu[1] - mu[0]))
+    subgoals:
+      - lines: [3, 6]
+        label: Bandit und Policy festlegen
+      - lines: [7, 9]
+        label: Viele Stichproben vektorisiert ziehen
+      - lines: [10, 12]
+        label: Mit und ohne Baseline schätzen
+      - lines: 13
+        label: Mit der Wahrheit vergleichen
+    after: |
+      Beide Mittelwerte liegen nahe am wahren Wert 0.25, aber ohne Baseline schwankt eine Einzelschätzung um etwa ±5 – zwanzigmal mehr als das Signal. Mit Baseline ist die Streuung rund zehnmal kleiner. Weniger Varianz heißt: weniger Episoden oder größere Schritte.
+  - type: explain
+    question: |
+      Warum darf die Baseline vom Zustand $s$ abhängen, aber **nicht** von der Aktion $a$?
+    options:
+      - text: Nur dann lässt sie sich vor die Summe über $a$ ziehen, und $\sum_a \nabla \pi(a \mid s) = 0$ macht ihren Beitrag zu null.
+        correct: true
+        why: Hinge $b$ von $a$ ab, bliebe $\sum_a b(s, a)\,\nabla\pi(a \mid s)$ im Allgemeinen ungleich null – der Gradient wäre verzerrt.
+      - text: Weil eine Baseline immer konstant sein muss.
+        correct: false
+        why: Sie darf vom Zustand abhängen – $b(s) = \hat v(s)$ ist sogar die übliche Wahl.
+      - text: Weil Aktionen diskret sind.
+        correct: false
+        why: Das Argument gilt genauso für kontinuierliche Aktionen (Integral statt Summe).
+      - text: Weil sonst die Varianz steigt.
+        correct: false
+        why: Das Problem wäre nicht die Varianz, sondern ein falscher Erwartungswert.
+  - type: exercise
+    mode: make
+    prompt: |
+      **Gradient-Bandit** (Sutton & Barto, Abschnitt 2.8): eine Softmax-Policy über `len(mu)` Arme mit Präferenzen `theta`. In jedem Schritt: Arm ziehen, Belohnung `r` beobachten, Baseline `b` als laufenden Mittelwert aller bisherigen Belohnungen aktualisieren, dann
+
+      $$\theta \leftarrow \theta + \alpha\,(r - b)\,(e_a - \pi)$$
+
+      Ergänze die Schleife und gib am Ende die Wahrscheinlichkeiten `softmax(theta)` zurück.
+    starter: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def gradient_bandit(steps, mu, lr=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          mu = np.asarray(mu, dtype=float)
+          theta, b = np.zeros(len(mu)), 0.0
+          for t in range(steps):
+              p = softmax(theta)
+              a = int(rng.choice(len(mu), p=p))
+              r = mu[a] + rng.normal()
+              # Baseline aktualisieren, dann theta
+          return softmax(theta)
+    solution: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def gradient_bandit(steps, mu, lr=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          mu = np.asarray(mu, dtype=float)
+          theta, b = np.zeros(len(mu)), 0.0
+          for t in range(steps):
+              p = softmax(theta)
+              a = int(rng.choice(len(mu), p=p))
+              r = mu[a] + rng.normal()
+              b += (r - b) / (t + 1)
+              theta += lr * (r - b) * (np.eye(len(mu))[a] - p)
+          return softmax(theta)
+    tests:
+      - name: Findet den besten Arm trotz Belohnung um +10
+        code: |
+          import numpy as np
+          best = np.mean([gradient_bandit(300, [10.0, 10.5, 11.0], seed=s)[2] for s in range(5)])
+          assert best > 0.8, f"Wahrscheinlichkeit für den besten Arm nach 300 Schritten im Mittel {best:.2f}, erwartet über 0.8"
+      - name: Auch bei negativen Belohnungen
+        code: |
+          import numpy as np
+          best = np.mean([gradient_bandit(300, [-11.0, -10.0, -10.5], seed=s)[1] for s in range(5)])
+          assert best > 0.8, f"Bei Belohnungen um −10 sollte Arm 1 gewinnen, Wahrscheinlichkeit im Mittel {best:.2f}"
+      - name: Wahrscheinlichkeiten
+        code: |
+          import numpy as np
+          p = gradient_bandit(10, [0.0, 1.0], seed=0)
+          assert np.shape(p) == (2,) and close(np.sum(p), 1.0), f"Rückgabe sollte ein Wahrscheinlichkeitsvektor der Länge 2 sein, ist {p}"
+    mutants:
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def gradient_bandit(steps, mu, lr=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            mu = np.asarray(mu, dtype=float)
+            theta, b = np.zeros(len(mu)), 0.0
+            for t in range(steps):
+                p = softmax(theta)
+                a = int(rng.choice(len(mu), p=p))
+                r = mu[a] + rng.normal()
+                theta += lr * r * (np.eye(len(mu))[a] - p)
+            return softmax(theta)
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def gradient_bandit(steps, mu, lr=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            mu = np.asarray(mu, dtype=float)
+            theta, b = np.zeros(len(mu)), 0.0
+            for t in range(steps):
+                p = softmax(theta)
+                a = int(rng.choice(len(mu), p=p))
+                r = mu[a] + rng.normal()
+                b += (r - b) / (t + 1)
+                theta += lr * (r - b) * (p - np.eye(len(mu))[a])
+            return softmax(theta)
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def gradient_bandit(steps, mu, lr=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            mu = np.asarray(mu, dtype=float)
+            theta, b = np.zeros(len(mu)), 0.0
+            for t in range(steps):
+                p = softmax(theta)
+                a = int(rng.choice(len(mu), p=p))
+                r = mu[a] + rng.normal()
+                b = r
+                theta += lr * (r - b) * (np.eye(len(mu))[a] - p)
+            return softmax(theta)
+    hints:
+      - "Teilziel: erst den Mittelwert der Belohnungen fortschreiben, dann die Präferenzen in Richtung $(r - b)(e_a - \\pi)$ verschieben."
+      - "Laufender Mittelwert nach $t + 1$ Belohnungen: $b \\leftarrow b + (r - b)/(t + 1)$. Der One-hot-Vektor ist `np.eye(len(mu))[a]`."
+      - "`b += (r - b) / (t + 1)`"
+      - "`theta += lr * (r - b) * (np.eye(len(mu))[a] - p)`"
+  - type: example
+    title: Mit und ohne Baseline
+    intro: |
+      Ähnlich wie das Gradient-Bandit-Experiment in Sutton & Barto (Abschnitt 2.8, dort 10 Arme mit Werten um +4): drei Arme, alle Belohnungen um +10 verschoben. Gezeigt ist die Wahrscheinlichkeit des besten Arms, gemittelt über 20 Läufe.
+    code: |
+      import numpy as np
+      import lab
+
+      def run(use_baseline, steps=300, runs=20, mu=(10.0, 10.5, 11.0), lr=0.1):
+          curve = np.zeros(steps)
+          for seed in range(runs):
+              rng = np.random.default_rng(seed)
+              theta, b = np.zeros(3), 0.0
+              for t in range(steps):
+                  p = np.exp(theta - theta.max())
+                  p /= p.sum()
+                  a = int(rng.choice(3, p=p))
+                  r = mu[a] + rng.normal()
+                  if use_baseline:
+                      b += (r - b) / (t + 1)
+                  theta += lr * (r - b) * (np.eye(3)[a] - p)
+                  curve[t] += p[2] / runs
+          return curve
+
+      fig = lab.Figure(title="P(bester Arm), Belohnungen um +10", xlabel="Schritt", ylabel="Wahrscheinlichkeit")
+      fig.line(run(True), label="mit Baseline")
+      fig.line(run(False), label="ohne Baseline (b = 0)")
+      fig.hline(1 / 3, label="Zufall")
+      fig.show()
+    subgoals:
+      - lines: [4, 8]
+        label: Läufe vorbereiten
+      - lines: [9, 13]
+        label: Arm ziehen
+      - lines: [14, 16]
+        label: Update mit oder ohne Baseline
+      - lines: [20, 24]
+        label: Kurven vergleichen
+    heavy: true
+    after: |
+      Ohne Baseline bleibt der Mittelwert beim Zufallsniveau $1/3$ oder sinkt sogar darunter: Jeder Lauf verstärkt die Arme, die er zufällig früh zieht, und rastet oft auf einem beliebigen Arm ein. Mit Baseline ist es egal, ob alle Belohnungen um 10 oder um 0 liegen – nur der Unterschied zum Mittel zählt.
+  - type: text
+    body: |
+      ## Baseline in REINFORCE
+
+      Für Episoden mit Zuständen ist die übliche Baseline eine gelernte Wertfunktion $b(s) = \hat v(s; w)$ (Sutton & Barto, Abschnitt 13.4). Mit linearem $\hat v = S\,w$ und den Returns als Ziel kommen pro Episode zwei Schritte dazu:
+
+      $$\text{adv} = G - S w, \qquad w \leftarrow w + \alpha_v\, S^\top \text{adv}$$
+
+      und im Policy-Update steht `adv` statt `G`. Wie viel das bringt, hängt von der Aufgabe ab: Bei CartPole mit linearem $\hat v$ ist der Gewinn klein, beim verschobenen Banditen riesig. Eine gute Baseline braucht ein gutes $\hat v$ – das führt direkt zu **Actor-Critic**.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die beiden Baseline-Schritte für eine Episode mit zwei Zeitschritten.
+    code: |
+      import numpy as np
+      S = np.array([[1.0, 0.0],
+                    [1.0, 1.0]])      # Zustände (Merkmale) der Episode
+      G = np.array([3.0, 1.0])        # Returns
+      w = np.array([1.0, 1.0])        # Baseline-Gewichte
+      adv = G - ___
+      w += 0.5 * S.T @ ___
+      print(adv, w)
+    blanks:
+      - answer: "S @ w"
+        options: ["S @ w", "w", "G.mean()"]
+      - answer: "adv"
+        options: ["adv", "G", "-adv"]
+    expect_output: "[ 2. -1.] [1.5 0.5]"
+    explanation: |
+      $\hat v = S w = [1, 2]$, also $\text{adv} = [2, -1]$: Der erste Schritt lief besser, der zweite schlechter als erwartet. Das Update schiebt $\hat v$ zu den Returns hin (Gradient des quadratischen Fehlers), deshalb `adv` und nicht `G`.
+  - type: quiz
+    question: |
+      Was ändert eine (aktionsunabhängige) Baseline am REINFORCE-Gradienten?
+    options:
+      - text: Den Erwartungswert nicht, aber meist die Varianz der Schätzung
+        correct: true
+        why: $\mathbb{E}[b\,\nabla\log\pi] = 0$; die Streuung kann dagegen stark sinken.
+      - text: Den Erwartungswert, aber nicht die Varianz
+        correct: false
+        why: Genau umgekehrt.
+      - text: Sie macht den Gradienten exakt
+        correct: false
+        why: Es bleibt eine Stichprobenschätzung, nur mit weniger Rauschen.
+      - text: Nichts, sie ist nur Kosmetik
+        correct: false
+        why: Beim verschobenen Banditen entscheidet sie, ob überhaupt gelernt wird.
+cards:
+  - id: m15-c-advantage
+    concept: baseline-varianz
+    variants:
+      - type: predict
+        code: |
+          G = [5.0, 12.0, 7.0]
+          b = sum(G) / len(G)
+          print([g - b for g in G])
+        options: ["[-3.0, 4.0, -1.0]", "[5.0, 12.0, 7.0]", "[3.0, -4.0, 1.0]", "[-8.0, -8.0, -8.0]"]
+        answer: "[-3.0, 4.0, -1.0]"
+        explanation: "Mittel 8: Die erste und dritte Episode waren schlechter, die zweite besser als üblich."
+      - type: predict
+        code: |
+          r, b = 10.2, 10.5
+          print(round(r - b, 1))
+        options: ["-0.3", "10.2", "0.3", "20.7"]
+        answer: "-0.3"
+        explanation: Trotz hoher Belohnung wird die Aktion leicht **abgeschwächt** – sie war schlechter als der Durchschnitt.
+  - id: m15-c-baseline-bias
+    concept: baseline-varianz
+    variants:
+      - type: quiz
+        question: Welche Baseline ist **nicht** erlaubt, ohne den Gradienten zu verzerren?
+        options:
+          - text: Eine, die von der gewählten Aktion $a_t$ abhängt
+            correct: true
+            why: Dann gilt $\sum_a b\,\nabla\pi = 0$ nicht mehr.
+          - text: Ein gelerntes $\hat v(s_t)$
+            correct: false
+            why: Das ist die Standardwahl.
+          - text: Der Mittelwert aller bisherigen Returns
+            correct: false
+            why: Konstant bezüglich der Aktion – erlaubt.
+      - type: quiz
+        question: Alle Belohnungen eines Banditen werden um +100 verschoben. Was passiert mit dem Gradient-Bandit **ohne** Baseline?
+        options:
+          - text: Jede gezogene Aktion wird stark verstärkt; die Policy rastet leicht auf einem zufälligen Arm ein.
+            correct: true
+            why: Das Signal „besser als üblich“ geht im großen positiven Return unter.
+          - text: Nichts, Verschiebungen ändern Softmax-Policies nicht.
+            correct: false
+            why: Verschobene Logits ändern nichts, verschobene **Belohnungen** im Update aber sehr wohl.
+          - text: Er lernt schneller, weil die Belohnungen größer sind.
+            correct: false
+            why: Die Unterschiede zwischen den Armen bleiben gleich, nur das Rauschen im Update wächst.

@@ -1,0 +1,201 @@
+id: m09-checkpoint
+title: "Checkpoint: Dynamik & Regelung"
+kind: checkpoint
+minutes: 15
+goals:
+  - Regelkreise mit P-, PD- und PID-Anteil, Schwerkraftkompensation und τ = Jᵀ F sicher anwenden
+concepts: [regelkreis, pd-regler, pid-regler, instabiles-gleichgewicht, schwerkraftkompensation, manipulator-dynamik, jacobi-transponiert, unteraktuierung]
+steps:
+  - type: quiz
+    question: |
+      Ein PD-geregeltes Gelenk erreicht den Sollwert, solange keine Last wirkt. Mit Dauerlast bleibt es 0.08 rad darunter. Was beseitigt den Fehler, **ohne** ein Modell der Last zu brauchen?
+    options:
+      - text: Ein I-Anteil
+        correct: true
+        why: Das Integral wächst, bis es die (unbekannte) Last genau ausgleicht.
+      - text: Ein größerer D-Anteil
+        correct: false
+        why: In Ruhe ist $\dot q = 0$ – der D-Anteil trägt nichts bei.
+      - text: Schwerkraftkompensation
+        correct: false
+        why: Die braucht ein Modell der Last – hier ist aber keins bekannt.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def step(state, tau, dt):
+          q, qd = state
+          qd = qd + dt * (tau - qd)
+          return np.array([q + dt * qd, qd])
+
+      state = np.array([0.0, 0.0])
+      for k in range(600):
+          tau = 40.0 * (1.0 - state[0]) - 12.0 * state[1]
+          state = step(state, tau - 2.0, 0.01)
+      print(round(1.0 - state[0], 2))
+    options: ["0.05", "0.0", "0.1", "2.0"]
+    answer: "0.05"
+    explanation: |
+      In Ruhe trägt der P-Anteil die Last: $K_p e = 2$ → $e = 2/40 = 0.05$ rad.
+  - type: parsons
+    prompt: |
+      Baue eine PID-Regelschleife für ein Gelenk unter der Last $-2$ N·m, sodass am Ende `1.0` ausgegeben wird.
+    lines:
+      - "import numpy as np"
+      - "def step(state, tau, dt):"
+      - "    qd = state[1] + dt * (tau - state[1])"
+      - "    return np.array([state[0] + dt * qd, qd])"
+      - "state = np.array([0.0, 0.0])"
+      - "integral = 0.0"
+      - "for k in range(1000):"
+      - "    e = 1.0 - state[0]"
+      - "    integral += e * 0.01"
+      - "    tau = 20.0 * e + 10.0 * integral - 8.0 * state[1]"
+      - "    state = step(state, tau - 2.0, 0.01)"
+      - "print(round(state[0], 2))"
+    distractors: ["    integral = e * 0.01"]
+    expect_output: "1.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Glied (Masse $m = 2$ kg, Schwerpunkt bei $l_c = 0.4$ m) hängt an einem Gelenk, $q$ von der Waagerechten. Schreibe `controller(q, qd, q_ref)`: PD mit $K_p = 30$, $K_d = 4$ **plus Schwerkraftkompensation** $G(q) = m g l_c \cos q$ mit $g = 9.81$.
+    starter: |
+      import numpy as np
+
+      m, lc, g = 2.0, 0.4, 9.81
+
+      def controller(q, qd, q_ref):
+          pass
+    solution: |
+      import numpy as np
+
+      m, lc, g = 2.0, 0.4, 9.81
+
+      def controller(q, qd, q_ref):
+          return 30.0 * (q_ref - q) - 4.0 * qd + m * g * lc * np.cos(q)
+    tests:
+      - name: Haltemoment am Sollwert
+        code: |
+          import numpy as np
+          for qr in (0.0, 0.8, -1.2):
+              ref = 2.0 * 9.81 * 0.4 * np.cos(qr)
+              assert close(controller(qr, 0.0, qr), ref), f"Bei q = q_ref = {qr} in Ruhe erwartet τ = G = {ref:.3f}, bekommen {float(controller(qr, 0.0, qr)):.3f}"
+      - name: Regelt ohne bleibenden Fehler
+        code: |
+          import numpy as np
+          I = 2.0 * 0.8**2 / 3
+          for qr in (0.3, 1.2, -0.7):
+              s = np.array([0.0, 0.0])
+              for k in range(500):
+                  tau = controller(s[0], s[1], qr)
+                  qd = s[1] + 0.01 * (tau - 0.1 * s[1] - 2.0 * 9.81 * 0.4 * np.cos(s[0])) / I
+                  s = np.array([s[0] + 0.01 * qd, qd])
+              assert abs(s[0] - qr) < 0.005, f"Soll {qr}: nach 5 s ist q = {s[0]:.3f}"
+      - name: D-Anteil
+        code: |
+          d = float(controller(0.2, 1.0, 0.2)) - float(controller(0.2, 0.0, 0.2))
+          assert close(d, -4.0), f"Bei qd = 1 rad/s sollte der D-Anteil -4 N·m liefern, liefert {d:.3f}"
+    mutants:
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 30.0 * (q_ref - q) - 4.0 * qd
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 30.0 * (q_ref - q) - 4.0 * qd + 2.0 * 9.81 * 0.4 * np.sin(q)
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 30.0 * (q_ref - q) + 4.0 * qd + 2.0 * 9.81 * 0.4 * np.cos(q)
+    hints:
+      - "Teilziel: PD-Moment plus Modell-Schwerkraftmoment."
+      - "`30.0 * (q_ref - q) - 4.0 * qd + m * g * lc * np.cos(q)`"
+  - type: quiz
+    question: |
+      Ein Pendel (θ = 0 oben) folgt linearisiert $\ddot\theta = 12\,\theta + 2u$. Der PD-Regler ist $u = -K_p\theta - K_d\dot\theta$. Welches $K_p$ hält es oben?
+    options:
+      - text: $K_p = 8$
+        correct: true
+        why: $2 \cdot 8 = 16 > 12$ – die virtuelle Feder überwiegt die Schwerkraft.
+      - text: $K_p = 5$
+        correct: false
+        why: $2 \cdot 5 = 10 < 12$ – die Schwerkraft gewinnt, egal wie groß $K_d$ ist.
+      - text: Jedes $K_p > 0$, solange $K_d$ groß genug ist
+        correct: false
+        why: Dämpfung bremst nur den Sturz; ohne ausreichende Rückstellung fällt das Pendel.
+  - type: predict
+    code: |
+      import numpy as np
+
+      J = np.array([[0.0, 0.0], [1.0, 0.4]])    # gestreckter Arm, l1 = 0.6, l2 = 0.4
+      F = np.array([0.0, 5.0])
+      print(J.T @ F)
+    options: ["[5. 2.]", "[2. 5.]", "[0. 0.]", "[0. 5.]"]
+    answer: "[5. 2.]"
+    explanation: |
+      $\tau = J^T F$: Hebelarm 1 m für Gelenk 1, 0.4 m für Gelenk 2.
+  - type: fill
+    prompt: |
+      Ergänze den kartesischen PD-Regler (virtuelle Feder an der Spitze).
+    code: |
+      import numpy as np
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+          q, qd = state[:2], state[2:]
+          J = jacobian(q)
+          F = Kp * (x_ref - fk(q)) - Kd * (___)
+          return ___
+    blanks:
+      - answer: "J @ qd"
+        options: ["J @ qd", "J.T @ qd", "qd"]
+      - answer: "J.T @ F"
+        options: ["J.T @ F", "J @ F", "F"]
+    tests:
+      - name: Feder über Jᵀ
+        code: |
+          import numpy as np
+          q = np.array([0.0, np.pi / 2])
+          tau = task_space_controller(np.array([0.0, np.pi / 2, 0.0, 0.0]), fk(q) + np.array([0.0, 0.1]))
+          assert close(tau, [5.0, 0.0]), f"Erwartet (5, 0), bekommen {tau}"
+      - name: Dämpfer über die Spitzengeschwindigkeit
+        code: |
+          import numpy as np
+          q = np.array([0.3, 1.1])
+          qd = np.array([0.5, -0.8])
+          J = jacobian(q)
+          tau = task_space_controller(np.concatenate([q, qd]), fk(q))
+          assert close(tau, J.T @ (-10.0 * (J @ qd))), f"Am Ziel mit Bewegung sollte nur der Dämpfer wirken: erwartet {J.T @ (-10.0 * (J @ qd))}, bekommen {tau}"
+  - type: quiz
+    question: |
+      Beim CartPole hält ein PD-Regler auf den Stabwinkel den Stab oben, aber der Wagen verlässt die Bahn. Warum?
+    options:
+      - text: Das System ist unteraktuiert; ohne Rückführung von $x$ und $\dot x$ ist jede konstante Wagengeschwindigkeit eine mögliche Ruhelage des Stabs.
+        correct: true
+        why: Der Regler „sieht“ den Wagen nicht – man muss alle vier Zustände zurückführen.
+      - text: Die Kraft ist auf ±10 N begrenzt.
+        correct: false
+        why: Auch ohne Begrenzung bliebe die Drift.
+      - text: Der Zeitschritt von 0.02 s ist zu groß.
+        correct: false
+        why: Die Drift ist echte Dynamik, kein numerischer Effekt.
+  - type: quiz
+    question: |
+      In $M(q)\ddot q + C(q,\dot q)\dot q + G(q) = \tau$: Welcher Term sorgt dafür, dass ein Moment an Gelenk 1 auch Gelenk 2 beschleunigt?
+    options:
+      - text: Die Nebendiagonale von $M(q)$
+        correct: true
+        why: $M_{12} \neq 0$ koppelt die Beschleunigungen.
+      - text: $G(q)$
+        correct: false
+        why: Die Schwerkraft hängt von der Stellung ab, koppelt aber nicht die Beschleunigungen.
+      - text: Keiner – die Gelenke sind unabhängig
+        correct: false
+        why: Gerade beim 2-Gelenk-Arm sind sie über $M$ und $C$ gekoppelt.

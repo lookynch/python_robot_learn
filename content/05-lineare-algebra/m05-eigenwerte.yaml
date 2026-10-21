@@ -1,0 +1,288 @@
+id: m05-eigenwerte
+title: Eigenwerte und Stabilität
+minutes: 9
+goals:
+  - Eigenwerte und Eigenvektoren mit `np.linalg.eig` berechnen und richtig auslesen
+  - Das Verhalten von $x_{k+1} = A x_k$ aus den Eigenwerten vorhersagen
+  - Eine Stabilitätsprüfung über den Betrag der Eigenwerte schreiben
+concepts: [la-eigen, la-stabilitaet]
+steps:
+  - type: text
+    body: |
+      ## Auffrischung
+
+      $A\vec v = \lambda \vec v$: Ein Eigenvektor $\vec v$ behält unter $A$ seine Richtung und wird nur um den Faktor $\lambda$ gestreckt.
+
+      ```python
+      werte, vektoren = np.linalg.eig(A)
+      ```
+
+      `vektoren[:, i]` (eine **Spalte**) gehört zu `werte[i]`. Bei nicht-symmetrischen Matrizen können die Eigenwerte komplex sein; ihr Betrag `np.abs(werte)` ist dann der Streckfaktor pro Schritt.
+
+      **Warum das für Roboter zählt:** Viele Regelkreise und Simulationen haben (näherungsweise) die Form $x_{k+1} = A\,x_k$. Sind alle $|\lambda_i| < 1$, klingt jede Abweichung ab – das System ist **stabil** (genauer: asymptotisch stabil). Ist ein $|\lambda_i| > 1$, wächst sie für fast jeden Startwert exponentiell.
+  - type: example
+    code: |
+      import numpy as np
+      A = np.array([[2.0, 0.0],
+                    [0.0, 0.5]])
+      werte, vektoren = np.linalg.eig(A)
+      print(werte)
+      print(vektoren)
+      v = vektoren[:, 0]
+      print(A @ v, werte[0] * v)
+    subgoals:
+      - lines: [1, 3]
+        label: Matrix festlegen
+      - lines: [4, 6]
+        label: Eigenwerte und -vektoren berechnen
+      - lines: [7, 8]
+        label: Definition A v = λ v prüfen
+    after: |
+      Bei einer Diagonalmatrix sind die Eigenwerte die Diagonaleinträge und die Eigenvektoren die Koordinatenachsen. Die x-Richtung wird pro Anwendung verdoppelt, die y-Richtung halbiert.
+  - type: explain
+    question: |
+      `werte, vektoren = np.linalg.eig(A)`. Wie bekommst du den Eigenvektor zum zweiten Eigenwert `werte[1]`?
+    options:
+      - text: "`vektoren[:, 1]` – die zweite Spalte"
+        correct: true
+        why: NumPy speichert Eigenvektoren als Spalten, passend zu $A V = V \Lambda$.
+      - text: "`vektoren[1]` – die zweite Zeile"
+        correct: false
+        why: Das ist eine Zeile und im Allgemeinen kein Eigenvektor. Bei Diagonalmatrizen fällt der Fehler nicht auf – bei anderen schon.
+      - text: "`vektoren * werte[1]`"
+        correct: false
+        why: Das skaliert die ganze Matrix und wählt nichts aus.
+  - type: predict
+    code: |
+      import numpy as np
+      A = np.array([[2.0, 1.0],
+                    [1.0, 2.0]])
+      werte = np.linalg.eig(A)[0]
+      print(np.sort(np.round(werte, 3)))
+    options: ["[1. 3.]", "[2. 2.]", "[1. 2.]", "[0. 4.]"]
+    answer: "[1. 3.]"
+    explanation: |
+      Eigenvektoren $(1, 1)$ mit $\lambda = 3$ und $(1, -1)$ mit $\lambda = 1$. Bei Nicht-Diagonalmatrizen sind die Eigenwerte **nicht** die Diagonaleinträge. Die Reihenfolge, in der `eig` die Werte liefert, ist nicht festgelegt – darum `np.sort`.
+  - type: predict
+    code: |
+      import numpy as np
+      A = np.array([[0.5, 0.0],
+                    [0.0, 2.0]])
+      x = np.array([8.0, 1.0])
+      for k in range(3):
+          x = A @ x
+      print(x)
+    options: ["[1. 8.]", "[4. 2.]", "[8. 1.]", "[0.125 8.   ]"]
+    answer: "[1. 8.]"
+    explanation: |
+      Nach $k$ Schritten ist $x_k = A^k x_0$: die erste Komponente $8 \cdot 0.5^3 = 1$, die zweite $1 \cdot 2^3 = 8$. Die Richtung mit $|\lambda| > 1$ setzt sich durch.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def rot(theta):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s], [s, c]])
+
+      fig = lab.Figure(title="x(k+1) = A·x(k), 60 Schritte", xlabel="x1", ylabel="x2")
+      for faktor in [0.95, 1.05]:
+          A = faktor * rot(0.3)
+          print(faktor, np.round(np.abs(np.linalg.eigvals(A)), 3))
+          x = np.array([1.0, 0.0])
+          bahn = [x]
+          for k in range(60):
+              x = A @ x
+              bahn.append(x)
+          bahn = np.array(bahn)
+          fig.line(bahn[:, 1], x=bahn[:, 0], label=f"Faktor {faktor}")
+      fig.show()
+    subgoals:
+      - lines: [4, 6]
+        label: Rotationsmatrix als Funktion
+      - lines: [9, 11]
+        label: Systemmatrix bauen und Eigenwertbeträge ausgeben
+      - lines: [12, 17]
+        label: System iterieren und Bahn speichern
+      - lines: [18, 19]
+        label: Bahnen zeichnen
+    after: |
+      Eine gestreckte Drehung hat komplexe Eigenwerte $\text{faktor}\cdot e^{\pm 0.3 i}$ mit Betrag = Faktor. Bei 0.95 spiralt die Bahn in den Ursprung (stabil), bei 1.05 nach außen (instabil). `np.linalg.eigvals` liefert nur die Eigenwerte.
+  - type: fill
+    fading: true
+    prompt: |
+      Prüfe, ob $x_{k+1} = A x_k$ stabil ist: **alle** Eigenwerte müssen betragsmäßig kleiner als 1 sein.
+    code: |
+      import numpy as np
+      A = np.array([[-1.5, 1.0],
+                    [0.0, 0.5]])
+      werte = np.linalg.eig(A)[0]
+      stabil = np.___(np.___(werte) < 1)
+      print(stabil)
+    blanks:
+      - answer: all
+        options: [all, any, sum]
+      - answer: abs
+        options: [abs, real, sum]
+    expect_output: "False"
+    explanation: |
+      Die Eigenwerte (Dreiecksmatrix → Diagonale) sind $-1.5$ und $0.5$. Wegen $|-1.5| > 1$ ist das System instabil – es schwingt mit wachsender Amplitude hin und her. Ohne Betrag sähe $-1.5 < 1$ harmlos aus.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `ist_stabil(A)`, die `True` zurückgibt, wenn alle Eigenwerte von `A` einen Betrag **echt kleiner** als 1 haben, sonst `False`. Achtung: Eigenwerte können komplex sein.
+    starter: |
+      import numpy as np
+
+      def ist_stabil(A):
+          werte = np.linalg.eigvals(A)
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def ist_stabil(A):
+          werte = np.linalg.eigvals(A)
+          return bool(np.all(np.abs(werte) < 1))
+    tests:
+      - name: Gestreckte Drehung (komplexe Eigenwerte)
+        code: |
+          import numpy as np
+          R = np.array([[np.cos(0.5), -np.sin(0.5)], [np.sin(0.5), np.cos(0.5)]])
+          assert ist_stabil(0.9 * R), "0.9 · R hat Eigenwertbetrag 0.9 → stabil"
+          assert not ist_stabil(1.1 * R), "1.1 · R hat Eigenwertbetrag 1.1 → instabil"
+      - name: Negativer Eigenwert
+        code: |
+          import numpy as np
+          assert not ist_stabil(np.array([[-1.2, 0.0], [0.0, 0.3]])), "Eigenwert -1.2 hat Betrag > 1 → instabil"
+      - name: Diagonalmatrizen
+        code: |
+          import numpy as np
+          assert ist_stabil(np.diag([0.5, 0.99])), "Eigenwerte 0.5 und 0.99 → stabil"
+          assert not ist_stabil(np.diag([2.0, 0.1])), "Eigenwert 2 → instabil, auch wenn das Produkt 0.2 ist"
+      - name: Grenzfall Betrag 1
+        code: |
+          import numpy as np
+          assert not ist_stabil(np.eye(2)), "Bei Betrag genau 1 klingt nichts ab → nicht stabil"
+    mutants:
+      - |
+        import numpy as np
+
+        def ist_stabil(A):
+            werte = np.linalg.eigvals(A)
+            return bool(np.all(werte.real < 1))
+      - |
+        import numpy as np
+
+        def ist_stabil(A):
+            werte = np.linalg.eigvals(A)
+            return bool(np.all(np.abs(werte) <= 1))
+      - |
+        import numpy as np
+
+        def ist_stabil(A):
+            return bool(abs(np.linalg.det(A)) < 1)
+      - |
+        import numpy as np
+
+        def ist_stabil(A):
+            werte = np.linalg.eigvals(A)
+            return bool(np.all(np.abs(werte.real) < 1))
+    hints:
+      - "Teilziel: Beträge aller Eigenwerte bilden und prüfen, ob **alle** kleiner als 1 sind."
+      - "`np.abs` funktioniert auch für komplexe Zahlen (Betrag $\\sqrt{a^2 + b^2}$); `np.all` prüft, ob alle Einträge `True` sind."
+      - "`return bool(np.all(np.abs(werte) < 1))`"
+    explanation: |
+      Der größte Eigenwertbetrag heißt **Spektralradius**. Die Determinante (Produkt der Eigenwerte) reicht nicht: Ein großer und ein kleiner Eigenwert können ein kleines Produkt haben.
+  - type: quiz
+    question: |
+      Ein lineares System $x_{k+1} = A x_k$ hat die Eigenwerte $0.8$ und $-0.95$. Was passiert mit einer Anfangsabweichung?
+    options:
+      - text: Sie klingt ab; die Komponente zu $-0.95$ wechselt dabei jedes Mal das Vorzeichen und klingt nur langsam ab.
+        correct: true
+        why: Beide Beträge < 1 → stabil. Negative Eigenwerte bedeuten Hin-und-her-Pendeln.
+      - text: Sie wächst, weil ein Eigenwert negativ ist.
+        correct: false
+        why: Für das Wachstum zählt der Betrag, nicht das Vorzeichen.
+      - text: Sie bleibt konstant.
+        correct: false
+        why: Konstant bliebe sie nur bei Betrag genau 1.
+cards:
+  - id: m05-c-eig-spalten
+    concept: la-eigen
+    variants:
+      - type: quiz
+        question: |
+          Wie liest du nach `werte, V = np.linalg.eig(A)` den Eigenvektor zu `werte[0]` aus?
+        options:
+          - text: "`V[:, 0]`"
+            correct: true
+            why: Eigenvektoren stehen als Spalten in `V`.
+          - text: "`V[0]`"
+            correct: false
+            why: Das ist die erste Zeile, im Allgemeinen kein Eigenvektor.
+          - text: "`V[0, 0]`"
+            correct: false
+            why: Das ist eine einzelne Zahl, kein Vektor.
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.array([[3.0, 0.0], [0.0, -1.0]])
+          print(np.linalg.eig(A)[0])
+        options: ["[ 3. -1.]", "[3. 1.]", "[ 3.  0.  0. -1.]", "[2. 2.]"]
+        answer: "[ 3. -1.]"
+        explanation: Bei einer Diagonalmatrix sind die Eigenwerte die Diagonaleinträge.
+  - id: m05-c-stabil
+    concept: la-stabilitaet
+    variants:
+      - type: quiz
+        question: |
+          Welches System $x_{k+1} = A x_k$ ist **instabil**?
+        options:
+          - text: Eigenwerte $0.5$ und $1.1$
+            correct: true
+            why: "$|1.1| > 1$ – diese Komponente wächst um 10 % pro Schritt."
+          - text: Eigenwerte $-0.9$ und $0.2$
+            correct: false
+            why: Beide Beträge < 1 → stabil (mit Vorzeichenwechsel).
+          - text: Eigenwerte $0.6 \pm 0.6i$
+            correct: false
+            why: "Betrag $\\sqrt{0.72} \\approx 0.85 < 1$ → stabil, als abklingende Spirale."
+      - type: quiz
+        question: |
+          `A` hat die Eigenwerte $-1.3$ und $0.4$. Was beobachtest du bei $x_{k+1} = A x_k$?
+        options:
+          - text: Eine wachsende Schwingung mit Vorzeichenwechsel in jedem Schritt.
+            correct: true
+            why: "$|-1.3| > 1$ → Wachstum; negativ → Vorzeichenwechsel."
+          - text: Abklingen, weil $-1.3 < 1$ ist.
+            correct: false
+            why: Entscheidend ist der Betrag.
+          - text: Monotones Wachstum ohne Vorzeichenwechsel.
+            correct: false
+            why: Ein negativer Eigenwert dreht in jedem Schritt das Vorzeichen dieser Komponente um.
+  - id: m05-c-eig-iteration
+    concept: la-stabilitaet
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.diag([0.5, 3.0])    # Diagonalmatrix
+          x = np.array([4.0, 1.0])
+          for k in range(2):
+              x = A @ x
+          print(x)
+        options: ["[1. 9.]", "[2. 3.]", "[ 4. 81.]", "[0.25 9.  ]"]
+        answer: "[1. 9.]"
+        explanation: "$4 \\cdot 0.5^2 = 1$, $1 \\cdot 3^2 = 9$."
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.diag([-1.0, 0.5])   # Diagonalmatrix
+          x = np.array([2.0, 4.0])
+          for k in range(3):
+              x = A @ x
+          print(x)
+        options: ["[-2.   0.5]", "[2.  0.5]", "[-2. -4.]", "[ 2. 32.]"]
+        answer: "[-2.   0.5]"
+        explanation: "Eigenwert −1 dreht nur das Vorzeichen: $2 \\cdot (-1)^3 = -2$; $4 \\cdot 0.5^3 = 0.5$."

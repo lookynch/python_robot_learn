@@ -1,0 +1,41 @@
+id: m08
+number: 8
+title: Kinematik planarer Arm
+summary: |
+  Vom Gelenkwinkel zur Position und zurück: Vorwärtskinematik, Arbeitsraum, inverse Kinematik, Jacobi-Matrix und Singularitäten – selbst implementiert und am animierten 2-Gelenk-Arm überprüft.
+depth: voll
+lessons:
+  - m08-gelenkraum
+  - m08-fk
+  - m08-fk-allgemein
+  - m08-arbeitsraum
+  - m08-ik-analytisch
+  - m08-jacobi
+  - m08-differentielle-ik
+  - m08-singularitaeten
+  - m08-checkpoint
+concepts:
+  - id: gelenkraum-arbeitsraum
+    name: Gelenkraum vs. kartesischer Raum
+    description: Ein Arm wird durch Gelenkwinkel q beschrieben (Gelenkraum); die Spitze hat kartesische Koordinaten (x, y). Gelenkwinkel sind relativ zum vorherigen Glied.
+  - id: vorwaertskinematik
+    name: Vorwärtskinematik (FK)
+    description: fk(q) berechnet aus den Gelenkwinkeln die Position der Spitze; Glied 2 zeigt in Richtung q1 + q2.
+  - id: fk-kette
+    name: FK für n Gelenke
+    description: Winkel aufsummieren und Gliedvektoren addieren – oder homogene Transformationen von links nach rechts multiplizieren.
+  - id: arbeitsraum
+    name: Arbeitsraum
+    description: Menge aller erreichbaren Spitzenpositionen; beim 2-Gelenk-Arm ohne Gelenkgrenzen der Ring |l1 − l2| ≤ r ≤ l1 + l2.
+  - id: inverse-kinematik
+    name: Analytische inverse Kinematik
+    description: Aus (x, y) mit Kosinussatz und atan2 die Gelenkwinkel berechnen; meist zwei Lösungen (Ellbogen oben/unten), außerhalb des Arbeitsraums keine.
+  - id: jacobi-matrix
+    name: Jacobi-Matrix
+    description: J(q) = ∂fk/∂q; Spalte i ist die Spitzengeschwindigkeit, wenn nur Gelenk i dreht; dp ≈ J dq.
+  - id: differentielle-ik
+    name: Differentielle IK und Damped Least Squares
+    description: Iterativ q ← q + α·Δq mit Δq aus J⁻¹e, Pseudoinverse oder DLS Δq = Jᵀ(JJᵀ + λ²I)⁻¹e.
+  - id: singularitaet
+    name: Singularitäten
+    description: det J = l1·l2·sin q2 = 0 bei gestrecktem oder gefaltetem Arm; dort fehlt eine Bewegungsrichtung, J⁻¹ explodiert, DLS bleibt beschränkt.

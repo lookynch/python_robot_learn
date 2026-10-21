@@ -1,0 +1,50 @@
+id: m04
+number: 4
+title: NumPy & Visualisierung
+summary: |
+  Rechnen mit ganzen Arrays statt mit einzelnen Zahlen: anlegen, elementweise rechnen, indizieren, Broadcasting, Vektorisierung, Aggregation, Zufall – und Ergebnisse als Diagramm oder Animation zeigen.
+depth: voll
+lessons:
+  - m04-arrays
+  - m04-elementweise
+  - m04-indexing
+  - m04-broadcasting
+  - m04-vektorisierung
+  - m04-aggregation
+  - m04-zufall
+  - m04-plotten
+  - m04-checkpoint
+concepts:
+  - id: np-array
+    name: NumPy-Array
+    description: np.array macht aus einer Liste ein Array mit festem dtype und shape (Tupel mit einer Länge pro Achse).
+  - id: np-erzeugen
+    name: Arrays erzeugen
+    description: np.zeros, np.ones, np.arange (Schrittweite, Ende exklusiv) und np.linspace (Anzahl, Ende inklusiv).
+  - id: np-elementweise
+    name: Elementweise Operationen
+    description: + - * / ** und Funktionen wie np.sin wirken auf jedes Element einzeln; * ist kein Skalarprodukt.
+  - id: np-indexing
+    name: Indizieren und Slicing
+    description: a[i], a[start:stop:step], M[zeile, spalte], M[:, j] für eine Spalte, M[i] für eine Zeile.
+  - id: np-maske
+    name: Boolesche Masken
+    description: Ein Vergleich liefert ein bool-Array; a[maske] wählt aus, a[maske] = wert setzt gezielt.
+  - id: np-broadcasting
+    name: Broadcasting
+    description: Shapes werden von rechts verglichen; gleich lange Achsen oder Länge 1 passen, Achsen der Länge 1 werden gestreckt.
+  - id: np-vektorisierung
+    name: Vektorisierung
+    description: Schleifen über Elemente durch Array-Ausdrücke und np.where ersetzen – schneller und kürzer.
+  - id: np-aggregation
+    name: Aggregation mit axis
+    description: sum, mean, max, min, argmax, argmin; axis=k rechnet Achse k weg, argmin liefert den Index.
+  - id: np-zufall
+    name: Zufallszahlen mit Seed
+    description: rng = np.random.default_rng(seed); uniform, normal, integers (Obergrenze exklusiv); gleicher Seed, gleiche Folge.
+  - id: lab-plot
+    name: Diagramme mit lab
+    description: lab.plot(y, x=...), lab.scatter, lab.Figure für mehrere Reihen; Achsen mit Einheiten beschriften.
+  - id: lab-scene
+    name: Animationen mit lab.Scene
+    description: Formen pro Frame zeichnen, next_frame() für den nächsten Frame, static=True für den Hintergrund, show() am Ende.

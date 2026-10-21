@@ -1,0 +1,176 @@
+id: m17-ha-schmidhuber
+title: "World Models (Ha & Schmidhuber): V, M und C"
+minutes: 9
+goals:
+  - Die drei Bausteine Vision, Memory und Controller zuordnen
+  - Verstehen, wie ein Controller im „Traum“ des Modells trainiert werden kann
+  - Modellausnutzung an einem Mini-Beispiel sehen und Gegenmittel nennen
+concepts: [lwm-vmc]
+steps:
+  - type: text
+    body: |
+      ## Drei Bausteine
+
+      Ha & Schmidhuber (2018, „World Models“) haben das Prinzip deines Moduls 16 auf Bilder übertragen:
+
+      | Baustein | Aufgabe | Umsetzung |
+      |---|---|---|
+      | **V** – Vision | Bild $o_t$ (64×64 Pixel, farbig) → $z_t$ | Variationeller Autoencoder (VAE); bei CarRacing 32 Zahlen |
+      | **M** – Memory | Zukunft vorhersagen: Verteilung von $z_{t+1}$ aus $z_t$, $a_t$, $h_t$ | LSTM mit Mischverteilung am Ausgang (MDN-RNN) |
+      | **C** – Controller | Aktion wählen | **linear**: $a_t = W_c\,[z_t, h_t] + b_c$ |
+
+      V und M werden mit Gradientenabstieg auf Zufalls-Rollouts trainiert – ganz ohne Belohnung. Nur der winzige Controller (bei CarRacing 867 Parameter) lernt die Aufgabe, und zwar mit der Evolutionsstrategie **CMA-ES** statt mit Gradienten.
+  - type: text
+    body: |
+      ## Lernen im Traum
+
+      Weil M die Zukunft (als Verteilung) vorhersagt, kann man C ganz **innerhalb von M** trainieren – im „Traum“. Bei der VizDoom-Aufgabe *Take Cover* wurde der Controller nur im Traum trainiert und dann in der echten Umgebung eingesetzt.
+
+      Das Problem: C findet Fehler von M und nutzt sie aus. Gegenmittel im Paper: eine **Temperatur** $\tau$ beim Ziehen aus M. Ein etwas höheres $\tau$ macht den Traum unsicherer – Strategien, die nur in einem fehlerhaften Traum funktionieren, lohnen sich dann nicht mehr, und der Transfer in die Realität klappt besser.
+
+      Bei CarRacing erreichte der Ansatz als Erster im Mittel über 900 Punkte, die Schwelle, ab der die Aufgabe als gelöst gilt.
+  - type: explain
+    question: |
+      Warum ist C absichtlich so klein (linear, 867 Parameter)?
+    options:
+      - text: Die schwere Arbeit (Wahrnehmung, Vorhersage) steckt in V und M; ein kleiner C lässt sich mit Evolutionsstrategien effizient optimieren, die nur Returns und keine Gradienten brauchen.
+        correct: true
+        why: CMA-ES skaliert schlecht mit sehr vielen Parametern – die Aufteilung macht es praktikabel.
+      - text: Weil größere Controller in Python nicht laufen.
+        correct: false
+        why: Es geht um die Optimierungsmethode, nicht um die Programmiersprache.
+      - text: Weil lineare Controller garantiert optimal sind.
+        correct: false
+        why: Linear ist eine starke Einschränkung – sie reicht nur, weil $[z_t, h_t]$ schon die relevanten Merkmale enthält.
+  - type: example
+    intro: |
+      Modellausnutzung im Kleinen: Die wahre Belohnung ist $r(a) = -(a-1)^2$ (bestes $a = 1$). Wir lernen ein „Modell“ (Polynom 5. Grades) aus 30 verrauschten Messungen mit $a \in [-1, 2]$ und optimieren dann **im Modell** über $a \in [-4, 4]$.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      a_data = rng.uniform(-1, 2, 30)
+      r_data = -(a_data - 1) ** 2 + 0.1 * rng.standard_normal(30)
+      coef = np.polyfit(a_data, r_data, 5)
+
+      a_grid = np.linspace(-4, 4, 801)
+      a_best = a_grid[np.argmax(np.polyval(coef, a_grid))]
+      print(f"Im Modell beste Aktion: a = {a_best:.2f}")
+      print(f"Modell verspricht {np.polyval(coef, a_best):.1f}, echt: {-(a_best - 1) ** 2:.1f}")
+
+      inside = a_grid[(a_grid >= a_data.min()) & (a_grid <= a_data.max())]
+      a_safe = inside[np.argmax(np.polyval(coef, inside))]
+      print(f"Nur im Datenbereich: a = {a_safe:.2f}, echt: {-(a_safe - 1) ** 2:.2f}")
+
+      fig = lab.Figure(title="Modell vs. Realität", xlabel="Aktion a", ylabel="Belohnung")
+      fig.line(np.clip(np.polyval(coef, a_grid), -30, 30), x=a_grid, label="Modell (beschnitten auf ±30)")
+      fig.line(-(a_grid - 1) ** 2, x=a_grid, label="wahr")
+      fig.scatter(a_data, r_data, label="Daten")
+      fig.show()
+    subgoals:
+      - lines: [4, 7]
+        label: Modell aus wenigen Daten lernen
+      - lines: [9, 12]
+        label: Im Modell optimieren
+      - lines: [14, 16]
+        label: Optimierung auf den Datenbereich beschränken
+      - lines: [18, 22]
+        label: Modell und Realität vergleichen
+    after: |
+      Im Datenbereich passt das Modell gut. Außerhalb explodiert das Polynom – und genau dort findet der Optimierer sein „Optimum“: versprochen +296, real −25. Beschränkt auf den Datenbereich landet er bei $a \approx 0{,}92$. Dasselbe passiert, wenn ein Controller im Traum eines Netzes trainiert wird.
+  - type: predict
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      a_data = rng.uniform(-1, 2, 30)
+      r_data = -(a_data - 1) ** 2 + 0.1 * rng.standard_normal(30)
+      coef = np.polyfit(a_data, r_data, 5)
+      a_grid = np.linspace(-4, 4, 801)
+      a_best = a_grid[np.argmax(np.polyval(coef, a_grid))]
+      print(a_data.min() <= a_best <= a_data.max())
+    options: ["False", "True"]
+    answer: "False"
+    explanation: |
+      Ein Optimierer sucht das Maximum des **Modells**, nicht der Realität. Extrapolationsfehler sind oft die größten Werte – also landet er außerhalb der Daten. Gegenmittel: Bereich beschränken, Unsicherheit bestrafen (Ensembles) oder – wie bei Ha & Schmidhuber – den Traum mit höherer Temperatur unsicherer machen.
+  - type: quiz
+    question: |
+      Welcher Baustein sagt im V-M-C-Modell die **Zukunft** voraus?
+    options:
+      - text: M – das MDN-RNN sagt die Verteilung des nächsten latenten Vektors vorher.
+        correct: true
+        why: M ist das eigentliche Dynamikmodell im latenten Raum.
+      - text: V – der VAE.
+        correct: false
+        why: V komprimiert nur das aktuelle Bild.
+      - text: C – der Controller.
+        correct: false
+        why: C wählt nur die Aktion aus $[z_t, h_t]$.
+  - type: quiz
+    question: |
+      Warum hat ein etwas höheres $\tau$ beim Traum-Training geholfen?
+    options:
+      - text: Der Traum wird zufälliger; Strategien, die einzelne Modellfehler ausnutzen, funktionieren darin nicht mehr zuverlässig.
+        correct: true
+        why: Ein unsicherer Traum ist schwerer zu „betrügen“ – der Controller lernt robustere Strategien.
+      - text: Höheres $\tau$ macht das Modell genauer.
+        correct: false
+        why: $\tau$ ändert nicht das gelernte Modell, nur wie stark beim Vorstellen gestreut wird.
+      - text: Es beschleunigt das Training von V.
+        correct: false
+        why: V ist zu diesem Zeitpunkt längst fertig trainiert.
+cards:
+  - id: m17-c-vmc
+    concept: lwm-vmc
+    variants:
+      - type: quiz
+        question: Welche Zuordnung von V, M und C ist richtig?
+        options:
+          - text: V komprimiert Bilder, M sagt die Zukunft im latenten Raum voraus, C wählt Aktionen.
+            correct: true
+            why: Wahrnehmung, Vorhersage, Entscheidung – getrennt trainiert.
+          - text: V wählt Aktionen, M komprimiert Bilder, C sagt die Zukunft voraus.
+            correct: false
+            why: Die Rollen sind vertauscht.
+          - text: V, M und C sind drei gleich große Netze, die gemeinsam mit derselben Belohnung trainiert werden.
+            correct: false
+            why: V und M lernen ohne Belohnung; nur der kleine C lernt die Aufgabe.
+      - type: quiz
+        question: Womit wurde der Controller bei Ha & Schmidhuber optimiert?
+        options:
+          - text: Mit der Evolutionsstrategie CMA-ES.
+            correct: true
+            why: Gradientenfrei, gut geeignet für wenige hundert Parameter.
+          - text: Mit Backpropagation durch V und M.
+            correct: false
+            why: Das macht später Dreamer (Wertgradienten durch das Modell) – nicht V-M-C.
+          - text: Mit tabellarischem Q-Learning.
+            correct: false
+            why: Kontinuierliche latente Zustände passen nicht in eine Tabelle.
+  - id: m17-c-traum
+    concept: lwm-vmc
+    variants:
+      - type: quiz
+        question: Was bedeutet „Training im Traum“?
+        options:
+          - text: Der Controller sammelt seine Erfahrungen nur in Rollouts des gelernten Modells M, nicht in der echten Umgebung.
+            correct: true
+            why: Echte Interaktionen braucht man nur, um V und M zu trainieren.
+          - text: Das Netz wird nachts trainiert.
+            correct: false
+            why: Es ist eine Metapher für das Lernen im Modell.
+          - text: Der Controller lernt aus zufälligem Rauschen ohne jedes Modell.
+            correct: false
+            why: Der Traum ist die Vorhersage von M.
+      - type: quiz
+        question: Ein Controller erzielt im Traum Rekordwerte, in der Realität versagt er. Was ist die wahrscheinlichste Ursache?
+        options:
+          - text: Er nutzt Fehler des Modells aus (Modellausnutzung).
+            correct: true
+            why: Optimierer finden zielsicher die Stellen, an denen das Modell zu optimistisch ist.
+          - text: Die Realität ist zufällig, der Traum nicht.
+            correct: false
+            why: M ist sogar stochastisch – das Problem sind systematische Modellfehler.
+          - text: Der Controller hat zu wenige Parameter.
+            correct: false
+            why: Dann wäre er auch im Traum schlecht.

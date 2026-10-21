@@ -1,0 +1,280 @@
+id: m10-zufallsvariablen
+title: Zufallsvariablen und Histogramme
+minutes: 9
+goals:
+  - Diskrete und stetige Zufallsvariablen unterscheiden
+  - Stichproben mit `np.bincount` und `np.histogram` auszählen
+  - Eine Verteilung aus Stichproben als Kurve plotten
+concepts: [wk-zufallsvariable, wk-histogramm]
+steps:
+  - type: text
+    body: |
+      ## Zufall als Zahl
+
+      Ein Roboter lebt mit Zufall: Sensorrauschen, Rutschen, unbekannte Lasten. Mathematisch beschreibt das eine **Zufallsvariable** (random variable) $X$ – das Ergebnis eines Zufallsexperiments als Zahl.
+
+      - **diskret**: endlich/abzählbar viele Werte, z. B. Würfelaugen. Beschrieben durch Wahrscheinlichkeiten $p(x)$ mit $\sum_x p(x) = 1$.
+      - **stetig**: Werte aus einem Intervall, z. B. ein gemessener Winkel. Beschrieben durch eine **Dichte** $f(x)$ mit $P(a \le X \le b) = \int_a^b f(x)\,dx$.
+
+      Im Code rechnen wir selten mit Formeln, sondern ziehen **Stichproben** (samples) mit `rng` und zählen aus.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      wuerfe = rng.integers(1, 7, size=6000)
+
+      anzahl = np.bincount(wuerfe, minlength=7)[1:]
+      rel = anzahl / len(wuerfe)
+      print(np.round(rel, 3))
+
+      fig = lab.Figure(title="Würfel: relative Häufigkeit", xlabel="Augenzahl", ylabel="Anteil")
+      fig.scatter([1, 2, 3, 4, 5, 6], rel, label="6000 Würfe")
+      fig.hline(1 / 6, label="1/6")
+      fig.show()
+    subgoals:
+      - lines: [4, 5]
+        label: Stichproben ziehen
+      - lines: [7, 9]
+        label: Auszählen und normieren
+      - lines: [11, 14]
+        label: Verteilung plotten
+    after: |
+      - `rng.integers(1, 7)` liefert 1 bis **6** – die obere Grenze ist exklusiv wie bei `range`.
+      - `np.bincount(x)` zählt, wie oft jeder Wert `0, 1, 2, …` vorkommt. Index 0 (Augenzahl 0) gibt es beim Würfel nicht, darum `[1:]`.
+      - Geteilt durch $N$ wird aus der Anzahl die **relative Häufigkeit** – eine Schätzung von $p(x)$.
+  - type: predict
+    code: |
+      import numpy as np
+      x = np.array([0, 2, 2, 3])
+      print(np.bincount(x))
+    options: ["[1 0 2 1]", "[1 2 1]", "[0 2 2 3]", "[1 0 2 1 0]"]
+    answer: "[1 0 2 1]"
+    explanation: |
+      `bincount` zählt **jeden** Wert von 0 bis zum Maximum – auch Werte, die nicht vorkommen (die 1 kommt 0-mal vor). Länger wird das Ergebnis nur mit `minlength`.
+  - type: explain
+    question: |
+      Im Beispiel liegen die Anteile nahe bei, aber nicht genau auf $1/6 \approx 0.167$. Warum?
+    options:
+      - text: Eine endliche Stichprobe schwankt zufällig um die wahre Wahrscheinlichkeit.
+        correct: true
+        why: Relative Häufigkeiten sind selbst Zufallsgrößen. Mit mehr Würfen werden die Abweichungen kleiner – das quantifizieren wir in der Monte-Carlo-Lektion.
+      - text: "`rng.integers` erzeugt keine gleichverteilten Zahlen."
+        correct: false
+        why: Der Generator ist gleichverteilt. Die Abweichung kommt von der endlichen Stichprobengröße.
+      - text: "`rng.integers(1, 7)` kann auch 7 liefern, deshalb fehlt den anderen etwas."
+        correct: false
+        why: Die obere Grenze ist exklusiv – es kommen nur 1 bis 6 vor.
+      - text: Weil der Seed 0 ungünstig ist; mit einem anderen Seed käme genau 1/6 heraus.
+        correct: false
+        why: Jeder Seed liefert eine andere, aber ebenso zufällig schwankende Stichprobe.
+  - type: example
+    intro: |
+      Bei **stetigen** Werten gibt es keine einzelnen Werte zum Zählen. Man teilt die Achse in Klassen (bins) und zählt pro Klasse: das **Histogramm**. Mit `density=True` wird so normiert, dass die Fläche 1 ist – dann schätzt es die Dichte $f(x)$.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(1)
+      u = rng.uniform(0, 1, size=20000)
+      s = rng.uniform(0, 1, size=20000) + rng.uniform(0, 1, size=20000)
+
+      fig = lab.Figure(title="Histogramme (Dichte)", xlabel="x", ylabel="f(x)")
+      for werte, name in [(u, "U(0,1)"), (s, "U + U")]:
+          dichte, kanten = np.histogram(werte, bins=40, range=(0, 2), density=True)
+          mitten = (kanten[:-1] + kanten[1:]) / 2
+          fig.line(dichte, x=mitten, label=name)
+      fig.show()
+    subgoals:
+      - lines: [4, 6]
+        label: Stichproben ziehen
+      - lines: [9, 10]
+        label: In Klassen zählen
+      - lines: [11, 12]
+        label: Klassenmitten berechnen und plotten
+    after: |
+      Die Summe zweier Gleichverteilungen ist **dreieckig** verteilt: Werte um 1 entstehen auf viele Arten, Werte nahe 0 oder 2 nur auf wenige. Solche Formen sieht man in Stichproben sofort – ohne die Faltung von Hand zu rechnen.
+  - type: predict
+    code: |
+      import numpy as np
+      x = np.array([0.1, 0.4, 0.6, 1.7])
+      anzahl, kanten = np.histogram(x, bins=4, range=(0, 2))
+      print(len(anzahl), len(kanten))
+      print(anzahl)
+    options:
+      - |
+        4 5
+        [2 1 0 1]
+      - |
+        4 4
+        [2 1 0 1]
+      - |
+        4 5
+        [1 1 1 1]
+      - |
+        5 5
+        [2 1 0 1 0]
+    answer: |
+      4 5
+      [2 1 0 1]
+    explanation: |
+      4 Klassen brauchen **5 Kanten** (`[0, 0.5, 1, 1.5, 2]`). In `[0, 0.5)` liegen 0.1 und 0.4, in `[0.5, 1)` die 0.6, in `[1.5, 2]` die 1.7.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne aus den Kanten die **Klassenmitten**, damit man das Histogramm als Kurve plotten kann.
+    code: |
+      import numpy as np
+      kanten = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+      mitten = (kanten[___] + kanten[___]) / 2
+      print(mitten)
+    blanks:
+      - answer: ":-1"
+        options: [":-1", "1:", "0", ":"]
+      - answer: "1:"
+        options: ["1:", ":-1", "-1", ":"]
+    expect_output: "[0.25 0.75 1.25 1.75]"
+    explanation: |
+      `kanten[:-1]` sind die linken, `kanten[1:]` die rechten Kanten – beide haben genau so viele Einträge wie es Klassen gibt.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `rel_haeufigkeit(stichprobe, k)`: Die Stichprobe enthält ganze Zahlen von `0` bis `k - 1`. Gib ein Array der Länge `k` zurück, das für jeden Wert seinen Anteil an der Stichprobe enthält.
+
+      Beispiel: `rel_haeufigkeit(np.array([0, 1, 1, 3]), 4)` → `[0.25, 0.5, 0.0, 0.25]`
+    starter: |
+      import numpy as np
+
+      def rel_haeufigkeit(stichprobe, k):
+          # dein Code
+          pass
+
+      print(rel_haeufigkeit(np.array([0, 1, 1, 3]), 4))
+    solution: |
+      import numpy as np
+
+      def rel_haeufigkeit(stichprobe, k):
+          anzahl = np.bincount(stichprobe, minlength=k)
+          return anzahl / len(stichprobe)
+
+      print(rel_haeufigkeit(np.array([0, 1, 1, 3]), 4))
+    tests:
+      - name: Beispiel
+        code: |
+          r = rel_haeufigkeit(np.array([0, 1, 1, 3]), 4)
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert close(r, [0.25, 0.5, 0.0, 0.25]), f"Erwartet [0.25, 0.5, 0.0, 0.25], bekommen {r}"
+      - name: Länge k, auch wenn große Werte fehlen
+        code: |
+          r = rel_haeufigkeit(np.array([0, 0, 1]), 5)
+          assert len(r) == 5, f"Das Ergebnis muss Länge k = 5 haben, hat aber Länge {len(r)}"
+          assert close(r, [2 / 3, 1 / 3, 0, 0, 0]), f"Erwartet [0.667, 0.333, 0, 0, 0], bekommen {r}"
+      - name: Summe ist 1
+        code: |
+          rng = np.random.default_rng(5)
+          r = rel_haeufigkeit(rng.integers(0, 6, size=999), 6)
+          assert close(np.sum(r), 1.0), f"Anteile müssen sich zu 1 summieren, Summe ist {np.sum(r)}"
+    mutants:
+      - |
+        import numpy as np
+        def rel_haeufigkeit(stichprobe, k):
+            return np.bincount(stichprobe) / len(stichprobe)
+      - |
+        import numpy as np
+        def rel_haeufigkeit(stichprobe, k):
+            return np.bincount(stichprobe, minlength=k)
+      - |
+        import numpy as np
+        def rel_haeufigkeit(stichprobe, k):
+            return np.bincount(stichprobe, minlength=k) / k
+    hints:
+      - "Teilziel: erst auszählen, dann normieren."
+      - "`np.bincount` zählt jeden Wert; mit `minlength=k` hat das Ergebnis mindestens Länge `k`."
+      - "`anzahl = np.bincount(stichprobe, minlength=k)` – und dann durch die Stichprobengröße teilen."
+      - "`return np.bincount(stichprobe, minlength=k) / len(stichprobe)`"
+  - type: quiz
+    question: |
+      Welche Größe beschreibst du sinnvollerweise mit einer **stetigen** Zufallsvariablen?
+    options:
+      - text: Der gemessene Gelenkwinkel eines Encoders mit Rauschen (in rad)
+        correct: true
+        why: Der Winkel kann jeden Wert in einem Intervall annehmen – dafür nimmt man eine Dichte.
+      - text: Die Anzahl der Versuche, bis ein Greifer ein Teil fasst
+        correct: false
+        why: Eine Anzahl ist diskret (1, 2, 3, …).
+      - text: Die Augenzahl eines Würfels
+        correct: false
+        why: Sechs mögliche Werte – klassisch diskret.
+cards:
+  - id: m10-c-bincount
+    concept: wk-histogramm
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.bincount(np.array([1, 1, 3])))
+        options: ["[0 2 0 1]", "[2 1]", "[2 0 1]", "[1 1 3]"]
+        answer: "[0 2 0 1]"
+        explanation: Gezählt wird für jeden Wert ab 0 bis zum Maximum 3 – die 0 und die 2 kommen 0-mal vor.
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.bincount(np.array([0, 2]), minlength=4))
+        options: ["[1 0 1 0]", "[1 0 1]", "[1 1 0 0]", "[0 2 0 0]"]
+        answer: "[1 0 1 0]"
+        explanation: "`minlength=4` verlängert das Ergebnis mit Nullen auf Länge 4."
+      - type: predict
+        code: |
+          import numpy as np
+          x = np.array([2, 2, 0, 2])
+          print(np.bincount(x) / len(x))
+        options: ["[0.25 0.   0.75]", "[1 0 3]", "[0.25 0.75]", "[0.75 0.   0.25]"]
+        answer: "[0.25 0.   0.75]"
+        explanation: Anzahlen `[1 0 3]`, geteilt durch 4 ergibt die relativen Häufigkeiten.
+  - id: m10-c-histogramm-kanten
+    concept: wk-histogramm
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          anzahl, kanten = np.histogram(np.array([0.2, 0.3, 0.9]), bins=2, range=(0, 1))
+          print(anzahl, len(kanten))
+        options: ["[2 1] 3", "[2 1] 2", "[1 2] 3", "[2 0 1] 3"]
+        answer: "[2 1] 3"
+        explanation: 2 Klassen `[0, 0.5)` und `[0.5, 1]` brauchen 3 Kanten.
+      - type: predict
+        code: |
+          import numpy as np
+          anzahl, kanten = np.histogram(np.array([1.0, 1.5, 2.5, 3.5]), bins=3, range=(1, 4))
+          print(anzahl, kanten)
+        options: ["[2 1 1] [1. 2. 3. 4.]", "[2 1 1] [1. 2. 3.]", "[1 2 1] [1. 2. 3. 4.]", "[2 2 0] [1. 2. 3. 4.]"]
+        answer: "[2 1 1] [1. 2. 3. 4.]"
+        explanation: Klassen `[1, 2)`, `[2, 3)`, `[3, 4]` – also 3 Klassen und 4 Kanten.
+  - id: m10-c-diskret-stetig
+    concept: wk-zufallsvariable
+    variants:
+      - type: quiz
+        question: Welche Größe ist **diskret**?
+        options:
+          - text: Anzahl defekter Sensoren in einer Charge
+            correct: true
+            why: Eine Anzahl nimmt nur ganzzahlige Werte an.
+          - text: Abstand des Greifers zum Ziel in m
+            correct: false
+            why: Ein Abstand kann jeden reellen Wert in einem Intervall annehmen – stetig.
+          - text: Motortemperatur in °C
+            correct: false
+            why: Temperatur ist eine stetige Messgröße.
+      - type: quiz
+        question: Was gilt für die Dichte $f(x)$ einer stetigen Zufallsvariablen?
+        options:
+          - text: Die Fläche unter $f$ ist 1; Wahrscheinlichkeiten sind Integrale über Intervalle.
+            correct: true
+            why: "$P(a \\le X \\le b) = \\int_a^b f(x)\\,dx$, über alles integriert ergibt 1."
+          - text: "$f(x)$ ist die Wahrscheinlichkeit, dass genau $X = x$ herauskommt."
+            correct: false
+            why: Bei stetigen Variablen ist $P(X = x) = 0$; $f(x)$ ist eine Dichte und kann sogar größer als 1 sein.
+          - text: Die Werte $f(x)$ summieren sich zu 1.
+            correct: false
+            why: Das gilt für $p(x)$ bei diskreten Variablen. Bei Dichten integriert man.

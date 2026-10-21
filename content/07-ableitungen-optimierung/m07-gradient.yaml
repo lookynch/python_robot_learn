@@ -1,0 +1,310 @@
+id: m07-gradient
+title: Der Gradient
+minutes: 9
+goals:
+  - Partielle Ableitungen numerisch mit Einheitsvektoren berechnen
+  - Den Gradienten als Richtung des steilsten Anstiegs deuten und zeichnen
+  - Den Aufwand des numerischen Gradienten abschätzen
+concepts: [gradient-numerisch, zentraldifferenz]
+steps:
+  - type: text
+    body: |
+      ## Viele Eingaben, eine Zahl
+
+      Kostenfunktionen hängen fast immer von mehreren Größen ab: zwei Gelenkwinkeln, zehn Aktionen, einer Million Netzgewichten. Der **Gradient** sammelt alle partiellen Ableitungen in einem Vektor:
+
+      $$
+      \nabla f(p) = \left[\frac{\partial f}{\partial p_1}, \dots, \frac{\partial f}{\partial p_n}\right]
+      $$
+
+      Er zeigt in die Richtung des **steilsten Anstiegs**, seine Länge ist die Steigung in dieser Richtung, und er steht senkrecht auf den Höhenlinien.
+
+      Numerisch: Für jede Komponente $i$ nur $p_i$ um $\pm h$ verschieben, alle anderen festhalten. Dafür addiert man $h \cdot e_i$ – den $i$-ten Einheitsvektor mal $h$.
+  - type: example
+    code: |
+      import numpy as np
+
+      def f(p):
+          x, y = p
+          return (x - 1)**2 + 2 * (y + 0.5)**2
+
+      def num_grad(f, p, h=1e-5):
+          g = np.zeros(len(p))
+          for i in range(len(p)):
+              e = np.zeros(len(p))
+              e[i] = h
+              g[i] = (f(p + e) - f(p - e)) / (2 * h)
+          return g
+
+      p = np.array([0.0, 0.0])
+      g_num = num_grad(f, p)
+      g_ana = np.array([2 * (p[0] - 1), 4 * (p[1] + 0.5)])
+      print(f"numerisch:  [{g_num[0]:.6f}, {g_num[1]:.6f}]")
+      print(f"analytisch: [{g_ana[0]:.6f}, {g_ana[1]:.6f}]")
+    subgoals:
+      - lines: [3, 5]
+        label: Funktion mehrerer Variablen definieren
+      - lines: [7, 9]
+        label: Schleife über alle Komponenten
+      - lines: [10, 11]
+        label: Einheitsvektor mal h bauen
+      - lines: [12, 13]
+        label: Zentrale Differenz je Komponente
+      - lines: [15, 19]
+        label: Mit analytischem Gradienten vergleichen
+    after: |
+      Analytisch ist $\nabla f = [2(x-1),\ 4(y+0{,}5)]$, bei $(0, 0)$ also $[-2, 2]$. Der numerische Gradient stimmt auf 6 Stellen überein. Ein solcher Vergleich heißt **Gradient-Check** – du wirst ihn in Modul 12 nutzen, um handgeschriebene Ableitungen zu prüfen.
+  - type: explain
+    question: |
+      Warum wird in jedem Durchlauf ein neues `e = np.zeros(len(p))` angelegt, bevor `e[i] = h` gesetzt wird?
+    options:
+      - text: Damit immer nur **eine** Komponente verschoben wird; sonst bliebe das `h` aus früheren Durchläufen stehen.
+        correct: true
+        why: Eine partielle Ableitung hält alle anderen Variablen fest. Ohne Zurücksetzen wäre im zweiten Durchlauf `e = [h, h]` – eine schräge Richtungsableitung.
+      - text: Weil NumPy-Arrays nach einem Zugriff gelöscht werden.
+        correct: false
+        why: Arrays bleiben bestehen, bis man sie überschreibt. Genau deshalb muss `e` neu angelegt werden.
+      - text: Damit `p` nicht verändert wird.
+        correct: false
+        why: "`p + e` erzeugt ohnehin ein neues Array; `p` bleibt unverändert. Es geht um `e` selbst."
+  - type: predict
+    code: |
+      import numpy as np
+
+      def f(p):
+          return p[0]**2 * p[1]
+
+      def num_grad(f, p, h=1e-5):
+          g = np.zeros(len(p))
+          for i in range(len(p)):
+              e = np.zeros(len(p))
+              e[i] = h
+              g[i] = (f(p + e) - f(p - e)) / (2 * h)
+          return g
+
+      g = num_grad(f, np.array([2.0, 3.0]))
+      print(round(g[0], 4), round(g[1], 4))
+    options: ["12.0 4.0", "4.0 12.0", "6.0 4.0", "12.0 2.0"]
+    answer: "12.0 4.0"
+    explanation: |
+      $f = x^2 y$: $\partial f/\partial x = 2xy = 12$, $\partial f/\partial y = x^2 = 4$. Die Reihenfolge der Einträge folgt der Reihenfolge der Variablen in `p`.
+  - type: example
+    intro: |
+      Zeichnen wir den **negativen** Gradienten an vielen Punkten – das ist die Richtung, in die es am steilsten bergab geht.
+    code: |
+      import numpy as np
+      import lab
+
+      def grad(x, y):
+          return np.array([2 * (x - 1), 4 * (y + 0.5)])
+
+      s = lab.Scene(title="−∇f und Höhenlinien von f", bounds=[-1.5, 3.5, -2.5, 1.5])
+      t = np.linspace(0, 2 * np.pi, 60)
+      for c in [0.25, 1.0, 2.25, 4.0]:
+          pts = np.stack([1 + np.sqrt(c) * np.cos(t), -0.5 + np.sqrt(c / 2) * np.sin(t)], axis=1)
+          s.line(pts, color="muted", width=1, static=True)
+      for x in np.linspace(-1, 3, 5):
+          for y in np.linspace(-2, 1, 4):
+              g = grad(x, y)
+              s.arrow(x, y, -0.12 * g[0], -0.12 * g[1], color="accent")
+      s.circle(1, -0.5, 0.06, color="good", fill="good")
+      s.show()
+    subgoals:
+      - lines: [4, 5]
+        label: Analytischen Gradienten definieren
+      - lines: [9, 11]
+        label: Höhenlinien zeichnen
+      - lines: [12, 15]
+        label: Pfeile an Gitterpunkten
+    after: |
+      Die Pfeile stehen senkrecht auf den Höhenlinien und zeigen zum Minimum bei $(1, -0{,}5)$ (grüner Punkt). Weil $f$ in $y$ doppelt so stark gekrümmt ist, zeigen sie **nicht** direkt auf das Minimum – das wird beim Gradientenabstieg wichtig.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den numerischen Gradienten. Für $f = (x-1)^2 + 2(y+0{,}5)^2$ bei $(0, 0)$ soll `-2.0 2.0` herauskommen.
+    code: |
+      import numpy as np
+
+      def f(p):
+          return (p[0] - 1)**2 + 2 * (p[1] + 0.5)**2
+
+      def num_grad(f, p, h=1e-5):
+          g = np.zeros(len(p))
+          for i in range(len(p)):
+              e = np.zeros(len(p))
+              e[i] = ___
+              g[i] = (f(p + e) - f(___)) / (2 * h)
+          return g
+
+      g = num_grad(f, np.array([0.0, 0.0]))
+      print(round(g[0], 4), round(g[1], 4))
+    blanks:
+      - answer: h
+        options: [h, "1.0", "2 * h"]
+      - answer: p - e
+        options: [p - e, p, e]
+    expect_output: "-2.0 2.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `num_grad(f, p, h=1e-5)` für beliebig viele Variablen (zentrale Differenz). `p` kann eine Liste oder ein Array sein; die Rückgabe ist ein Array derselben Länge.
+    starter: |
+      import numpy as np
+
+      def num_grad(f, p, h=1e-5):
+          p = np.array(p, dtype=float)
+          g = np.zeros(len(p))
+          for i in range(len(p)):
+              # Komponente i um +h und -h verschieben
+              pass
+          return g
+    solution: |
+      import numpy as np
+
+      def num_grad(f, p, h=1e-5):
+          p = np.array(p, dtype=float)
+          g = np.zeros(len(p))
+          for i in range(len(p)):
+              e = np.zeros(len(p))
+              e[i] = h
+              g[i] = (f(p + e) - f(p - e)) / (2 * h)
+          return g
+    tests:
+      - name: Quadratsumme in 3D
+        code: |
+          def sq(p):
+              return np.sum(p**2)
+          g = num_grad(sq, [1.0, -2.0, 0.5])
+          assert close(g, [2.0, -4.0, 1.0], tol=1e-6), f"Gradient von Σp² ist 2p = [2, -4, 1], bekommen {g}"
+      - name: Gekoppelte Variablen
+        code: |
+          def fxy(p):
+              return p[0] * p[1] + p[1]**2
+          g = num_grad(fxy, [3.0, 2.0])
+          assert close(g, [2.0, 7.0], tol=1e-6), f"Für xy + y² bei (3, 2) erwartet [2, 7], bekommen {g}"
+      - name: Nicht-polynomiell
+        code: |
+          def fse(p):
+              return np.sin(p[0]) * np.exp(p[1])
+          p = [0.7, -0.3]
+          expected = [np.cos(0.7) * np.exp(-0.3), np.sin(0.7) * np.exp(-0.3)]
+          g = num_grad(fse, p)
+          assert close(g, expected, tol=1e-8), f"Erwartet {np.round(expected, 8)}, bekommen {np.round(g, 8)}"
+    mutants:
+      - |
+        import numpy as np
+
+        def num_grad(f, p, h=1e-5):
+            p = np.array(p, dtype=float)
+            g = np.zeros(len(p))
+            e = np.zeros(len(p))
+            for i in range(len(p)):
+                e[i] = h
+                g[i] = (f(p + e) - f(p - e)) / (2 * h)
+            return g
+      - |
+        import numpy as np
+
+        def num_grad(f, p, h=1e-5):
+            p = np.array(p, dtype=float)
+            g = np.zeros(len(p))
+            for i in range(len(p)):
+                e = np.zeros(len(p))
+                e[i] = h
+                g[i] = (f(p + e) - f(p)) / h
+            return g
+      - |
+        import numpy as np
+
+        def num_grad(f, p, h=1e-5):
+            p = np.array(p, dtype=float)
+            g = np.zeros(len(p))
+            for i in range(len(p)):
+                e = np.zeros(len(p))
+                e[i] = h
+                g[i] = (f(p + e) - f(p - e)) / h
+            return g
+    hints:
+      - "Teilziel: Schleife über alle Komponenten – je einen Einheitsvektor mal h bauen."
+      - "Für Komponente `i`: `e` mit Nullen anlegen, `e[i] = h`, dann zentrale Differenz mit `p + e` und `p - e`."
+      - |
+        ```python
+        e = np.zeros(len(p))
+        e[i] = h
+        g[i] = ...
+        ```
+      - "`g[i] = (f(p + e) - f(p - e)) / (2 * h)`"
+  - type: quiz
+    question: |
+      Ein neuronales Netz hat $10^6$ Gewichte. Wie viele Auswertungen der Kostenfunktion braucht **ein** numerischer Gradient mit zentraler Differenz?
+    options:
+      - text: $2 \cdot 10^6$
+        correct: true
+        why: Pro Komponente zwei Auswertungen. Deshalb trainiert man Netze nicht so, sondern mit der Kettenregel (Backpropagation), die den ganzen Gradienten für etwa den Aufwand weniger Auswertungen liefert.
+      - text: "2"
+        correct: false
+        why: Zwei Auswertungen liefern nur **eine** Richtungsableitung, nicht alle $10^6$ Komponenten.
+      - text: $10^{12}$
+        correct: false
+        why: Es gibt keine paarweisen Kombinationen; jede Komponente wird einzeln gestört.
+cards:
+  - id: m07-c-gradient-werte
+    concept: gradient-numerisch
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+
+          def f(p):
+              return 3 * p[0] + p[1]**2
+
+          p = np.array([1.0, 2.0])
+          h = 1e-4
+          g0 = (f(p + [h, 0]) - f(p - [h, 0])) / (2 * h)
+          g1 = (f(p + [0, h]) - f(p - [0, h])) / (2 * h)
+          print(round(g0, 4), round(g1, 4))
+        options: ["3.0 4.0", "4.0 3.0", "3.0 2.0", "5.0 5.0"]
+        answer: "3.0 4.0"
+        explanation: "$\\partial f/\\partial x = 3$, $\\partial f/\\partial y = 2y = 4$."
+      - type: predict
+        code: |
+          import numpy as np
+
+          def f(p):
+              return p[0] * p[1]
+
+          p = np.array([5.0, -1.0])
+          h = 1e-4
+          g0 = (f(p + [h, 0]) - f(p - [h, 0])) / (2 * h)
+          g1 = (f(p + [0, h]) - f(p - [0, h])) / (2 * h)
+          print(round(g0, 4), round(g1, 4))
+        options: ["-1.0 5.0", "5.0 -1.0", "-5.0 -5.0", "4.0 4.0"]
+        answer: "-1.0 5.0"
+        explanation: "$\\partial(xy)/\\partial x = y = -1$, $\\partial(xy)/\\partial y = x = 5$."
+  - id: m07-c-gradient-richtung
+    concept: gradient-numerisch
+    variants:
+      - type: quiz
+        question: In welche Richtung zeigt $\nabla f(p)$?
+        options:
+          - text: in die Richtung des steilsten Anstiegs von $f$
+            correct: true
+            why: Für einen Einheitsvektor $d$ ist die Steigung $\nabla f \cdot d$, maximal für $d \parallel \nabla f$.
+          - text: immer direkt zum Minimum
+            correct: false
+            why: Nur bei kreisrunden Höhenlinien. Bei länglichen Tälern zeigt $-\nabla f$ schräg daran vorbei.
+          - text: entlang der Höhenlinie
+            correct: false
+            why: Entlang der Höhenlinie ändert sich $f$ nicht; der Gradient steht senkrecht darauf.
+      - type: quiz
+        question: Wie viele Funktionsauswertungen braucht der zentrale numerische Gradient einer Funktion von 7 Variablen?
+        options:
+          - text: "14"
+            correct: true
+            why: Zwei pro Variable.
+          - text: "7"
+            correct: false
+            why: Zentral braucht jede Variable zwei Auswertungen ($p \pm h e_i$). Mit Vorwärtsdifferenzen wären es 8 (eine pro Variable plus $f(p)$).
+          - text: "2"
+            correct: false
+            why: Damit bekommt man nur eine Richtungsableitung.

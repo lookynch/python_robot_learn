@@ -1,0 +1,255 @@
+id: m05-vektoren
+title: Vektoren, Länge und Richtung
+minutes: 8
+goals:
+  - Vektoren addieren und skalieren und mit `lab.vectors` zeichnen
+  - Länge mit `np.linalg.norm` berechnen und Einheitsvektoren bilden
+  - Normen vieler Vektoren auf einmal mit `axis=1` berechnen
+concepts: [la-vektor, la-norm]
+steps:
+  - type: text
+    body: |
+      ## Kurze Auffrischung
+
+      Ein Vektor $\vec v \in \mathbb{R}^2$ ist in NumPy ein 1D-Array der Form `(2,)`. Addition und Skalierung kennst du schon – sie sind elementweise:
+
+      $$ \vec a + \vec b, \qquad c\,\vec v, \qquad \|\vec v\| = \sqrt{v_1^2 + v_2^2} $$
+
+      Die Länge (euklidische Norm) liefert `np.linalg.norm(v)`. Das Untermodul `np.linalg` enthält die lineare Algebra.
+
+      **Robotik-Bild:** Jedes Glied eines Arms ist ein Vektor vom einen Gelenk zum nächsten. Die Position der Spitze ist die **Summe** der Glied-Vektoren.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      a = np.array([2.0, 1.0])     # Glied 1 in m
+      b = np.array([0.5, 1.5])     # Glied 2 in m
+      spitze = a + b
+      print(spitze, np.linalg.norm(spitze))
+      lab.vectors([a, b, spitze], labels=["a", "b", "a + b"], title="Glied-Vektoren")
+      lab.vectors([b], labels=["b"], origin=a, title="b am Ende von a angesetzt")
+    subgoals:
+      - lines: [1, 4]
+        label: Glied-Vektoren anlegen
+      - lines: [5, 6]
+        label: Summe und Länge berechnen
+      - lines: [7, 8]
+        label: Vektoren zeichnen
+    after: |
+      Die Spitze liegt bei $(2.5, 2.5)$ m, also $\sqrt{12.5} \approx 3.54$ m von der Basis entfernt. Im zweiten Bild startet `b` am Ende von `a` (`origin=a`) – genau so hängen die Glieder aneinander.
+  - type: predict
+    code: |
+      import numpy as np
+      v = np.array([3.0, 4.0])
+      print(np.linalg.norm(v))
+      print(v / np.linalg.norm(v))
+    options:
+      - |
+        5.0
+        [0.6 0.8]
+      - |
+        7.0
+        [0.43 0.57]
+      - |
+        25.0
+        [0.12 0.16]
+      - |
+        5.0
+        [1. 1.]
+    answer: |
+      5.0
+      [0.6 0.8]
+    explanation: |
+      $\sqrt{3^2 + 4^2} = 5$. Geteilt durch die Länge entsteht der **Einheitsvektor**: gleiche Richtung, Länge 1.
+  - type: explain
+    question: |
+      Wozu teilt man einen Vektor durch seine Norm?
+    options:
+      - text: Man behält nur die Richtung (Länge 1) und kann dann jede gewünschte Länge daraus machen, z. B. `0.2 * e` für einen Schritt von 0.2 m.
+        correct: true
+        why: Einheitsvektoren trennen Richtung und Betrag – praktisch für „bewege dich 0.2 m in Richtung Ziel“.
+      - text: Damit alle Komponenten positiv werden.
+        correct: false
+        why: Die Vorzeichen bleiben erhalten; $(-3, 4)$ wird zu $(-0.6, 0.8)$.
+      - text: Damit die Komponenten zusammen 1 ergeben.
+        correct: false
+        why: Die **Länge** ist 1, nicht die Summe – $0.6 + 0.8 = 1.4$.
+  - type: predict
+    code: |
+      import numpy as np
+      P = np.array([[3.0, 4.0],
+                    [1.0, 0.0],
+                    [0.0, -2.0]])
+      print(np.linalg.norm(P, axis=1))
+    options:
+      - "[5. 1. 2.]"
+      - "[3.16 4.47]"
+      - "5.477225575051661"
+      - "[ 5.  1. -2.]"
+    answer: "[5. 1. 2.]"
+    explanation: |
+      Mit `axis=1` wird jede **Zeile** als eigener Vektor behandelt – eine Länge pro Punkt. Ohne `axis` gäbe es eine einzige Zahl für die ganze Matrix (die Frobeniusnorm). Normen sind nie negativ.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne den Abstand vom Start zum Ziel und den Einheitsvektor, der vom Start zum Ziel zeigt.
+    code: |
+      import numpy as np
+      start = np.array([1.0, 2.0])
+      ziel = np.array([4.0, 6.0])
+      abstand = np.linalg.norm(ziel ___ start)
+      richtung = (ziel - start) / ___
+      print(abstand, richtung)
+    blanks:
+      - answer: "-"
+        options: ["-", "+", "*"]
+      - answer: abstand
+        options: [abstand, ziel, "2"]
+    expect_output: "5.0 [0.6 0.8]"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `einheitsvektor(v)`, die den Einheitsvektor von `v` zurückgibt (beliebige Dimension). Für den Nullvektor gibt es keine Richtung: Dann soll die Funktion `ValueError` auslösen.
+    starter: |
+      import numpy as np
+
+      def einheitsvektor(v):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def einheitsvektor(v):
+          laenge = np.linalg.norm(v)
+          if laenge == 0:
+              raise ValueError("Nullvektor hat keine Richtung")
+          return v / laenge
+    tests:
+      - name: 2D
+        code: |
+          import numpy as np
+          r = einheitsvektor(np.array([3.0, 4.0]))
+          assert close(r, [0.6, 0.8]), f"Erwartet [0.6, 0.8], bekommen {r}"
+      - name: Negative Komponente
+        code: |
+          import numpy as np
+          r = einheitsvektor(np.array([0.0, -2.0]))
+          assert close(r, [0.0, -1.0]), f"Erwartet [0, -1], bekommen {r}"
+      - name: 3D
+        code: |
+          import numpy as np
+          r = einheitsvektor(np.array([1.0, 2.0, 2.0]))
+          assert close(r, [1 / 3, 2 / 3, 2 / 3]), f"Erwartet [0.333, 0.667, 0.667], bekommen {r}"
+      - name: Nullvektor
+        code: |
+          import numpy as np
+          try:
+              einheitsvektor(np.array([0.0, 0.0]))
+          except ValueError:
+              pass
+          else:
+              raise AssertionError("Für den Nullvektor sollte ValueError ausgelöst werden.")
+    mutants:
+      - |
+        import numpy as np
+
+        def einheitsvektor(v):
+            if v.sum() == 0:
+                raise ValueError("Nullvektor")
+            return v / v.sum()
+      - |
+        import numpy as np
+
+        def einheitsvektor(v):
+            return v / np.linalg.norm(v)
+      - |
+        import numpy as np
+
+        def einheitsvektor(v):
+            laenge = (v ** 2).sum()
+            if laenge == 0:
+                raise ValueError("Nullvektor")
+            return v / laenge
+    hints:
+      - "Teilziel: Länge berechnen, Sonderfall prüfen, dann teilen."
+      - "Die Länge liefert `np.linalg.norm(v)`; Fehler meldest du mit `raise ValueError(...)` (Modul 2)."
+      - "`if laenge == 0: raise ValueError(\"...\")`"
+      - "`return v / laenge`"
+    explanation: |
+      Ohne die Prüfung liefert `v / 0` ein Array aus `nan` (not a number) und eine Warnung – ein Fehler, der sich später schwer finden lässt.
+  - type: quiz
+    question: |
+      `v` hat die Länge 3. Welche Länge hat `-2 * v`?
+    options:
+      - text: "6"
+        correct: true
+        why: "$\\|c\\,\\vec v\\| = |c|\\,\\|\\vec v\\|$ – der Betrag des Faktors zählt."
+      - text: "−6"
+        correct: false
+        why: Längen sind nie negativ; das Vorzeichen dreht nur die Richtung um.
+      - text: "3"
+        correct: false
+        why: Die Richtung kehrt sich um, aber die Länge verdoppelt sich.
+cards:
+  - id: m05-c-norm
+    concept: la-norm
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.linalg.norm(np.array([6.0, 8.0])))
+        options: ["10.0", "14.0", "100.0", "[6. 8.]"]
+        answer: "10.0"
+        explanation: "$\\sqrt{36 + 64} = 10$."
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.linalg.norm(np.array([1.0, 1.0, 1.0, 1.0])))
+        options: ["2.0", "4.0", "1.0", "16.0"]
+        answer: "2.0"
+        explanation: "$\\sqrt{1+1+1+1} = 2$ – die Norm funktioniert in jeder Dimension."
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.linalg.norm(np.array([0.0, -5.0])))
+        options: ["5.0", "-5.0", "25.0", "0.0"]
+        answer: "5.0"
+        explanation: Die Länge ist immer nicht-negativ.
+  - id: m05-c-einheitsvektor
+    concept: la-norm
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          v = np.array([0.0, 3.0])
+          print(v / np.linalg.norm(v))
+        options: ["[0. 1.]", "[0. 3.]", "[0.  0.33]", "[1. 0.]"]
+        answer: "[0. 1.]"
+        explanation: Gleiche Richtung (nach oben), Länge 1.
+      - type: predict
+        code: |
+          import numpy as np
+          v = np.array([-4.0, 3.0])
+          print(v / np.linalg.norm(v))
+        options: ["[-0.8  0.6]", "[0.8 0.6]", "[-4.  3.]", "[-1.33  1.  ]"]
+        answer: "[-0.8  0.6]"
+        explanation: Länge 5; Vorzeichen bleiben erhalten.
+  - id: m05-c-glieder-summe
+    concept: la-vektor
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          glieder = [np.array([1.0, 0.0]), np.array([0.0, 2.0]), np.array([-1.0, 0.0])]
+          print(glieder[0] + glieder[1] + glieder[2])
+        options: ["[0. 2.]", "[ 1.  0.  0.  2. -1.  0.]", "[2. 2.]", "2.0"]
+        answer: "[0. 2.]"
+        explanation: Die Spitze ist die Summe der Glied-Vektoren.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([1.0, 1.0])
+          print(a + 0.5 * a)
+        options: ["[1.5 1.5]", "[1.5 1. ]", "[2.  1.5]", "3.0"]
+        answer: "[1.5 1.5]"
+        explanation: Skalieren und Addieren – beides elementweise.

@@ -1,0 +1,326 @@
+id: m11-mppi
+title: MPPI – gewichtet mitteln statt auswählen
+minutes: 10
+goals:
+  - Die MPPI-Gewichte $w_i \propto \exp(-(c_i - c_{\min})/\lambda)$ berechnen
+  - Den Einfluss der Temperatur $\lambda$ vorhersagen
+  - Ein MPPI-Update selbst implementieren und als Planer einsetzen
+concepts: [plan-mppi, plan-temperatur]
+steps:
+  - type: text
+    body: |
+      ## Alle Samples zählen – die guten mehr
+
+      CEM wirft alles außer der Elite weg. **MPPI** (Model Predictive Path Integral) nutzt jedes Sample, aber gewichtet nach seinen Kosten – mit der Softmax aus Modul 10:
+
+      $$
+      w_i = \frac{\exp\!\big(-(c_i - c_{\min})/\lambda\big)}{\sum_j \exp\!\big(-(c_j - c_{\min})/\lambda\big)}, \qquad \mu \leftarrow \sum_i w_i\, A_i
+      $$
+
+      Die **Temperatur** $\lambda > 0$ steuert, wie wählerisch das Mitteln ist:
+
+      - $\lambda \to 0$: nur das beste Sample zählt (wie Random Shooting)
+      - $\lambda \to \infty$: alle gleich, $\mu$ bleibt ungefähr, wo es war
+
+      $c_{\min}$ abzuziehen ändert die Gewichte nicht, verhindert aber, dass alle `exp`-Werte zu 0 werden. In NumPy erledigt `np.average(A, axis=0, weights=w)` das Normieren und die gewichtete Summe zugleich.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      c = np.array([1.0, 1.5, 2.0, 4.0, 8.0])
+      fig = lab.Figure(title="MPPI-Gewichte", xlabel="Sample i (nach Kosten sortiert)", ylabel="w_i")
+      for lam in [0.1, 1.0, 10.0]:
+          w = np.exp(-(c - c.min()) / lam)
+          w = w / w.sum()
+          print(lam, np.round(w, 3))
+          fig.line(w, label=f"λ = {lam}")
+      fig.show()
+    subgoals:
+      - lines: 4
+        label: Kosten der Samples
+      - lines: 7
+        label: Exponentiell gewichten
+      - lines: 8
+        label: Normieren
+      - lines: [9, 11]
+        label: Temperaturen vergleichen
+    after: |
+      Bei $\lambda = 0.1$ bekommt das beste Sample 99 %, bei $\lambda = 10$ ist die Verteilung fast flach. Sinnvolle Werte für $\lambda$ hängen von der Größenordnung der Kostenunterschiede ab – gleiche Kosten in kN·m statt N·m bräuchten ein anderes $\lambda$.
+  - type: predict
+    code: |
+      import numpy as np
+      c = np.array([0.0, 1.0, 2.0])
+      for lam in [1000.0, 0.01]:
+          w = np.exp(-(c - c.min()) / lam)
+          print(np.round(w / w.sum(), 2))
+    options:
+      - |
+        [0.33 0.33 0.33]
+        [1. 0. 0.]
+      - |
+        [1. 0. 0.]
+        [0.33 0.33 0.33]
+      - |
+        [0. 0.33 0.67]
+        [0. 0. 1.]
+      - |
+        [0.33 0.33 0.33]
+        [0.33 0.33 0.33]
+    answer: |
+      [0.33 0.33 0.33]
+      [1. 0. 0.]
+    explanation: |
+      Große Temperatur: alle Exponenten fast 0, Gewichte fast gleich. Kleine Temperatur: schon 1 Kosteneinheit Unterschied ergibt $e^{-100} \approx 0$ – nur das beste Sample (Kosten 0) zählt. Kleine Kosten bekommen **großes** Gewicht, nicht umgekehrt.
+  - type: explain
+    question: |
+      Was passiert ohne das Abziehen von $c_{\min}$, wenn alle Kosten bei etwa 1000 liegen und $\lambda = 1$ ist?
+    options:
+      - text: "Alle `np.exp(-c / lam)` werden 0 (Unterlauf), die Normierung teilt 0 durch 0 – das Ergebnis ist `nan`."
+        correct: true
+        why: "$e^{-1000}$ ist kleiner als die kleinste darstellbare float64-Zahl (etwa $5 \\cdot 10^{-324} \\approx e^{-744}$) und wird zu 0. Mit $c - c_{\\min}$ hat das beste Sample immer das Gewicht $e^0 = 1$."
+      - text: Die Gewichte werden größer als 1.
+        correct: false
+        why: Ohne Normierung wären sie kleiner als 1; das Problem ist das Gegenteil – sie werden numerisch 0.
+      - text: Nichts – mathematisch kürzt sich der Faktor heraus.
+        correct: false
+        why: Mathematisch ja, numerisch nicht. Genau deshalb zieht man ab.
+  - type: fill
+    fading: true
+    prompt: |
+      Vervollständige die MPPI-Gewichte. Sie sollen sich zu 1 summieren und auch bei Kosten über 1000 funktionieren.
+    code: |
+      import numpy as np
+
+      def gewichte(c, lam):
+          w = np.exp(-(c - np.___(c)) / lam)
+          return w / np.___(w)
+
+      print(np.round(gewichte(np.array([0.0, 1.0, 2.0]), 1.0), 3))
+    blanks:
+      - answer: "min"
+        options: ["min", "max", "mean"]
+      - answer: "sum"
+        options: ["sum", "max", "mean"]
+    tests:
+      - name: Bekannte Gewichte
+        code: |
+          w_t = gewichte(np.array([0.0, 1.0, 2.0]), 1.0)
+          assert close(w_t, [0.66524, 0.24473, 0.09003], tol=1e-4), f"Erwartet ≈ [0.665, 0.245, 0.090], bekommen {np.round(w_t, 3)}"
+      - name: Große Kosten, kleine Temperatur
+        code: |
+          w_t = gewichte(np.array([1000.0, 1001.0, 1500.0]), 0.01)
+          assert np.all(np.isfinite(w_t)), f"Gewichte enthalten inf/nan: {w_t}"
+          assert close(w_t, [1.0, 0.0, 0.0], tol=1e-6), f"Erwartet ≈ [1, 0, 0], bekommen {w_t}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `mppi_update(f, mu, sigma, N, lam, rng)`: `N` Samples $A_i = \mu + \sigma\,\varepsilon_i$ ziehen (Zeile im Starter), mit `f` bewerten, die Gewichte bilden und den neuen Mittelwert $\sum_i w_i A_i$ zurückgeben. `sigma` ist eine Zahl, `mu` ein Array beliebiger Form.
+    starter: |
+      import numpy as np
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          # bewerten, gewichten, gewichtet mitteln
+          return mu
+
+      ziel = np.array([1.0, -2.0, 0.5])
+      def f(A):
+          return np.sum((A - ziel) ** 2, axis=1)
+
+      rng = np.random.default_rng(0)
+      mu = np.zeros(3)
+      for it in range(50):
+          mu = mppi_update(f, mu, 0.3, 100, 0.05, rng)
+      print(np.round(mu, 2))
+    solution: |
+      import numpy as np
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          c = f(A)
+          w = np.exp(-(c - c.min()) / lam)
+          return np.average(A, axis=0, weights=w)
+
+      ziel = np.array([1.0, -2.0, 0.5])
+      def f(A):
+          return np.sum((A - ziel) ** 2, axis=1)
+
+      rng = np.random.default_rng(0)
+      mu = np.zeros(3)
+      for it in range(50):
+          mu = mppi_update(f, mu, 0.3, 100, 0.05, rng)
+      print(np.round(mu, 2))
+    tests:
+      - name: Konvergiert zum Minimum
+        code: |
+          ziel_t = np.array([1.0, -2.0, 0.5])
+          def f_t(A):
+              return np.sum((A - ziel_t) ** 2, axis=1)
+          rng_t = np.random.default_rng(1)
+          mu_t = np.zeros(3)
+          for _ in range(50):
+              mu_t = mppi_update(f_t, mu_t, 0.3, 100, 0.05, rng_t)
+          assert mu_t is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert close(mu_t, ziel_t, tol=0.1), f"Nach 50 Updates sollte mu nahe {ziel_t} sein, ist {np.round(mu_t, 3)}"
+      - name: Kleines λ wählt das beste Sample
+        code: |
+          def f_t(A):
+              return np.sum((A - 3.0) ** 2, axis=1)
+          mu_t = mppi_update(f_t, np.zeros(2), 1.0, 50, 1e-6, np.random.default_rng(5))
+          A_t = np.zeros(2) + 1.0 * np.random.default_rng(5).standard_normal((50, 2))
+          bestes = A_t[np.argmin(f_t(A_t))]
+          assert close(mu_t, bestes, tol=1e-6), f"Bei λ → 0 sollte das beste Sample {np.round(bestes, 3)} herauskommen, bekommen {np.round(mu_t, 3)}"
+      - name: Großes λ mittelt alle
+        code: |
+          def f_t(A):
+              return np.sum((A - 3.0) ** 2, axis=1)
+          mu_t = mppi_update(f_t, np.zeros(2), 1.0, 50, 1e9, np.random.default_rng(5))
+          A_t = np.zeros(2) + 1.0 * np.random.default_rng(5).standard_normal((50, 2))
+          assert close(mu_t, A_t.mean(axis=0), tol=1e-6), f"Bei sehr großem λ sollte der ungewichtete Mittelwert {np.round(A_t.mean(axis=0), 3)} herauskommen, bekommen {np.round(mu_t, 3)}"
+      - name: Form bleibt erhalten
+        code: |
+          def f_t(A):
+              return np.sum(A ** 2, axis=(1, 2))
+          mu_t = mppi_update(f_t, np.ones((5, 2)), 0.5, 30, 1.0, np.random.default_rng(0))
+          assert np.shape(mu_t) == (5, 2), f"mu der Form (5, 2) sollte die Form behalten, hat {np.shape(mu_t)}"
+    mutants:
+      - |
+        import numpy as np
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            c = f(A)
+            w = np.exp((c - c.min()) / lam)
+            return np.average(A, axis=0, weights=w)
+      - |
+        import numpy as np
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            return A.mean(axis=0)
+      - |
+        import numpy as np
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            c = f(A)
+            w = np.exp(-(c - c.min()) * lam)
+            return np.average(A, axis=0, weights=w)
+      - |
+        import numpy as np
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            c = f(A)
+            w = np.exp(-(c - c.min()) / lam)
+            return np.average(A - mu, axis=0, weights=w)
+    hints:
+      - "Teilziel: bewerten → Gewichte (stabil) → gewichteter Mittelwert über die Samples."
+      - Kleine Kosten sollen großes Gewicht bekommen; durch $\lambda$ wird **geteilt**. `np.average` normiert die Gewichte selbst.
+      - "`c = f(A)` und `w = np.exp(-(c - c.min()) / lam)`"
+      - "`return np.average(A, axis=0, weights=w)`"
+  - type: example
+    intro: |
+      MPPI als Planer für die 40-Schritte-Folge des hängenden Pendels, 10 Updates à 100 Samples – mit drei Temperaturen $\lambda = 0.3$, $3$ und $30$.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          c = f(A)
+          w = np.exp(-(c - c.min()) / lam)
+          return np.average(A, axis=0, weights=w)
+
+      env = Pendulum()
+      s0 = env.reset()
+      def f(A):
+          return rollout_costs(env.dynamics, env.cost, s0, A)
+
+      fig = lab.Figure(title="MPPI: Kosten der Folge μ", xlabel="Update", ylabel="J")
+      for lam in [0.3, 3.0, 30.0]:
+          rng = np.random.default_rng(0)
+          mu, verlauf = np.zeros(40), []
+          for it in range(10):
+              mu = mppi_update(f, mu, 1.0, 100, lam, rng)
+              verlauf.append(f(mu[None])[0])
+          print(lam, round(float(verlauf[-1]), 1))
+          fig.line(verlauf, label=f"λ = {lam}")
+      fig.show()
+    subgoals:
+      - lines: [19, 22]
+        label: Batch-Kosten für den Planer
+      - lines: [25, 29]
+        label: MPPI-Updates
+      - lines: [30, 32]
+        label: Temperaturen vergleichen
+    after: |
+      $\lambda = 30$ mittelt fast ungewichtet – die Folge verbessert sich kaum. Bei $\lambda = 3$ und $0.3$ sinken die Kosten ähnlich schnell wie bei CEM. Ohne Elite-Auswahl und ohne $\sigma$-Anpassung ist MPPI etwas einfacher; seine Stärke zeigt sich gleich, wenn es in jedem MPC-Schritt nur **ein** Update macht.
+  - type: quiz
+    question: |
+      Wann verhält sich ein MPPI-Update wie Random Shooting (bestes Sample übernehmen)?
+    options:
+      - text: Für $\lambda \to 0$
+        correct: true
+        why: Dann hat nur das Sample mit $c_i = c_{\min}$ ein Gewicht ungleich 0.
+      - text: Für $\lambda \to \infty$
+        correct: false
+        why: Dann werden alle Samples gleich gewichtet – das ist der normale Mittelwert.
+      - text: Für $\lambda = 1$
+        correct: false
+        why: Bei $\lambda = 1$ tragen alle Samples bei, deren Kosten höchstens ein paar Einheiten über dem Minimum liegen.
+cards:
+  - id: m11-c-mppi-temperatur
+    concept: plan-temperatur
+    variants:
+      - type: quiz
+        question: Die MPPI-Folge verbessert sich kaum, die Gewichte sind fast alle gleich. Was ändern?
+        options:
+          - text: $\lambda$ verkleinern
+            correct: true
+            why: Kleineres $\lambda$ macht die Gewichtung wählerischer.
+          - text: $\lambda$ vergrößern
+            correct: false
+            why: Dann werden die Gewichte noch gleichmäßiger.
+          - text: $c_{\min}$ nicht mehr abziehen
+            correct: false
+            why: Das ändert die normierten Gewichte nicht – es macht die Rechnung nur instabil.
+      - type: predict
+        code: |
+          import numpy as np
+          c = np.array([2.0, 3.0])
+          w = np.exp(-(c - c.min()) / 1.0)
+          print(np.round(w / w.sum(), 3))
+        options: ["[0.731 0.269]", "[0.269 0.731]", "[0.4 0.6]", "[0.5 0.5]"]
+        answer: "[0.731 0.269]"
+        explanation: Das billigere Sample (Kosten 2) bekommt das größere Gewicht $1/(1 + e^{-1}) \approx 0.731$.
+  - id: m11-c-mppi-average
+    concept: plan-mppi
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.array([[0.0, 2.0], [4.0, 6.0]])
+          w = np.array([3.0, 1.0])
+          print(np.average(A, axis=0, weights=w))
+        options: ["[1. 3.]", "[3. 5.]", "[2. 4.]", "[12.  12.]"]
+        answer: "[1. 3.]"
+        explanation: "`np.average` normiert die Gewichte auf $0.75$ und $0.25$: $0.75 \\cdot (0, 2) + 0.25 \\cdot (4, 6) = (1, 3)$."
+      - type: quiz
+        question: Was unterscheidet MPPI von CEM?
+        options:
+          - text: MPPI mittelt alle Samples mit exponentiellen Gewichten statt eine Elite hart auszuwählen.
+            correct: true
+            why: Jedes Sample trägt bei – die guten deutlich mehr.
+          - text: MPPI braucht kein Modell.
+            correct: false
+            why: Auch MPPI bewertet Samples durch Rollouts im Modell.
+          - text: MPPI wählt immer nur das beste Sample.
+            correct: false
+            why: Das gilt nur im Grenzfall $\lambda \to 0$.

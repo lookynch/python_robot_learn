@@ -1,0 +1,12 @@
+id: m00
+number: 0
+title: Start – so lernst du hier
+summary: |
+  Wie die App aufgebaut ist und warum sie so funktioniert: vorhersagen, ausführen, verstehen, wiederholen.
+depth: voll
+lessons:
+  - m00-willkommen
+concepts:
+  - id: lernmethode
+    name: Lernen mit Vorhersage und Wiederholung
+    description: Erst vorhersagen, dann ausführen; Abruf und verteilte Wiederholung festigen Wissen.

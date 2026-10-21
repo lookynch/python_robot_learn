@@ -1,0 +1,317 @@
+id: m10-softmax-entropie
+title: Softmax und Entropie
+minutes: 9
+goals:
+  - Aus beliebigen Bewertungen mit Softmax eine Wahrscheinlichkeitsverteilung machen
+  - Die Temperatur gezielt einsetzen und Softmax numerisch stabil implementieren
+  - Die Entropie einer Verteilung berechnen und deuten
+concepts: [wk-softmax, wk-entropie]
+steps:
+  - type: text
+    body: |
+      ## Aus Bewertungen werden Wahrscheinlichkeiten
+
+      Ein Planer hat für jede von $n$ Möglichkeiten eine Bewertung $z_i$ (z. B. negative Kosten). Wie macht man daraus Wahrscheinlichkeiten, die besseren Optionen mehr Gewicht geben? Mit **Softmax**:
+
+      $$
+      p_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}
+      $$
+
+      Alle $p_i > 0$, Summe 1, Reihenfolge bleibt erhalten. Die **Temperatur** $T > 0$ steuert die Schärfe:
+
+      - $T \to 0$: fast alles Gewicht auf das Maximum (wie `argmax`)
+      - $T \to \infty$: fast gleichverteilt
+
+      Genau diese Gewichtung nutzt der MPPI-Planer in Modul 11 – und die Softmax-Policy im RL.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def softmax(z, T=1.0):
+          z = np.asarray(z, dtype=float) / T
+          e = np.exp(z - np.max(z))
+          return e / np.sum(e)
+
+      z = np.array([2.0, 1.0, 0.0, -1.0])
+      fig = lab.Figure(title="Softmax mit Temperatur", xlabel="Index i", ylabel="p_i")
+      for T in [0.3, 1.0, 5.0]:
+          p = softmax(z, T)
+          print(T, np.round(p, 3))
+          fig.line(p, label=f"T = {T}")
+      fig.show()
+    subgoals:
+      - lines: 5
+        label: Durch die Temperatur teilen
+      - lines: 6
+        label: Stabil exponenzieren
+      - lines: 7
+        label: Normieren
+      - lines: [9, 15]
+        label: Temperaturen vergleichen
+    after: |
+      Bei $T = 0.3$ bekommt die beste Option 96 %, bei $T = 5$ ist die Verteilung fast flach. Zeile 6 zieht vor dem `exp` das Maximum ab – warum, klärt der nächste Schritt.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / np.sum(e)
+
+      print(np.round(softmax(np.array([1.0, 2.0])), 3), np.round(softmax(np.array([101.0, 102.0])), 3))
+    options:
+      - "[0.269 0.731] [0.269 0.731]"
+      - "[0.333 0.667] [0.498 0.502]"
+      - "[0.269 0.731] [0.498 0.502]"
+      - "[0.269 0.731] [0. 1.]"
+    answer: "[0.269 0.731] [0.269 0.731]"
+    explanation: |
+      Softmax hängt nur von den **Differenzen** ab: $e^{z_i + c} / \sum_j e^{z_j + c} = e^{z_i}/\sum_j e^{z_j}$, der Faktor $e^c$ kürzt sich. Es ist also nicht der Quotient $1/3$ zu $2/3$, und eine Verschiebung um 100 ändert nichts.
+  - type: explain
+    question: |
+      Warum zieht eine gute Softmax-Implementierung vor dem `exp` das Maximum ab?
+    options:
+      - text: "`np.exp(1000)` ist `inf`; dann wird `inf / inf = nan`. Nach dem Abziehen ist der größte Exponent 0 – und das Ergebnis ist mathematisch gleich."
+        correct: true
+        why: float64 läuft ab etwa $e^{709}$ über. Durch die Verschiebungsinvarianz kostet die Stabilisierung nichts.
+      - text: Damit alle Wahrscheinlichkeiten kleiner als 1 werden.
+        correct: false
+        why: Das sind sie durch das Normieren ohnehin.
+      - text: Damit die beste Option die Wahrscheinlichkeit 1 bekommt.
+        correct: false
+        why: Das Abziehen ändert das Ergebnis gar nicht – nur die Zwischenwerte bleiben im darstellbaren Bereich.
+      - text: Weil `np.exp` negative Zahlen nicht verarbeiten kann.
+        correct: false
+        why: "`np.exp` funktioniert für alle reellen Zahlen; nach dem Abziehen sind die Exponenten sogar alle ≤ 0."
+  - type: text
+    body: |
+      ## Entropie: wie verteilt ist die Verteilung?
+
+      $$
+      H(p) = -\sum_i p_i \log p_i \qquad (0 \cdot \log 0 := 0)
+      $$
+
+      - Eine sichere Verteilung (ein $p_i = 1$) hat $H = 0$.
+      - Die Gleichverteilung über $n$ Werte hat das Maximum $H = \log n$.
+
+      Mit dem natürlichen Logarithmus ist die Einheit **nat**, mit $\log_2$ **bit**. Im Code nimmt man meist `np.log` (nat).
+
+      Bedeutung für uns: Eine niedrige Entropie der Planer-Gewichte heißt „wenige Samples bestimmen das Ergebnis“; im RL misst die Entropie einer Policy, wie viel sie noch exploriert.
+  - type: predict
+    code: |
+      import numpy as np
+      p = np.array([0.5, 0.5])
+      print(round(-np.sum(p * np.log(p)), 3))
+      q = np.full(4, 0.25)
+      print(round(-np.sum(q * np.log(q)), 3))
+    options:
+      - |
+        0.693
+        1.386
+      - |
+        1.0
+        2.0
+      - |
+        0.693
+        0.693
+      - |
+        0.5
+        0.25
+    answer: |
+      0.693
+      1.386
+    explanation: |
+      Gleichverteilt: $H = \log n$, also $\ln 2 \approx 0.693$ und $\ln 4 \approx 1.386$ nat. „1 bit“ und „2 bit“ wären dieselben Werte mit $\log_2$.
+  - type: fill
+    fading: true
+    prompt: |
+      Vervollständige `entropie(p)` in nat. Einträge mit $p_i = 0$ sollen nicht mitgerechnet werden ($0 \cdot \log 0 := 0$), sonst entsteht `nan`.
+    code: |
+      import numpy as np
+
+      def entropie(p):
+          p = p[p ___ 0]
+          return -np.sum(p * np.___(p))
+
+      print(round(entropie(np.array([0.5, 0.5, 0.0])), 3))
+    blanks:
+      - answer: ">"
+        options: [">", ">=", "<", "=="]
+      - answer: "log"
+        options: ["log", "log2", "exp", "sqrt"]
+    tests:
+      - name: Sichere Verteilung
+        code: |
+          r = entropie(np.array([1.0, 0.0, 0.0]))
+          assert close(r, 0.0), f"Für [1, 0, 0] ist H = 0, bekommen {r}"
+      - name: Gleichverteilung über 3
+        code: |
+          r = entropie(np.full(3, 1 / 3))
+          assert close(r, np.log(3)), f"Für die Gleichverteilung über 3 ist H = ln 3 ≈ 1.0986, bekommen {r}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `softmax(z, T=1.0)` für ein 1D-Array `z` mit Temperatur `T`. Sie muss auch für große Werte wie `[1000, 1001]` funktionieren (kein `nan`).
+    starter: |
+      import numpy as np
+
+      def softmax(z, T=1.0):
+          # dein Code
+          pass
+
+      print(softmax(np.array([1.0, 2.0])))
+    solution: |
+      import numpy as np
+
+      def softmax(z, T=1.0):
+          z = np.asarray(z, dtype=float) / T
+          e = np.exp(z - np.max(z))
+          return e / np.sum(e)
+
+      print(softmax(np.array([1.0, 2.0])))
+    tests:
+      - name: Bekannter Wert
+        code: |
+          p = softmax(np.array([1.0, 2.0]))
+          assert p is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert close(p, [0.26894, 0.73106], tol=1e-4), f"softmax([1, 2]) ≈ [0.269, 0.731], bekommen {p}"
+      - name: Summe 1
+        code: |
+          p = softmax(np.array([0.3, -2.0, 5.0, 1.0]))
+          assert close(np.sum(p), 1.0), f"Die Wahrscheinlichkeiten müssen sich zu 1 summieren, Summe {np.sum(p)}"
+      - name: Große Werte stabil
+        code: |
+          p = softmax(np.array([1000.0, 1001.0]))
+          assert np.all(np.isfinite(p)), f"Für [1000, 1001] kommt {p} heraus – vor dem exp das Maximum abziehen."
+          assert close(p, [0.26894, 0.73106], tol=1e-4), f"softmax([1000, 1001]) ≈ [0.269, 0.731], bekommen {p}"
+      - name: Temperatur
+        code: |
+          p = softmax(np.array([0.0, 1.0]), T=0.5)
+          assert close(p, [0.11920, 0.88080], tol=1e-4), f"Mit T = 0.5 ist softmax([0, 1]) = softmax([0, 2]) ≈ [0.119, 0.881], bekommen {p}"
+          q = softmax(np.array([0.0, 1.0]), T=100.0)
+          assert close(q, [0.5, 0.5], tol=0.01), f"Mit T = 100 sollte es fast gleichverteilt sein, bekommen {q}"
+    mutants:
+      - |
+        import numpy as np
+        def softmax(z, T=1.0):
+            e = np.exp(np.asarray(z, dtype=float) / T)
+            return e / np.sum(e)
+      - |
+        import numpy as np
+        def softmax(z, T=1.0):
+            z = np.asarray(z, dtype=float) * T
+            e = np.exp(z - np.max(z))
+            return e / np.sum(e)
+      - |
+        import numpy as np
+        def softmax(z, T=1.0):
+            z = np.asarray(z, dtype=float)
+            e = np.exp(z - np.max(z))
+            return e / np.sum(e)
+      - |
+        import numpy as np
+        def softmax(z, T=1.0):
+            z = np.asarray(z, dtype=float) / T
+            e = np.exp(z - np.max(z))
+            return e
+    hints:
+      - "Teilziel: durch `T` teilen → Maximum abziehen → exponenzieren → normieren."
+      - Wegen der Verschiebungsinvarianz darfst du vor dem `exp` jede Konstante abziehen – das Maximum macht den größten Exponenten zu 0.
+      - "`z = np.asarray(z, dtype=float) / T` und `e = np.exp(z - np.max(z))`"
+      - "`return e / np.sum(e)`"
+  - type: quiz
+    question: |
+      Was liefert `softmax(z, T)` für sehr große Temperatur $T$?
+    options:
+      - text: Fast die Gleichverteilung
+        correct: true
+        why: Alle $z_i/T$ liegen nahe 0, also sind alle $e^{z_i/T} \approx 1$.
+      - text: Fast ein One-Hot-Vektor auf dem Maximum
+        correct: false
+        why: Das passiert für $T \to 0$.
+      - text: "`nan`, weil durch eine große Zahl geteilt wird"
+        correct: false
+        why: Teilen durch eine große Zahl ist harmlos; problematisch ist nur das Überlaufen von `exp`.
+cards:
+  - id: m10-c-softmax-shift
+    concept: wk-softmax
+    variants:
+      - type: quiz
+        question: Wie ändert sich `softmax(z)`, wenn man zu **allen** $z_i$ die Zahl 50 addiert?
+        options:
+          - text: Gar nicht
+            correct: true
+            why: Der gemeinsame Faktor $e^{50}$ kürzt sich im Bruch.
+          - text: Die Verteilung wird flacher.
+            correct: false
+            why: Flacher wird sie durch eine größere Temperatur, nicht durch eine Verschiebung.
+          - text: Das Ergebnis wird `nan`.
+            correct: false
+            why: Mit abgezogenem Maximum ist $e^{50}$ kein Problem – und selbst ohne läuft float64 erst ab etwa $e^{709}$ über.
+      - type: predict
+        code: |
+          import numpy as np
+          z = np.array([0.0, 0.0, 1000.0])
+          e = np.exp(z - np.max(z))
+          print(np.round(e / np.sum(e), 3))
+        options: ["[0. 0. 1.]", "[nan nan nan]", "[0.333 0.333 0.333]", "[0. 0. 0.]"]
+        answer: "[0. 0. 1.]"
+        explanation: Nach dem Abziehen sind die Exponenten −1000, −1000, 0. Die ersten beiden ergeben praktisch 0, der dritte 1.
+  - id: m10-c-softmax-temperatur
+    concept: wk-softmax
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          def softmax(z, T):
+              e = np.exp((z - np.max(z)) / T)
+              return e / np.sum(e)
+          z = np.array([3.0, 1.0, 0.0])
+          print(np.round(softmax(z, 1.0), 2), np.round(softmax(z, 100.0), 2))
+        options:
+          - "[0.84 0.11 0.04] [0.34 0.33 0.33]"
+          - "[0.84 0.11 0.04] [1. 0. 0.]"
+          - "[0.75 0.25 0.  ] [0.34 0.33 0.33]"
+          - "[0.34 0.33 0.33] [0.84 0.11 0.04]"
+        answer: "[0.84 0.11 0.04] [0.34 0.33 0.33]"
+        explanation: Große Temperatur macht die Verteilung fast flach; $T = 1$ bevorzugt deutlich das Maximum.
+      - type: quiz
+        question: Du willst, dass Softmax fast nur die beste Option wählt. Was tust du?
+        options:
+          - text: Eine kleine Temperatur nehmen, z. B. $T = 0.01$
+            correct: true
+            why: Kleine $T$ vergrößern die Abstände der $z_i/T$ – das Maximum dominiert.
+          - text: Eine große Temperatur nehmen
+            correct: false
+            why: Große $T$ macht die Verteilung flacher.
+          - text: Zu allen $z_i$ eine große Zahl addieren
+            correct: false
+            why: Verschiebungen ändern Softmax nicht.
+  - id: m10-c-entropie
+    concept: wk-entropie
+    variants:
+      - type: quiz
+        question: Welche Verteilung über 4 Werte hat die **größte** Entropie?
+        options:
+          - text: "[0.25, 0.25, 0.25, 0.25]"
+            correct: true
+            why: Die Gleichverteilung maximiert die Entropie, hier $\ln 4$.
+          - text: "[1, 0, 0, 0]"
+            correct: false
+            why: Eine sichere Verteilung hat die Entropie 0.
+          - text: "[0.7, 0.1, 0.1, 0.1]"
+            correct: false
+            why: Ein Wert dominiert – die Entropie liegt zwischen 0 und $\ln 4$.
+      - type: quiz
+        question: Welche Entropie (in nat) hat die Gleichverteilung über 8 Werte?
+        options:
+          - text: $\ln 8 \approx 2.08$
+            correct: true
+            why: Für die Gleichverteilung über $n$ Werte ist $H = \ln n$.
+          - text: "3"
+            correct: false
+            why: 3 ist die Entropie in **bit** ($\log_2 8$).
+          - text: $1/8$
+            correct: false
+            why: Das ist die einzelne Wahrscheinlichkeit, nicht die Entropie.

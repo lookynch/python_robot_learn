@@ -1,0 +1,313 @@
+id: m05-rotation
+title: Rotationsmatrizen
+minutes: 9
+goals:
+  - Die 2D-Rotationsmatrix als Funktion `rot(theta)` schreiben und anwenden
+  - Rotationen verketten und mit der Transponierten umkehren
+  - Ein Arm-Glied und einen 2-Gelenk-Arm mit Rotationen berechnen
+concepts: [la-rotation, la-rotation-inverse]
+steps:
+  - type: text
+    body: |
+      ## Drehen als Matrix
+
+      $$ R(\theta) = \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix} $$
+
+      dreht einen Vektor um $\theta$ (in rad) **gegen den Uhrzeigersinn** um den Ursprung. Länge bleibt gleich.
+
+      Zwei Eigenschaften brauchst du ständig:
+
+      - **Verketten:** $R(\alpha)\,R(\beta) = R(\alpha + \beta)$
+      - **Umkehren:** $R(\theta)^{-1} = R(\theta)^T = R(-\theta)$
+
+      **Robotik-Bild:** Ein Glied der Länge $l$ liegt bei $q = 0$ entlang der x-Achse, also $(l, 0)$. Dreht das Gelenk um $q$, liegt die Spitze bei $R(q)\,(l, 0)^T$.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def rot(theta):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s],
+                           [s, c]])
+
+      glied = np.array([1.0, 0.0])          # Länge 1 m entlang x
+      spitze = rot(np.pi / 3) @ glied
+      print(np.round(spitze, 3), np.linalg.norm(spitze))
+      lab.vectors([glied, spitze], labels=["q = 0", "q = π/3"], title="Glied um π/3 gedreht")
+    subgoals:
+      - lines: [4, 7]
+        label: Rotationsmatrix als Funktion
+      - lines: [9, 11]
+        label: Glied drehen und Länge prüfen
+      - lines: 12
+        label: Vorher und nachher zeichnen
+    after: |
+      Die Spitze liegt bei $(\cos 60°, \sin 60°) = (0.5, 0.866)$; die Länge bleibt 1 (bis auf Rundung). `rot` brauchst du in den nächsten Lektionen immer wieder.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def rot(theta):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s], [s, c]])
+
+      v = np.array([2.0, 0.0])
+      print(np.round(rot(np.pi / 2) @ v, 3))
+    options:
+      - "[0. 2.]"
+      - "[ 0. -2.]"
+      - "[2. 0.]"
+      - "[-0.896  1.788]"
+    answer: "[0. 2.]"
+    explanation: |
+      90° **gegen** den Uhrzeigersinn: von der x-Achse auf die y-Achse. `[ 0. -2.]` wäre im Uhrzeigersinn. `[-0.896  1.788]` entsteht, wenn man `rot(90)` schreibt – 90 rad statt 90°.
+  - type: explain
+    question: |
+      Warum gilt $R(\alpha)\,R(\beta) = R(\alpha+\beta)$?
+    options:
+      - text: Zwei Drehungen um denselben Punkt ergeben eine Drehung um die Summe der Winkel; ausmultipliziert folgt das aus den Additionstheoremen für sin und cos.
+        correct: true
+        why: Genau. In 2D ist deshalb auch die Reihenfolge der Drehungen egal.
+      - text: Weil Matrixprodukte immer kommutativ sind.
+        correct: false
+        why: Sind sie nicht (siehe Strecken und Scheren). Für 2D-Rotationen gilt es nur, weil alle um dieselbe Achse drehen.
+      - text: Weil man die Matrizen elementweise addieren kann.
+        correct: false
+        why: "$R(\\alpha) + R(\\beta)$ ist keine Rotation – es geht um das Produkt."
+  - type: predict
+    code: |
+      import numpy as np
+
+      def rot(theta):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s], [s, c]])
+
+      R = rot(0.7)
+      v = np.array([1.0, 2.0])
+      print(np.round(R.T @ (R @ v), 3))
+      print(np.allclose(R.T, rot(-0.7)))
+    options:
+      - |
+        [1. 2.]
+        True
+      - |
+        [1. 2.]
+        False
+      - |
+        [-1. -2.]
+        True
+      - |
+        [-1. -2.]
+        False
+    answer: |
+      [1. 2.]
+      True
+    explanation: |
+      `R.T` macht die Drehung rückgängig – das ist die Inverse. Und sie ist dasselbe wie die Drehung um $-0.7$ rad. Eine Transponierte ist viel billiger als `np.linalg.inv`.
+  - type: example
+    intro: |
+      Ein 2-Gelenk-Arm: Glied 2 ist um $q_1 + q_2$ gedreht, weil der Winkel $q_2$ **relativ** zu Glied 1 gemessen wird.
+    code: |
+      import numpy as np
+      import lab
+
+      def rot(theta):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s], [s, c]])
+
+      l1, l2 = 1.0, 0.7
+      s = lab.Scene(title="2-Gelenk-Arm mit Rotationsmatrizen", bounds=[-1.9, 1.9, -1.9, 1.9])
+      s.circle(0, 0, 0.06, color="muted", fill="muted", static=True)
+      for k in range(60):
+          q1 = np.pi / 2 * k / 59
+          q2 = 0.8 * np.sin(2 * np.pi * k / 59)
+          ellbogen = rot(q1) @ np.array([l1, 0.0])
+          spitze = ellbogen + rot(q1 + q2) @ np.array([l2, 0.0])
+          s.line([(0, 0), ellbogen, spitze], color="c1", width=6)
+          s.circle(spitze[0], spitze[1], 0.05, color="accent", fill="accent")
+          s.caption(f"q1 = {q1:.2f} rad, q2 = {q2:.2f} rad")
+          s.next_frame()
+      s.show()
+    subgoals:
+      - lines: [4, 6]
+        label: Rotationsmatrix als Funktion
+      - lines: [8, 10]
+        label: Szene und Basis anlegen
+      - lines: [11, 15]
+        label: Gelenkpositionen pro Frame berechnen
+      - lines: [16, 20]
+        label: Arm zeichnen und Animation zeigen
+    after: |
+      Das ist bereits die **Vorwärtskinematik**: $\vec p = R(q_1)\,(l_1, 0)^T + R(q_1+q_2)\,(l_2, 0)^T$. In Modul 8 baust du daraus `fk(q)`.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne die Spitze eines 2-Gelenk-Arms bei $q_1 = \pi/2$, $q_2 = -\pi/2$ (Glied 1 zeigt nach oben, Glied 2 knickt um 90° nach rechts ab).
+    code: |
+      import numpy as np
+
+      def rot(theta):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s], [s, c]])
+
+      q1, q2 = np.pi / 2, -np.pi / 2
+      l1, l2 = 1.0, 1.0
+      ellbogen = rot(q1) @ np.array([l1, 0.0])
+      spitze = ellbogen + rot(___) @ np.array([l2, 0.0])
+      print(np.round(spitze, 3))
+    blanks:
+      - answer: "q1 + q2"
+        options: ["q1 + q2", "q2", "q1", "q1 - q2"]
+    expect_output: "[1. 1.]"
+    explanation: |
+      Glied 2 hat die absolute Richtung $q_1 + q_2 = 0$, zeigt also nach rechts. Nur `q2` allein würde so tun, als hinge Glied 2 an der Basis statt am Ellbogen.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `winkel_aus_matrix(R)`, die aus einer 2D-Rotationsmatrix den Winkel $\theta \in (-\pi, \pi]$ zurückgewinnt. Tipp: Die erste Spalte von $R$ ist $(\cos\theta, \sin\theta)$.
+    starter: |
+      import numpy as np
+
+      def winkel_aus_matrix(R):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def winkel_aus_matrix(R):
+          return np.arctan2(R[1, 0], R[0, 0])
+    tests:
+      - name: Kleiner positiver Winkel
+        code: |
+          import numpy as np
+          th = 0.3
+          R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+          r = winkel_aus_matrix(R)
+          assert close(r, th), f"Erwartet {th}, bekommen {r}"
+      - name: Stumpfer Winkel
+        code: |
+          import numpy as np
+          th = 2.5
+          R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+          r = winkel_aus_matrix(R)
+          assert close(r, th), f"Erwartet {th}, bekommen {r}"
+      - name: Negative Winkel
+        code: |
+          import numpy as np
+          for th in [-0.4, -2.0]:
+              R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+              r = winkel_aus_matrix(R)
+              assert close(r, th), f"Erwartet {th}, bekommen {r}"
+    mutants:
+      - |
+        import numpy as np
+
+        def winkel_aus_matrix(R):
+            return np.arctan(R[1, 0] / R[0, 0])
+      - |
+        import numpy as np
+
+        def winkel_aus_matrix(R):
+            return np.arccos(R[0, 0])
+      - |
+        import numpy as np
+
+        def winkel_aus_matrix(R):
+            return np.arctan2(R[0, 1], R[0, 0])
+    hints:
+      - "Teilziel: aus $\\cos\\theta$ und $\\sin\\theta$ den Winkel mit dem richtigen Quadranten bestimmen."
+      - "`np.arctan2(y, x)` (wie `math.atan2` aus Modul 2) berücksichtigt beide Vorzeichen; `arccos` allein kennt das Vorzeichen von $\\theta$ nicht."
+      - "$\\cos\\theta$ steht in `R[0, 0]`, $\\sin\\theta$ in `R[1, 0]`."
+      - "`return np.arctan2(R[1, 0], R[0, 0])`"
+  - type: quiz
+    question: |
+      `R = rot(0.4)`. Welcher Ausdruck macht die Drehung von `v` rückgängig?
+    options:
+      - text: "`R.T @ v`"
+        correct: true
+        why: Für Rotationen ist die Transponierte die Inverse.
+      - text: "`-R @ v`"
+        correct: false
+        why: Das spiegelt zusätzlich am Ursprung (Drehung um weitere $\pi$), es kehrt nicht um.
+      - text: "`R @ R @ v`"
+        correct: false
+        why: Das dreht noch einmal um 0.4 rad weiter.
+cards:
+  - id: m05-c-rot-richtung
+    concept: la-rotation
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          th = np.pi
+          R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+          print(np.round(R @ np.array([1.0, 0.0]), 3))
+        options: ["[-1.  0.]", "[1. 0.]", "[0. 1.]", "[ 0. -1.]"]
+        answer: "[-1.  0.]"
+        explanation: Eine halbe Drehung ($\pi$ rad) dreht die x-Achse in die Gegenrichtung.
+      - type: predict
+        code: |
+          import numpy as np
+          th = -np.pi / 2
+          R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+          print(np.round(R @ np.array([0.0, 1.0]), 3))
+        options: ["[1. 0.]", "[-1.  0.]", "[ 0. -1.]", "[0. 1.]"]
+        answer: "[1. 0.]"
+        explanation: Negativer Winkel = im Uhrzeigersinn; die y-Achse dreht nach rechts auf die x-Achse.
+  - id: m05-c-rot-inverse
+    concept: la-rotation-inverse
+    variants:
+      - type: quiz
+        question: |
+          Welche Aussage gilt für jede 2D-Rotationsmatrix $R(\theta)$?
+        options:
+          - text: "$R^T R = I$"
+            correct: true
+            why: Rotationen sind orthogonal – Spalten haben Länge 1 und stehen senkrecht aufeinander.
+          - text: "$R^T = R$"
+            correct: false
+            why: Nur für $\theta = 0$ oder $\pi$; sonst wechselt $\sin\theta$ das Vorzeichen.
+          - text: "$R\\,R = I$"
+            correct: false
+            why: Das wäre eine Drehung um $2\theta$; die Identität nur für $\theta = 0$ oder $\pi$.
+      - type: quiz
+        question: |
+          Wie bekommst du $R(\theta)^{-1}$ am einfachsten?
+        options:
+          - text: "`R.T` oder `rot(-theta)`"
+            correct: true
+            why: Beides ist dieselbe Matrix – die Drehung zurück.
+          - text: "`1 / R`"
+            correct: false
+            why: Das teilt elementweise und erzeugt bei Nullen Division durch 0 – keine Matrixinverse.
+          - text: "`-R`"
+            correct: false
+            why: Das ist die Drehung um $\theta + \pi$.
+  - id: m05-c-rot-komposition
+    concept: la-rotation
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+
+          def rot(theta):
+              c, s = np.cos(theta), np.sin(theta)
+              return np.array([[c, -s], [s, c]])
+
+          print(np.allclose(rot(0.3) @ rot(0.5), rot(0.8)))
+        options: ["True", "False"]
+        answer: "True"
+        explanation: Drehungen um denselben Punkt addieren ihre Winkel.
+      - type: predict
+        code: |
+          import numpy as np
+
+          def rot(theta):
+              c, s = np.cos(theta), np.sin(theta)
+              return np.array([[c, -s], [s, c]])
+
+          print(np.round(rot(np.pi / 4) @ rot(np.pi / 4) @ np.array([1.0, 0.0]), 3))
+        options: ["[0. 1.]", "[0.707 0.707]", "[1. 0.]", "[-1.  0.]"]
+        answer: "[0. 1.]"
+        explanation: Zweimal 45° sind 90° – die x-Achse wird auf die y-Achse gedreht.

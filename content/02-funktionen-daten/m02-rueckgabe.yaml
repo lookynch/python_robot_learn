@@ -1,0 +1,355 @@
+id: m02-rueckgabe
+title: Mehrere Rückgaben und Standardwerte
+minutes: 9
+goals:
+  - Mehrere Werte mit `return a, b` zurückgeben und entpacken
+  - Parameter mit Standardwerten definieren
+  - Argumente per Namen (Keyword-Argumente) übergeben
+concepts: [m02-mehrfach-rueckgabe, m02-standardwerte]
+steps:
+  - type: text
+    body: |
+      ## Zwei Ergebnisse auf einmal
+
+      Manche Rechnungen liefern natürlicherweise mehrere Werte: Zeile **und** Spalte einer Gitterzelle, x **und** y einer Position.
+
+      ```python
+      return zeile, spalte
+      ```
+
+      gibt beide zusammen als **Tupel** (tuple) zurück – eine feste Folge von Werten, geschrieben `(2, 1)`. Beim Aufruf kannst du das Tupel direkt auf mehrere Variablen **entpacken**:
+
+      ```python
+      z, s = zelle(9, 4)
+      ```
+  - type: example
+    code: |
+      def zelle(feld, spalten):
+          zeile = feld // spalten
+          spalte = feld % spalten
+          return zeile, spalte
+
+      z, s = zelle(9, 4)
+      print(z, s)
+      paar = zelle(6, 4)
+      print(paar)
+    subgoals:
+      - lines: [2, 3]
+        label: Beide Ergebnisse berechnen
+      - lines: 4
+        label: Beide zurückgeben
+      - lines: [6, 7]
+        label: Beim Aufruf entpacken
+      - lines: [8, 9]
+        label: Tupel als Ganzes speichern
+    after: |
+      Ohne Entpacken bekommst du das ganze Tupel `(1, 2)`. Beim Entpacken muss die Anzahl der Namen links zur Anzahl der Werte passen – sonst gibt es einen `ValueError`.
+  - type: predict
+    code: |
+      def sortiere_zwei(a, b):
+          if a < b:
+              return a, b
+          return b, a
+
+      klein, gross = sortiere_zwei(7, 3)
+      print(gross - klein)
+      print(sortiere_zwei(1, 2))
+    options:
+      - |
+        4
+        (1, 2)
+      - |
+        -4
+        (1, 2)
+      - |
+        4
+        1 2
+      - |
+        -4
+        1 2
+    answer: |
+      4
+      (1, 2)
+    explanation: |
+      `7 < 3` ist falsch, also wird `(3, 7)` zurückgegeben: `klein = 3`, `gross = 7`. Ohne Entpacken gibt `print` das Tupel mit Klammern aus.
+  - type: explain
+    question: |
+      Warum funktioniert `z, s = zelle(9, 4)`?
+    options:
+      - text: Die Funktion liefert **ein** Tupel mit zwei Werten, und Python verteilt dessen Elemente der Reihe nach auf `z` und `s`.
+        correct: true
+        why: Genau – erst entsteht das Tupel `(2, 1)`, dann wird entpackt.
+      - text: Die Funktion wird zweimal aufgerufen, einmal für `z` und einmal für `s`.
+        correct: false
+        why: Es gibt genau einen Aufruf. Er liefert beide Werte gemeinsam.
+      - text: Python sucht in der Funktion nach Variablen namens `z` und `s`.
+        correct: false
+        why: Namen innerhalb der Funktion spielen keine Rolle. Es zählt nur die Reihenfolge hinter `return`.
+  - type: text
+    body: |
+      ## Standardwerte und Keyword-Argumente
+
+      Parameter können einen **Standardwert** (default) haben. Wird beim Aufruf nichts übergeben, gilt dieser Wert:
+
+      ```python
+      def motor(gelenk, geschw=1.0, richtung="vor"):
+      ```
+
+      Beim Aufruf kannst du Argumente auch **per Namen** übergeben – als **Keyword-Argumente** (keyword arguments). Dann ist die Reihenfolge egal und der Code liest sich selbsterklärend:
+
+      ```python
+      motor("greifer", richtung="zurueck")
+      ```
+
+      Regeln: In der Definition stehen Parameter **ohne** Standardwert vorne. Beim Aufruf kommen Positionsargumente **vor** Keyword-Argumenten.
+  - type: predict
+    code: |
+      def skaliere(wert, faktor=10, offset=0):
+          return wert * faktor + offset
+
+      print(skaliere(2))
+      print(skaliere(2, 3))
+      print(skaliere(2, offset=1))
+    options:
+      - |
+        20
+        6
+        21
+      - |
+        20
+        6
+        3
+      - |
+        2
+        6
+        3
+      - |
+        20
+        23
+        21
+    answer: |
+      20
+      6
+      21
+    explanation: |
+      1. Beide Standardwerte: $2 \cdot 10 + 0$.
+      2. `3` füllt den zweiten Parameter `faktor`: $2 \cdot 3 + 0$.
+      3. `offset=1` per Namen, `faktor` bleibt 10: $2 \cdot 10 + 1$.
+  - type: fill
+    fading: true
+    prompt: |
+      `rampe` teilt einen Weg in gleich große Schritte. Ergänze die Aufrufe so, dass `0.5`, `1.0` und `3.0` ausgegeben werden.
+    code: |
+      def rampe(start, ziel, schritte=4):
+          return (ziel - start) / schritte
+
+      print(rampe(0, 2))
+      print(rampe(0, 2, ___))
+      print(rampe(___=1, start=0, ziel=3))
+    blanks:
+      - answer: "2"
+        options: ["2", "4", schritte]
+      - answer: schritte
+        options: [schritte, "1", delta]
+    expect_output: |
+      0.5
+      1.0
+      3.0
+    explanation: |
+      Das dritte Positionsargument füllt `schritte`. Per Namen kannst du `schritte` auch zuerst nennen – entscheidend ist der Name, nicht die Position.
+  - type: parsons
+    fading: true
+    prompt: |
+      Ordne die Zeilen: `statistik` soll Summe **und** Mittelwert einer Liste zurückgeben. Ausgabe: `12 4.0`.
+    lines:
+      - "def statistik(werte):"
+      - "    summe = 0"
+      - "    for w in werte:"
+      - "        summe = summe + w"
+      - "    return summe, summe / len(werte)"
+      - "s, m = statistik([2, 4, 6])"
+      - "print(s, m)"
+    expect_output: "12 4.0"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Gib dem Parameter `zeit` den Standardwert `1.0`, sodass `geschwindigkeit(3)` den Wert `3.0` liefert. Der Aufruf mit zwei Argumenten soll weiter funktionieren.
+    starter: |
+      def geschwindigkeit(weg, zeit):
+          return weg / zeit
+
+      print(geschwindigkeit(10, 2))
+    solution: |
+      def geschwindigkeit(weg, zeit=1.0):
+          return weg / zeit
+
+      print(geschwindigkeit(10, 2))
+    tests:
+      - name: Ohne zeit
+        code: |
+          assert geschwindigkeit(3) == 3.0, f"geschwindigkeit(3) sollte 3.0 sein, liefert {geschwindigkeit(3)}"
+      - name: Mit zeit
+        code: |
+          assert geschwindigkeit(10, 2) == 5.0, f"geschwindigkeit(10, 2) sollte 5.0 sein, liefert {geschwindigkeit(10, 2)}"
+          assert geschwindigkeit(weg=1, zeit=4) == 0.25, "geschwindigkeit(weg=1, zeit=4) sollte 0.25 sein"
+    mutants:
+      - |
+        def geschwindigkeit(weg, zeit=2):
+            return weg / zeit
+
+        print(geschwindigkeit(10, 2))
+      - |
+        def geschwindigkeit(weg=1.0, zeit=1.0):
+            return zeit / weg
+
+        print(geschwindigkeit(10, 2))
+    hints:
+      - "Teilziel: Standardwert in der Definition festlegen."
+      - Standardwerte stehen in der `def`-Zeile hinter dem Parameternamen.
+      - "`def geschwindigkeit(weg, zeit=1.0):`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `min_max(werte)`, die den kleinsten **und** den größten Wert einer (nicht leeren) Liste als Tupel `(kleinster, groesster)` zurückgibt. Benutze eine Schleife, nicht die fertigen Funktionen `min`/`max`.
+    starter: |
+      def min_max(werte):
+          kleinster = werte[0]
+          groesster = werte[0]
+          # Schleife über werte
+          # beide zurückgeben
+    solution: |
+      def min_max(werte):
+          kleinster = werte[0]
+          groesster = werte[0]
+          for w in werte:
+              if w < kleinster:
+                  kleinster = w
+              if w > groesster:
+                  groesster = w
+          return kleinster, groesster
+    tests:
+      - name: Gemischte Werte
+        code: |
+          assert min_max([3, 1, 2]) == (1, 3), f"min_max([3, 1, 2]) sollte (1, 3) sein, liefert {min_max([3, 1, 2])}"
+          assert min_max([5, 9, -1, 4]) == (-1, 9), f"min_max([5, 9, -1, 4]) sollte (-1, 9) sein, liefert {min_max([5, 9, -1, 4])}"
+      - name: Ein Element
+        code: |
+          assert min_max([-2.5]) == (-2.5, -2.5), f"min_max([-2.5]) sollte (-2.5, -2.5) sein, liefert {min_max([-2.5])}"
+      - name: Nur negative Werte
+        code: |
+          assert min_max([-4, -7, -5]) == (-7, -4), f"min_max([-4, -7, -5]) sollte (-7, -4) sein, liefert {min_max([-4, -7, -5])}"
+    mutants:
+      - |
+        def min_max(werte):
+            kleinster = werte[0]
+            groesster = werte[0]
+            for w in werte:
+                if w < kleinster:
+                    kleinster = w
+                if w > groesster:
+                    groesster = w
+            return groesster, kleinster
+      - |
+        def min_max(werte):
+            kleinster = 0
+            groesster = 0
+            for w in werte:
+                if w < kleinster:
+                    kleinster = w
+                if w > groesster:
+                    groesster = w
+            return kleinster, groesster
+      - |
+        def min_max(werte):
+            kleinster = werte[0]
+            groesster = werte[0]
+            for w in werte:
+                if w < kleinster:
+                    kleinster = w
+                elif w > groesster:
+                    groesster = w
+                return kleinster, groesster
+    hints:
+      - "Teilziel: Schleife über alle Werte, dabei beide Kandidaten aktualisieren; am Ende beide zurückgeben."
+      - Ist `w` kleiner als der bisherige `kleinster`, wird `w` der neue `kleinster` – analog für `groesster`.
+      - |
+        ```python
+        for w in werte:
+            if w < kleinster:
+                kleinster = w
+            # ... dasselbe für groesster
+        ```
+      - "Zum Schluss, **nach** der Schleife (Einrückung!): `return kleinster, groesster`"
+  - type: quiz
+    question: |
+      Gegeben `def f(a, b=2): ...`. Welcher Aufruf führt zu einem Fehler?
+    options:
+      - text: "`f(b=3)`"
+        correct: true
+        why: "`a` hat keinen Standardwert und wird nicht übergeben – `TypeError: missing 1 required positional argument`."
+      - text: "`f(1)`"
+        correct: false
+        why: "`b` nimmt den Standardwert 2 an."
+      - text: "`f(b=3, a=1)`"
+        correct: false
+        why: Per Namen ist die Reihenfolge egal.
+      - text: "`f(1, 3)`"
+        correct: false
+        why: Zwei Positionsargumente für zwei Parameter – völlig in Ordnung.
+cards:
+  - id: m02-c-tupel-entpacken
+    concept: m02-mehrfach-rueckgabe
+    variants:
+      - type: predict
+        code: |
+          def teile(n):
+              return n // 3, n % 3
+
+          a, b = teile(10)
+          print(b, a)
+        options: ["1 3", "3 1", "(3, 1)"]
+        answer: "1 3"
+        explanation: "`teile(10)` liefert `(3, 1)`; `a = 3`, `b = 1` – ausgegeben wird `b` zuerst."
+      - type: predict
+        code: |
+          def pos():
+              return 0.5, -1.0
+
+          p = pos()
+          print(p)
+        options: ["(0.5, -1.0)", "0.5 -1.0", "0.5"]
+        answer: "(0.5, -1.0)"
+        explanation: Ohne Entpacken ist `p` das ganze Tupel.
+  - id: m02-c-standardwert
+    concept: m02-standardwerte
+    variants:
+      - type: predict
+        code: |
+          def f(x, k=3):
+              return x * k
+
+          print(f(2), f(2, 5))
+        options: ["6 10", "2 10", "6 15"]
+        answer: "6 10"
+        explanation: Ohne zweites Argument gilt `k = 3`; mit Argument wird es ersetzt.
+      - type: predict
+        code: |
+          def g(a, b=1, c=10):
+              return a + b + c
+
+          print(g(1, c=0))
+        options: ["2", "11", "1"]
+        answer: "2"
+        explanation: "`a = 1`, `b` bleibt 1, `c = 0` per Namen: $1 + 1 + 0 = 2$."
+      - type: quiz
+        question: Welche Definition ist **ungültig**?
+        options:
+          - text: "`def f(a=1, b):`"
+            correct: true
+            why: Parameter ohne Standardwert dürfen nicht hinter solchen mit Standardwert stehen – `SyntaxError`.
+          - text: "`def f(a, b=1):`"
+            correct: false
+            why: Erst ohne, dann mit Standardwert – korrekt.
+          - text: "`def f(a=1, b=2):`"
+            correct: false
+            why: Alle Parameter mit Standardwert – erlaubt.

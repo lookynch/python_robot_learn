@@ -1,0 +1,51 @@
+id: m10
+number: 10
+title: Wahrscheinlichkeit
+summary: |
+  Zufallsvariablen, Erwartungswert, Normalverteilung, Monte-Carlo, Softmax und Bayes – mit NumPy gesampelt und geplottet. Das Werkzeug für Planen unter Unsicherheit (Modul 11) und für Reinforcement Learning.
+depth: voll
+lessons:
+  - m10-zufallsvariablen
+  - m10-erwartung-varianz
+  - m10-normalverteilung
+  - m10-monte-carlo
+  - m10-softmax-entropie
+  - m10-bayes
+  - m10-checkpoint
+concepts:
+  - id: wk-zufallsvariable
+    name: Diskrete und stetige Zufallsvariablen
+    description: Eine Zufallsvariable bildet das Ergebnis eines Zufallsexperiments auf eine Zahl ab; diskret mit Wahrscheinlichkeiten p(x), stetig mit Dichte f(x).
+  - id: wk-histogramm
+    name: Histogramm und relative Häufigkeit
+    description: np.bincount bzw. np.histogram zählen Stichproben pro Wert oder Klasse; geteilt durch N ergibt sich eine Schätzung der Verteilung.
+  - id: wk-erwartungswert
+    name: Erwartungswert
+    description: E[X] = Σ x·p(x) analytisch, Mittelwert der Stichprobe empirisch; linear, also E[aX+b] = a·E[X] + b.
+  - id: wk-varianz
+    name: Varianz und Standardabweichung
+    description: Var(X) = E[(X − μ)²] in Einheit², σ = √Var; np.var teilt durch N, mit ddof=1 durch N − 1; Var(aX+b) = a²·Var(X).
+  - id: wk-normalverteilung
+    name: Normalverteilung
+    description: N(μ, σ²) mit rng.normal(mu, sigma) – sigma ist die Standardabweichung; etwa 68 % der Werte liegen in μ ± σ.
+  - id: wk-diagonal-gauss
+    name: Mehrdimensionale Normalverteilung (diagonal)
+    description: Unabhängige Komponenten mit Vektor mu und sigma – mu + sigma * rng.standard_normal((N, d)) per Broadcasting.
+  - id: wk-monte-carlo
+    name: Monte-Carlo-Schätzung
+    description: Erwartungswerte und Integrale als Mittelwert über Stichproben schätzen; ∫ g über [a, b] ≈ (b − a)·Mittelwert von g(U).
+  - id: wk-mc-fehler
+    name: Fehler von Monte-Carlo ~ 1/√N
+    description: Die Streuung einer Monte-Carlo-Schätzung fällt mit σ/√N – für halben Fehler braucht man vierfach so viele Stichproben.
+  - id: wk-softmax
+    name: Softmax mit Temperatur
+    description: p_i = exp(z_i/T) / Σ exp(z_j/T); numerisch stabil durch Abziehen des Maximums; kleine T → argmax, große T → gleichverteilt.
+  - id: wk-entropie
+    name: Entropie
+    description: H(p) = −Σ p log p misst die Streuung einer Verteilung; 0 für eine sichere, log n für die Gleichverteilung über n Werte.
+  - id: wk-bayes
+    name: Bayes-Regel
+    description: Posterior ∝ Likelihood × Prior; durch die Summe teilen (Normierung) ergibt Wahrscheinlichkeiten.
+  - id: wk-histogrammfilter
+    name: Histogrammfilter
+    description: Eine Wahrscheinlichkeit pro Ort; jede Messung multipliziert mit der Likelihood und normiert, Bewegung verschiebt die Verteilung.

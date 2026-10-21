@@ -1,0 +1,694 @@
+id: m16-mpc-gelernt
+title: "Capstone: Planen auf dem gelernten Modell"
+minutes: 10
+goals:
+  - CEM-MPC aus Modul 11 mit dem gelernten Modell statt der wahren Dynamik betreiben
+  - Eine vektorisierte Kostenfunktion für viele Aktionsfolgen im Modell schreiben
+  - Den Arm sichtbar zum Ziel steuern und Modellausnutzung erkennen
+concepts: [wm-mpc-gelernt, wm-modell-ausnutzung]
+steps:
+  - type: text
+    body: |
+      ## Alles zusammen
+
+      Der Planer aus Modul 11 bleibt fast gleich – nur `env.dynamics` wird durch `predict(model, …)` ersetzt:
+
+      1. Ziehe $N = 100$ Aktionsfolgen der Länge $H = 10$ um den Mittelwert $\mu$.
+      2. Rolle **alle gleichzeitig** im gelernten Modell aus. Kosten = Summe der Abstände der **vorhergesagten** Spitze $(\hat x, \hat y)$ zum Ziel über den Horizont.
+      3. Die 10 besten (Elite) bestimmen neues $\mu$ und $\sigma$; 3 Iterationen.
+      4. Führe nur die **erste** Aktion am echten Arm aus, miss den neuen Zustand, plane neu (MPC).
+
+      Das Modell hat nie FK gesehen – es hat aus 1000 Zufallsübergängen gelernt, wie Gelenkgeschwindigkeiten die Spitze bewegen.
+  - type: example
+    heavy: true
+    code: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def rollout_cost(model, s, U, goal):
+          S = np.tile(s, (len(U), 1))
+          cost = np.zeros(len(U))
+          for t in range(U.shape[1]):
+              S = predict(model, S, U[:, t])
+              cost += np.linalg.norm(S[:, 2:] - goal, axis=1)
+          return cost
+
+      def cem_plan(model, s, goal, mu, rng, n=100, n_elite=10, iters=3):
+          sd = np.ones_like(mu)
+          for _ in range(iters):
+              U = np.clip(mu + sd * rng.standard_normal((n,) + mu.shape), -2, 2)
+              elite = U[np.argsort(rollout_cost(model, s, U, goal))[:n_elite]]
+              mu, sd = elite.mean(axis=0), elite.std(axis=0) + 0.05
+          return mu
+
+      def run_mpc(model, goal, rng, steps=40, horizon=10):
+          env.reset(q=(0.0, 0.0), goal=goal)
+          qs, mu = [env.q.copy()], np.zeros((horizon, 2))
+          for _ in range(steps):
+              mu = cem_plan(model, observe(env), goal, mu, rng)
+              env.step(mu[0])
+              qs.append(env.q.copy())
+              mu = np.vstack([mu[1:], mu[-1:]])
+          return np.array(qs)
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      goal = np.array([-1.0, 0.8])
+      qs = run_mpc(model, goal, rng)
+      print(f"Endabstand zum Ziel: {np.linalg.norm(env.fk(qs[-1]) - goal):.3f} m")
+      env.render(qs, title="CEM-MPC auf dem gelernten Modell")
+    subgoals:
+      - lines: [56, 62]
+        label: Aktionsfolgen im Modell rollen und bewerten
+      - lines: [64, 70]
+        label: CEM – Elite wählen, Verteilung anpassen
+      - lines: [72, 80]
+        label: Erste Aktion ausführen, neu planen (MPC)
+      - lines: [82, 88]
+        label: Lernen, planen, zeigen
+    after: |
+      Nach etwa 20 Schritten (1 s) ist die Spitze am Ziel und bleibt dort auf wenige Zentimeter genau. Die Zeile `mu = np.vstack([mu[1:], mu[-1:]])` ist der **Warmstart**: Der Rest des alten Plans wird zum Startpunkt der nächsten Suche.
+  - type: explain
+    question: |
+      Das Modell hat Einschrittfehler von etwa 1 cm, und 10 Schritte offene Schleife driften noch mehr. Warum landet der Arm trotzdem auf wenige Zentimeter genau am Ziel?
+    options:
+      - text: MPC misst nach jedem Schritt den echten Zustand und plant neu; Fehler wirken nur kurz, und nahe am Ziel sind die nötigen Bewegungen klein.
+        correct: true
+        why: Rückkopplung macht Planen robust gegen Modellfehler – derselbe Grund, aus dem ein P-Regler mit grobem Modell funktioniert.
+      - text: CEM findet die exakt optimale Aktionsfolge, Modellfehler spielen dann keine Rolle.
+        correct: false
+        why: CEM optimiert im Modell. Eine im Modell optimale Folge ist in der Realität nur so gut wie das Modell.
+      - text: Weil das Modell während des Planens weiter lernt.
+        correct: false
+        why: Hier wird das Modell nur einmal vorher trainiert. Nachtrainieren kommt in der nächsten Lektion.
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue CEM für ein eindimensionales Spielproblem: Minimiere $(u - 1{,}5)^2$. Ausgegeben werden soll der gefundene Mittelwert, gerundet: `1.5`.
+    lines:
+      - "import numpy as np"
+      - "rng = np.random.default_rng(0)"
+      - "def cost(u):"
+      - "    return (u - 1.5) ** 2"
+      - "mu, sd = 0.0, 2.0"
+      - "for it in range(5):"
+      - "    U = mu + sd * rng.standard_normal(50)"
+      - "    elite = U[np.argsort(cost(U))[:10]]"
+      - "    mu, sd = elite.mean(), elite.std() + 0.01"
+      - "print(round(mu, 1))"
+    distractors:
+      - "    elite = U[np.argsort(cost(U))[-10:]]"
+      - "    mu, sd = U.mean(), U.std() + 0.01"
+    expect_output: "1.5"
+  - type: exercise
+    mode: make
+    heavy: true
+    prompt: |
+      Schreibe `rollout_cost(model, s, U, goal)`: `U` hat die Form `(N, H, 2)` – $N$ Aktionsfolgen der Länge $H$. Starte alle $N$ Rollouts im Zustand `s` (Form `(4,)`), wende Schritt für Schritt `predict` an und addiere nach **jedem** Schritt den Abstand der vorhergesagten Spitze (Spalten 2 und 3) zu `goal`. Gib ein Array der Länge $N$ zurück.
+
+      Der Rest (CEM, MPC) ist fertig. Ziel: Endabstand unter 10 cm.
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def rollout_cost(model, s, U, goal):
+          # dein Code
+          pass
+
+      def cem_plan(model, s, goal, mu, rng, n=100, n_elite=10, iters=3):
+          sd = np.ones_like(mu)
+          for _ in range(iters):
+              U = np.clip(mu + sd * rng.standard_normal((n,) + mu.shape), -2, 2)
+              elite = U[np.argsort(rollout_cost(model, s, U, goal))[:n_elite]]
+              mu, sd = elite.mean(axis=0), elite.std(axis=0) + 0.05
+          return mu
+
+      def run_mpc(model, goal, rng, steps=40, horizon=10):
+          env.reset(q=(0.0, 0.0), goal=goal)
+          qs, mu = [env.q.copy()], np.zeros((horizon, 2))
+          for _ in range(steps):
+              mu = cem_plan(model, observe(env), goal, mu, rng)
+              env.step(mu[0])
+              qs.append(env.q.copy())
+              mu = np.vstack([mu[1:], mu[-1:]])
+          return np.array(qs)
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      goal = np.array([0.5, 1.2])
+      qs = run_mpc(model, goal, rng)
+      dist = np.linalg.norm(env.fk(qs[-1]) - goal)
+      print(f"Endabstand zum Ziel: {dist:.3f} m")
+      env.render(qs, title="Dein Planer")
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def rollout_cost(model, s, U, goal):
+          S = np.tile(s, (len(U), 1))
+          cost = np.zeros(len(U))
+          for t in range(U.shape[1]):
+              S = predict(model, S, U[:, t])
+              cost += np.linalg.norm(S[:, 2:] - goal, axis=1)
+          return cost
+
+      def cem_plan(model, s, goal, mu, rng, n=100, n_elite=10, iters=3):
+          sd = np.ones_like(mu)
+          for _ in range(iters):
+              U = np.clip(mu + sd * rng.standard_normal((n,) + mu.shape), -2, 2)
+              elite = U[np.argsort(rollout_cost(model, s, U, goal))[:n_elite]]
+              mu, sd = elite.mean(axis=0), elite.std(axis=0) + 0.05
+          return mu
+
+      def run_mpc(model, goal, rng, steps=40, horizon=10):
+          env.reset(q=(0.0, 0.0), goal=goal)
+          qs, mu = [env.q.copy()], np.zeros((horizon, 2))
+          for _ in range(steps):
+              mu = cem_plan(model, observe(env), goal, mu, rng)
+              env.step(mu[0])
+              qs.append(env.q.copy())
+              mu = np.vstack([mu[1:], mu[-1:]])
+          return np.array(qs)
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      goal = np.array([0.5, 1.2])
+      qs = run_mpc(model, goal, rng)
+      dist = np.linalg.norm(env.fk(qs[-1]) - goal)
+      print(f"Endabstand zum Ziel: {dist:.3f} m")
+      env.render(qs, title="Dein Planer")
+    tests:
+      - name: Form der Kosten
+        code: |
+          U = np.random.default_rng(5).uniform(-2, 2, (7, 4, 2))
+          c = np.asarray(rollout_cost(model, S[0], U, np.array([1.0, 0.0])))
+          assert c.shape == (7,), f"Für 7 Aktionsfolgen erwartet 7 Kosten, bekommen Form {c.shape}"
+      - name: Kosten stimmen
+        code: |
+          def _ref(model, s, U, goal):
+              X = np.tile(s, (len(U), 1))
+              c = np.zeros(len(U))
+              for t in range(U.shape[1]):
+                  X = predict(model, X, U[:, t])
+                  c += np.linalg.norm(X[:, 2:] - goal, axis=1)
+              return c
+          r = np.random.default_rng(6)
+          for i, g in [(3, (1.0, 0.5)), (77, (-0.4, -1.2))]:
+              U = r.uniform(-2, 2, (20, 6, 2))
+              got = np.asarray(rollout_cost(model, S[i], U, np.array(g)), dtype=float)
+              want = _ref(model, S[i], U, np.array(g))
+              assert got.shape == want.shape and close(got, want, 1e-6), f"Kosten weichen ab: erwartet {np.round(want[:3], 3)}…, bekommen {np.round(got[:3], 3)}… – Abstand der vorhergesagten Spitze nach jedem Schritt aufsummieren."
+      - name: Arm erreicht das Ziel
+        code: |
+          assert dist < 0.1, f"Endabstand {dist:.3f} m – sollte unter 0,1 m liegen."
+      - name: Auch ein anderes Ziel
+        code: |
+          g2 = np.array([0.3, -1.4])
+          qs2 = run_mpc(model, g2, np.random.default_rng(11))
+          d2 = np.linalg.norm(env.fk(qs2[-1]) - g2)
+          assert d2 < 0.1, f"Für das Ziel (0.3, -1.4) ist der Endabstand {d2:.3f} m – sollte unter 0,1 m liegen."
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def rollout_cost(model, s, U, goal):
+            S = np.tile(s, (len(U), 1))
+            for t in range(U.shape[1]):
+                S = predict(model, S, U[:, t])
+            return np.linalg.norm(S[:, 2:] - goal, axis=1)
+        def cem_plan(model, s, goal, mu, rng, n=100, n_elite=10, iters=3):
+            sd = np.ones_like(mu)
+            for _ in range(iters):
+                U = np.clip(mu + sd * rng.standard_normal((n,) + mu.shape), -2, 2)
+                elite = U[np.argsort(rollout_cost(model, s, U, goal))[:n_elite]]
+                mu, sd = elite.mean(axis=0), elite.std(axis=0) + 0.05
+            return mu
+        def run_mpc(model, goal, rng, steps=40, horizon=10):
+            env.reset(q=(0.0, 0.0), goal=goal)
+            qs, mu = [env.q.copy()], np.zeros((horizon, 2))
+            for _ in range(steps):
+                mu = cem_plan(model, observe(env), goal, mu, rng)
+                env.step(mu[0])
+                qs.append(env.q.copy())
+                mu = np.vstack([mu[1:], mu[-1:]])
+            return np.array(qs)
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(40, 25, rng)
+        model = fit_model(S, A, S2, rng)
+        goal = np.array([0.5, 1.2])
+        qs = run_mpc(model, goal, rng)
+        dist = np.linalg.norm(env.fk(qs[-1]) - goal)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def rollout_cost(model, s, U, goal):
+            S = np.tile(s, (len(U), 1))
+            cost = np.zeros(len(U))
+            for t in range(U.shape[1]):
+                S = predict(model, S, U[:, t])
+                cost += np.linalg.norm(S[:, :2] - goal, axis=1)
+            return cost
+        def cem_plan(model, s, goal, mu, rng, n=100, n_elite=10, iters=3):
+            sd = np.ones_like(mu)
+            for _ in range(iters):
+                U = np.clip(mu + sd * rng.standard_normal((n,) + mu.shape), -2, 2)
+                elite = U[np.argsort(rollout_cost(model, s, U, goal))[:n_elite]]
+                mu, sd = elite.mean(axis=0), elite.std(axis=0) + 0.05
+            return mu
+        def run_mpc(model, goal, rng, steps=40, horizon=10):
+            env.reset(q=(0.0, 0.0), goal=goal)
+            qs, mu = [env.q.copy()], np.zeros((horizon, 2))
+            for _ in range(steps):
+                mu = cem_plan(model, observe(env), goal, mu, rng)
+                env.step(mu[0])
+                qs.append(env.q.copy())
+                mu = np.vstack([mu[1:], mu[-1:]])
+            return np.array(qs)
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(40, 25, rng)
+        model = fit_model(S, A, S2, rng)
+        goal = np.array([0.5, 1.2])
+        qs = run_mpc(model, goal, rng)
+        dist = np.linalg.norm(env.fk(qs[-1]) - goal)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def rollout_cost(model, s, U, goal):
+            S = np.tile(s, (len(U), 1))
+            cost = np.zeros(len(U))
+            for t in range(U.shape[1]):
+                S_next = predict(model, S, U[:, t])
+                cost += np.linalg.norm(S_next[:, 2:] - goal, axis=1)
+            return cost
+        def cem_plan(model, s, goal, mu, rng, n=100, n_elite=10, iters=3):
+            sd = np.ones_like(mu)
+            for _ in range(iters):
+                U = np.clip(mu + sd * rng.standard_normal((n,) + mu.shape), -2, 2)
+                elite = U[np.argsort(rollout_cost(model, s, U, goal))[:n_elite]]
+                mu, sd = elite.mean(axis=0), elite.std(axis=0) + 0.05
+            return mu
+        def run_mpc(model, goal, rng, steps=40, horizon=10):
+            env.reset(q=(0.0, 0.0), goal=goal)
+            qs, mu = [env.q.copy()], np.zeros((horizon, 2))
+            for _ in range(steps):
+                mu = cem_plan(model, observe(env), goal, mu, rng)
+                env.step(mu[0])
+                qs.append(env.q.copy())
+                mu = np.vstack([mu[1:], mu[-1:]])
+            return np.array(qs)
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(40, 25, rng)
+        model = fit_model(S, A, S2, rng)
+        goal = np.array([0.5, 1.2])
+        qs = run_mpc(model, goal, rng)
+        dist = np.linalg.norm(env.fk(qs[-1]) - goal)
+    hints:
+      - "Teilziel: Aktionsfolgen im Modell rollen und bewerten – alle N gleichzeitig."
+      - "`np.tile(s, (N, 1))` macht aus einem Zustand N Kopien (Form `(N, 4)`). `U[:, t]` sind die t-ten Aktionen aller Folgen (Form `(N, 2)`)."
+      - |
+        ```python
+        S = np.tile(s, (len(U), 1))
+        cost = np.zeros(len(U))
+        for t in range(U.shape[1]):
+            ...
+        ```
+      - |
+        ```python
+            S = predict(model, S, U[:, t])
+            cost += np.linalg.norm(S[:, 2:] - goal, axis=1)
+        return cost
+        ```
+    explanation: |
+      Wenn du nur den Abstand **am Ende** des Horizonts zählst, funktioniert der Planer oft auch – aber er hat keinen Grund, schnell zum Ziel zu fahren. Die Summe über alle Schritte belohnt kurze Wege.
+  - type: quiz
+    question: |
+      `cem_plan` beschneidet die Stichproben mit `np.clip(…, -2, 2)`. Warum ist das beim **gelernten** Modell besonders wichtig?
+    options:
+      - text: Das Modell hat nur Aktionen in $[-2, 2]$ gesehen. Außerhalb könnte CEM Aktionen finden, die nur im Modell gut aussehen – Modellausnutzung.
+        correct: true
+        why: Optimierer suchen gezielt die Stellen, an denen das Modell zu optimistisch irrt; ungesehene Eingaben sind dafür ideal.
+      - text: Weil NumPy sonst einen Überlauf meldet.
+        correct: false
+        why: Zahlen wie 5 oder −7 sind für NumPy kein Problem.
+      - text: Damit CEM schneller konvergiert.
+        correct: false
+        why: Das Clipping dient der Gültigkeit der Aktionen und dem Schutz vor Extrapolation, nicht der Geschwindigkeit.
+  - type: quiz
+    question: |
+      Du willst ein **neues** Ziel anfahren. Was musst du ändern?
+    options:
+      - text: Nur `goal` in der Kostenfunktion – das Modell bleibt, wie es ist.
+        correct: true
+        why: Das World Model beschreibt die Physik, nicht die Aufgabe. Ein großer Vorteil gegenüber einer Policy, die für ein Ziel trainiert wurde.
+      - text: Neue Daten sammeln und das Modell neu trainieren.
+        correct: false
+        why: Die Dynamik des Arms hängt nicht vom Ziel ab – solange das Ziel in einer Region mit Daten liegt.
+      - text: Den Planungshorizont auf die Entfernung zum Ziel anpassen.
+        correct: false
+        why: MPC plant in jedem Schritt neu; ein fester Horizont von 10 Schritten genügt.
+cards:
+  - id: m16-c-mpc-gelernt
+    concept: wm-mpc-gelernt
+    variants:
+      - type: quiz
+        question: Was unterscheidet CEM-MPC auf dem gelernten Modell von CEM-MPC aus Modul 11?
+        options:
+          - text: Nur die Funktion, mit der die Aktionsfolgen ausgerollt werden – `predict` statt `env.dynamics`.
+            correct: true
+            why: Der Algorithmus bleibt gleich; das Modell ist austauschbar.
+          - text: CEM wählt beim gelernten Modell die schlechtesten Folgen als Elite.
+            correct: false
+            why: Die Elite sind immer die Folgen mit den niedrigsten Kosten.
+          - text: Beim gelernten Modell wird die ganze Folge ausgeführt, nicht nur die erste Aktion.
+            correct: false
+            why: Gerade beim ungenauen Modell ist Neuplanen nach jedem Schritt wichtig.
+      - type: quiz
+        question: Warum führt MPC nur die **erste** Aktion des Plans aus?
+        options:
+          - text: Danach wird vom echt gemessenen Zustand neu geplant – Modellfehler und Störungen werden so laufend korrigiert.
+            correct: true
+            why: Receding Horizon = Rückkopplung.
+          - text: Weil die übrigen Aktionen meist außerhalb von $[-2, 2]$ liegen.
+            correct: false
+            why: Alle Aktionen werden beschnitten.
+          - text: Um Rechenzeit zu sparen.
+            correct: false
+            why: Neuplanen kostet sogar mehr Rechenzeit.
+  - id: m16-c-exploitation
+    concept: wm-modell-ausnutzung
+    variants:
+      - type: quiz
+        question: Ein Planer findet im Modell einen Weg mit fast null Kosten, am echten Arm ist er schlecht. Wie heißt das Phänomen?
+        options:
+          - text: Modellausnutzung (Model Exploitation)
+            correct: true
+            why: Der Optimierer hat einen Fehler des Modells gefunden und ausgenutzt.
+          - text: Overfitting des Planers
+            correct: false
+            why: Der Planer lernt keine Parameter – das Problem liegt im Modell.
+          - text: Exploration
+            correct: false
+            why: Exploration ist gewolltes Ausprobieren in der echten Welt.
+      - type: quiz
+        question: Welche Maßnahme hilft **nicht** gegen Modellausnutzung?
+        options:
+          - text: Mehr CEM-Iterationen, damit der Planer noch besser im Modell optimiert.
+            correct: true
+            why: Besser optimieren heißt auch, Modellfehler noch zielsicherer zu finden.
+          - text: Aktionen auf den Bereich der Trainingsdaten beschränken.
+            correct: false
+            why: Das hilft – das Modell extrapoliert dann weniger.
+          - text: Ensemble-Kosten über mehrere Modelle mitteln (wie PETS).
+            correct: false
+            why: Das hilft – ein Fehler einzelner Modelle zählt dann weniger.

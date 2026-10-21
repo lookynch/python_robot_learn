@@ -1,0 +1,298 @@
+id: m15-actor-critic
+title: Actor-Critic – Policy und Kritiker lernen gemeinsam
+minutes: 12
+goals:
+  - Den TD-Fehler als Schätzung des Vorteils (advantage) deuten
+  - Einen Ein-Schritt-Actor-Critic implementieren
+  - Die Idee hinter A2C/A3C einordnen
+concepts: [actor-critic-td, baseline-varianz, td0-update]
+steps:
+  - type: text
+    body: |
+      ## Der Kritiker ersetzt den Return
+
+      REINFORCE mit Baseline nutzt $G_t - \hat v(s_t)$ – und muss dafür bis zum Episodenende warten. **Actor-Critic** ersetzt $G_t$ durch das TD-Ziel aus Modul 14:
+
+      $$\delta = r + \gamma\, \hat v(s') - \hat v(s)$$
+
+      - Der **Critic** lernt $\hat v$ per TD(0): $\hat v(s) \leftarrow \hat v(s) + \alpha_v\, \delta$.
+      - Der **Actor** (die Policy) macht einen Policy-Gradient-Schritt mit $\delta$ statt $G - b$: $\theta \leftarrow \theta + \alpha_\theta\, \delta\, \nabla \log \pi(a \mid s)$.
+
+      Beides passiert **nach jedem Schritt**. Der Preis: $\delta$ ist verzerrt, solange $\hat v$ ungenau ist (Bootstrapping), dafür viel weniger verrauscht als $G_t$. Wir nutzen hier eine tabellarische Version: Präferenzen `H[s, a]` mit Softmax-Policy und Werte `V[s]` (Sutton & Barto, Abschnitt 13.5).
+  - type: predict
+    code: |
+      import numpy as np
+      H = np.array([0.0, 0.0])          # Präferenzen in s, 2 Aktionen
+      V_s, V_s2 = -5.0, -2.0
+      r, gamma, a, alpha = -1.0, 1.0, 1, 0.5
+      p = np.exp(H) / np.exp(H).sum()
+      delta = r + gamma * V_s2 - V_s
+      H += alpha * delta * (np.eye(2)[a] - p)
+      print(delta, H)
+    options: ["2.0 [-0.5  0.5]", "-2.0 [ 0.5 -0.5]", "2.0 [0.  1.]", "-8.0 [ 2. -2.]"]
+    answer: "2.0 [-0.5  0.5]"
+    explanation: |
+      $\delta = -1 + (-2) - (-5) = 2 > 0$: Es lief besser als erwartet, also wird Aktion 1 wahrscheinlicher. Mit $\pi = [0.5, 0.5]$ ist der Schritt $0.5 \cdot 2 \cdot [-0.5, 0.5]$.
+  - type: explain
+    question: |
+      Warum ist $\delta = r + \gamma V(s') - V(s)$ eine sinnvolle Schätzung dafür, **wie viel besser** Aktion $a$ war als üblich?
+    options:
+      - text: Mit dem wahren $V$ gilt $\mathbb{E}[\delta \mid s, a] = Q(s, a) - V(s)$ – genau der Vorteil (advantage) von $a$.
+        correct: true
+        why: $r + \gamma V(s')$ schätzt $Q(s, a)$, und $V(s)$ ist der Durchschnitt über die Policy – die Differenz ist der Vorteil.
+      - text: Weil $\delta$ immer positiv ist.
+        correct: false
+        why: $\delta$ ist negativ, wenn es schlechter lief als erwartet – dann wird die Aktion abgeschwächt.
+      - text: Weil $\delta$ der vollständige Return ist.
+        correct: false
+        why: $\delta$ enthält nur eine Belohnung und zwei Schätzungen.
+      - text: Weil der Critic die Policy kennt.
+        correct: false
+        why: Der Critic bewertet Zustände; die Policy fließt nur indirekt über die Daten ein.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma)`:
+
+      1. Policy in `s` berechnen: `p = softmax(H[s])` (vorgegeben).
+      2. TD-Fehler `delta` (bei `done` ohne `V[s2]`).
+      3. Critic: `V[s]` um `alpha_critic * delta` verschieben.
+      4. Actor: `H[s]` um `alpha_actor * delta * (e_a - p)` verschieben.
+      5. `delta` zurückgeben.
+
+      Ein Test trainiert damit einen Agenten an der Klippe aus Modul 14.
+    starter: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma):
+          p = softmax(H[s])
+          # TD-Fehler, Critic, Actor
+          pass
+    solution: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma):
+          p = softmax(H[s])
+          delta = (r if done else r + gamma * V[s2]) - V[s]
+          V[s] += alpha_critic * delta
+          H[s] += alpha_actor * delta * (np.eye(len(p))[a] - p)
+          return delta
+    tests:
+      - name: Ein Schritt mit Zahlen
+        code: |
+          import numpy as np
+          H, V = np.zeros((2, 2)), np.array([-5.0, -2.0])
+          d = actor_critic_step(H, V, 0, 1, -1.0, 1, False, 0.5, 0.1, 1.0)
+          assert d is not None and close(d, 2.0), f"δ = −1 + (−2) − (−5) = 2 erwartet, bekommen {d}"
+          assert close(V, [-4.8, -2.0]), f"V[0] sollte −5 + 0.1·2 = −4.8 sein, V ist {V.tolist()}"
+          assert close(H, [[-0.5, 0.5], [0.0, 0.0]]), f"H[0] sollte [−0.5, 0.5] sein, H ist {H.tolist()}"
+      - name: Endzustand und negativer Fehler
+        code: |
+          import numpy as np
+          H, V = np.zeros((2, 3)), np.array([1.0, 50.0])
+          d = actor_critic_step(H, V, 0, 0, -1.0, 1, True, 0.3, 0.5, 1.0)
+          assert close(d, -2.0), f"Bei done ist das Ziel nur r = −1 → δ = −2 erwartet, bekommen {d}"
+          assert close(V[0], 0.0), f"V[0] sollte 1 + 0.5·(−2) = 0 sein, ist {V[0]}"
+          assert close(H[0], [-0.4, 0.2, 0.2]), f"H[0] sollte 0.3·(−2)·([1, 0, 0] − 1/3) = [−0.4, 0.2, 0.2] sein, ist {np.round(H[0], 3).tolist()}"
+      - name: Lernt an der Klippe
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env = GridWorld(["............", "............", "............", "SXXXXXXXXXXG"], goal_reward=-1, max_steps=300)
+          rng = np.random.default_rng(0)
+          H, V, rets = np.zeros((env.n_states, 4)), np.zeros(env.n_states), []
+          for k in range(150):
+              s, done, G = env.reset(), False, 0.0
+              while not done:
+                  a = int(rng.choice(4, p=softmax(H[s])))
+                  s2, r, done = env.step(a)
+                  actor_critic_step(H, V, s, a, r, s2, env.is_terminal(s2), 0.1, 0.1, 1.0)
+                  s, G = s2, G + r
+              rets.append(G)
+          m = np.mean(rets[-20:])
+          assert m > -30, f"Mittlerer Return der letzten 20 Episoden ist {m:.0f}, erwartet über −30"
+    mutants:
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma):
+            p = softmax(H[s])
+            delta = (r if done else r + gamma * V[s2]) - V[s]
+            V[s] += alpha_critic * delta
+            H[s] += alpha_actor * delta * (p - np.eye(len(p))[a])
+            return delta
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma):
+            p = softmax(H[s])
+            delta = (r if done else r + gamma * V[s2]) - V[s]
+            H[s] += alpha_actor * delta * (np.eye(len(p))[a] - p)
+            return delta
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma):
+            p = softmax(H[s])
+            delta = (r if done else r + gamma * V[s2]) - V[s]
+            V[s] += alpha_critic * delta
+            H[s] += alpha_actor * r * (np.eye(len(p))[a] - p)
+            return delta
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def actor_critic_step(H, V, s, a, r, s2, done, alpha_actor, alpha_critic, gamma):
+            p = softmax(H[s])
+            delta = r + gamma * V[s2] - V[s]
+            V[s] += alpha_critic * delta
+            H[s] += alpha_actor * delta * (np.eye(len(p))[a] - p)
+            return delta
+    hints:
+      - "Teilziel: TD-Fehler einmal berechnen und für Critic **und** Actor verwenden."
+      - "Critic wie TD(0) aus Modul 14; Actor wie REINFORCE, nur mit $\\delta$ statt $G$. Der One-hot-Vektor ist `np.eye(len(p))[a]`."
+      - "`delta = (r if done else r + gamma * V[s2]) - V[s]`"
+      - "`V[s] += alpha_critic * delta` und `H[s] += alpha_actor * delta * (np.eye(len(p))[a] - p)`, dann `return delta`."
+  - type: example
+    title: Actor-Critic an der Klippe
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      env = GridWorld(["............", "............", "............", "SXXXXXXXXXXG"],
+                      goal_reward=-1, max_steps=300)
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      rng = np.random.default_rng(0)
+      H, V, returns = np.zeros((env.n_states, 4)), np.zeros(env.n_states), []
+      for k in range(200):
+          s, done, G = env.reset(), False, 0.0
+          while not done:
+              p = softmax(H[s])
+              a = int(rng.choice(4, p=p))
+              s2, r, done = env.step(a)
+              delta = (r if env.is_terminal(s2) else r + V[s2]) - V[s]
+              V[s] += 0.1 * delta                          # Critic
+              H[s] += 0.1 * delta * (np.eye(4)[a] - p)     # Actor
+              s, G = s2, G + r
+          returns.append(G)
+
+      lab.plot(np.convolve(returns, np.ones(10) / 10, mode="valid"), title="Actor-Critic: Return (gleitendes Mittel)", xlabel="Episode", ylabel="Return")
+      policy = np.argmax(H, axis=1)
+      s, path = env.reset(), [env.start]
+      while not env.is_terminal(s) and len(path) < 40:
+          s, r, done = env.step(int(policy[s]))
+          path.append(s)
+      env.render(values=V, policy=policy, path=path, title="Critic V und wahrscheinlichste Aktionen")
+      print("P(Aktionen) am Start:", np.round(softmax(H[env.start]), 2))
+    subgoals:
+      - lines: [12, 13]
+        label: Actor und Critic anlegen
+      - lines: [17, 18]
+        label: Aktion aus der Policy ziehen
+      - lines: [19, 22]
+        label: TD-Fehler für beide nutzen
+      - lines: [26, 32]
+        label: Lernkurve, Werte und Pfad zeigen
+    after: |
+      Die Lernkurve steigt ohne ε, ohne Episodenende-Warten. Der wahrscheinlichste Pfad hält Abstand zur Klippe (hier zwei Reihen) – wie bei SARSA, denn auch Actor-Critic ist **on-policy**: Er bewertet die stochastische Policy, mit der er handelt. Die Policy bleibt stochastisch; die Pfeile zeigen nur die jeweils wahrscheinlichste Aktion.
+  - type: text
+    body: |
+      ## Von hier zu A2C und A3C
+
+      Die großen Actor-Critic-Verfahren bauen genau diese Struktur aus:
+
+      - **Neuronale Netze** statt Tabellen für Policy und Wertfunktion (oft ein Netz mit zwei „Köpfen“).
+      - **n-Schritt-Ziele** $r_t + \gamma r_{t+1} + \dots + \gamma^{n-1} r_{t+n-1} + \gamma^n \hat v(s_{t+n})$ – ein Mittelweg zwischen TD (n = 1) und Monte Carlo.
+      - **Mehrere Umgebungen parallel**, damit die Daten eines Updates weniger korreliert sind. A3C (Mnih et al., 2016) lässt viele Worker asynchron updaten; A2C ist die synchrone Variante, bei der alle Worker gemeinsam einen Batch liefern.
+      - Ein **Entropie-Bonus** im Ziel, damit die Policy nicht zu früh deterministisch wird.
+
+      Den Advantage-Ausdruck $\delta$ bzw. $\hat A$ triffst du in PPO wieder.
+  - type: quiz
+    question: |
+      Welche Aussage über Ein-Schritt-Actor-Critic im Vergleich zu REINFORCE stimmt?
+    options:
+      - text: Er lernt nach jedem Schritt und hat weniger Varianz, aber ein verzerrtes Signal, solange der Critic ungenau ist.
+        correct: true
+        why: Das ist der klassische Bias-Varianz-Tausch durch Bootstrapping.
+      - text: Er braucht ein Modell der Umgebung für den Critic.
+        correct: false
+        why: Der Critic lernt modellfrei per TD aus erlebten Übergängen.
+      - text: Er ist off-policy und kann beliebige alte Daten nutzen.
+        correct: false
+        why: Die einfache Version ist on-policy – Actor und Critic lernen aus der aktuellen Policy.
+      - text: Er braucht ε-greedy zur Erkundung.
+        correct: false
+        why: Die Softmax-Policy ist stochastisch und erkundet selbst.
+cards:
+  - id: m15-c-ac-delta
+    concept: actor-critic-td
+    variants:
+      - type: predict
+        code: |
+          V_s, V_s2, r, gamma = 2.0, 3.0, 1.0, 0.5
+          print(r + gamma * V_s2 - V_s)
+        options: ["0.5", "2.0", "-0.5", "1.5"]
+        answer: "0.5"
+        explanation: "1 + 0.5·3 − 2 = 0.5: leicht besser als erwartet."
+      - type: predict
+        code: |
+          V_s, V_s2, r, gamma = -3.0, -6.0, -1.0, 1.0
+          print(r + gamma * V_s2 - V_s)
+        options: ["-4.0", "4.0", "-10.0", "2.0"]
+        answer: "-4.0"
+        explanation: "−1 − 6 + 3 = −4: Die Aktion führte in einen schlechten Zustand und wird abgeschwächt."
+  - id: m15-c-ac-rollen
+    concept: actor-critic-td
+    variants:
+      - type: quiz
+        question: Was lernt der **Critic** im Actor-Critic?
+        options:
+          - text: Eine Wertfunktion $\hat v(s)$, deren TD-Fehler das Lernsignal des Actors ist
+            correct: true
+            why: Der Critic bewertet, der Actor handelt.
+          - text: Die Policy $\pi(a \mid s)$
+            correct: false
+            why: Das ist der Actor.
+          - text: Ein Modell der Übergänge
+            correct: false
+            why: Das wäre modellbasiertes RL wie Dyna.
+      - type: quiz
+        question: Warum laufen bei A2C/A3C mehrere Umgebungen parallel?
+        options:
+          - text: Damit die Daten eines Updates aus verschiedenen Situationen stammen und weniger korreliert sind
+            correct: true
+            why: Aufeinanderfolgende Schritte einer Episode ähneln sich stark; parallele Worker mischen die Daten.
+          - text: Weil sonst kein Gradient berechnet werden kann
+            correct: false
+            why: Ein Worker reicht dafür – nur sind die Daten stärker korreliert.
+          - text: Um ein Modell der Welt zu lernen
+            correct: false
+            why: A2C/A3C sind modellfrei.

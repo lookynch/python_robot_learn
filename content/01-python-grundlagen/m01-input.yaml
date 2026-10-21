@@ -1,0 +1,347 @@
+id: m01-input
+title: Eingaben mit input()
+minutes: 8
+goals:
+  - Mit `input()` eine Eingabe im Terminal abfragen
+  - Wissen, dass `input()` immer einen `str` liefert
+  - Eingaben mit `int()` oder `float()` in Zahlen umwandeln
+concepts: [input-eingabe]
+steps:
+  - type: text
+    body: |
+      ## Das Programm fragt dich
+
+      `input("Frage: ")` macht drei Dinge:
+
+      1. Es schreibt die Frage ins Terminal.
+      2. Es **hält das Programm an** und wartet, bis du im Terminal etwas eintippst und bestätigst (Enter).
+      3. Es liefert deine Eingabe als Wert zurück – den speicherst du meist in einer Variablen.
+
+      Wenn du gleich auf **Ausführen** tippst, pausiert das Programm beim ersten `input()` und fragt im Terminal nach deiner Eingabe. Erst danach geht es mit der nächsten Zeile weiter.
+  - type: example
+    code: |
+      name = input("Wie heißt dein Roboter? ")
+      print("Hallo,", name)
+    stdin: ["Robbi"]
+    subgoals:
+      - lines: 1
+        label: Eingabe abfragen und speichern
+      - lines: 2
+        label: Eingabe verwenden
+    after: |
+      Im Terminal steht die Frage, direkt dahinter deine Eingabe. Das Leerzeichen am Ende von `"…Roboter? "` sorgt dafür, dass die Eingabe nicht an der Frage klebt.
+  - type: predict
+    intro: |
+      Bei der Frage wird `3` eingegeben.
+    code: |
+      n = input("Anzahl: ")
+      print(n * 2)
+    stdin: ["3"]
+    options:
+      - |
+        Anzahl: 3
+        6
+      - |
+        Anzahl: 3
+        33
+      - |
+        Anzahl: 3
+        3 3
+      - |
+        Anzahl: 3
+        Fehler
+    answer: |
+      Anzahl: 3
+      33
+    explanation: |
+      Die erste Zeile zeigt Frage und Eingabe. Dann: `n` ist der **Text** `"3"`, nicht die Zahl 3. Text mal 2 wiederholt den Text: `"33"`.
+  - type: explain
+    question: |
+      Warum liefert `input()` immer einen `str`, auch wenn man eine Zahl eintippt?
+    options:
+      - text: Python weiß nicht, was du vorhast – `"007"`, `"3.5"` oder `"ja"` sind alles gültige Eingaben. Die Umwandlung entscheidest du.
+        correct: true
+        why: Über die Tastatur kommen immer Zeichen. Ob daraus `int`, `float` oder etwas anderes werden soll, legst du mit `int()` oder `float()` fest.
+      - text: Weil Zahlen bei `input()` verboten sind.
+        correct: false
+        why: Du darfst Ziffern eintippen – sie kommen nur als Text an.
+      - text: Weil `input()` die Eingabe vorher mit `print()` ausgibt.
+        correct: false
+        why: Mit der Ausgabe hat der Typ nichts zu tun.
+  - type: predict
+    intro: |
+      Eingegeben wird `5`.
+    code: |
+      x = input()
+      print(type(x))
+    stdin: ["5"]
+    options:
+      - |
+        5
+        <class 'str'>
+      - |
+        5
+        <class 'int'>
+      - |
+        5
+        <class 'float'>
+    answer: |
+      5
+      <class 'str'>
+    explanation: |
+      Ohne Frage-Text erscheint nur deine Eingabe im Terminal. Der Typ ist – wie immer bei `input()` – `str`.
+  - type: text
+    body: |
+      ## Umwandeln, dann rechnen
+
+      Zum Rechnen wandelst du die Eingabe direkt um:
+
+      ```python
+      anzahl = int(input("Anzahl: "))       # ganze Zahl
+      masse = float(input("Masse in kg: "))  # Kommazahl
+      ```
+
+      Python wertet von innen nach außen aus: erst `input(…)`, dann `int(…)` auf dessen Ergebnis.
+
+      Tippt jemand bei `int(input())` eine Kommazahl wie `2.5` ein, bricht das Programm mit einem `ValueError` ab. Erwartest du Kommazahlen, nimm `float()`.
+  - type: predict
+    intro: |
+      Eingegeben werden nacheinander `4` und `6`.
+    code: |
+      a = input("a: ")
+      b = input("b: ")
+      print(a + b)
+      print(int(a) + int(b))
+    stdin: ["4", "6"]
+    options:
+      - |
+        a: 4
+        b: 6
+        10
+        10
+      - |
+        a: 4
+        b: 6
+        46
+        10
+      - |
+        a: 4
+        b: 6
+        46
+        46
+      - |
+        a: 4
+        b: 6
+        10
+        46
+    answer: |
+      a: 4
+      b: 6
+      46
+      10
+    explanation: |
+      `a + b` verkettet zwei Texte zu `"46"`. Erst nach `int()` sind es Zahlen, die addiert werden.
+  - type: quiz
+    question: |
+      Bei diesem Programm tippt jemand `2.5` ein. Was passiert?
+    code: |
+      n = int(input("Wert: "))
+      print(n * 2)
+    options:
+      - text: "Ein `ValueError`, weil `\"2.5\"` keine ganze Zahl darstellt."
+        correct: true
+        why: "`int()` kann nur Texte wie `\"2\"` oder `\"-17\"` umwandeln. Für Kommazahlen braucht es `float()`."
+      - text: "Es wird `5.0` ausgegeben."
+        correct: false
+        why: Das wäre richtig mit `float(input(…))`.
+      - text: "Es wird `4` ausgegeben, weil `int()` auf 2 abschneidet."
+        correct: false
+        why: Abschneiden klappt nur bei einer **Zahl** (`int(2.5)`), nicht bei einem **Text** (`int("2.5")`).
+      - text: "Es wird `2.52.5` ausgegeben."
+        correct: false
+        why: So sähe es ohne `int()` aus – dann wäre `n` Text und würde wiederholt.
+  - type: fill
+    fading: true
+    prompt: |
+      Das Programm fragt die Masse in kg ab (eingegeben wird `2.5`) und gibt die Gewichtskraft $F = m \cdot g$ aus. Ergänze die Lücke.
+    code: |
+      masse = ___(input("Masse in kg: "))
+      kraft = masse * 9.81
+      print(f"Kraft: {kraft:.1f} N")
+    stdin: ["2.5"]
+    blanks:
+      - answer: float
+        options: [float, int, str, input]
+    expect_output: |
+      Masse in kg: 2.5
+      Kraft: 24.5 N
+    explanation: |
+      `float("2.5")` ergibt 2.5. `int("2.5")` wäre ein `ValueError`, mit `str` bliebe es Text, und ein zweites `input` würde noch einmal nach einer Eingabe fragen.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Das Programm soll die Nummer des **nächsten** Gelenks ausgeben, bricht aber mit einem `TypeError` ab. Repariere es.
+
+      Bei Eingabe `3` soll die letzte Zeile lauten:
+      ```
+      Nächstes Gelenk: 4
+      ```
+    starter: |
+      nummer = input("Gelenk-Nr.: ")
+      print("Nächstes Gelenk:", nummer + 1)
+    stdin: ["3"]
+    solution: |
+      nummer = int(input("Gelenk-Nr.: "))
+      print("Nächstes Gelenk:", nummer + 1)
+    tests:
+      - name: Nächste Nummer
+        code: |
+          assert lines() and lines()[-1] == "Nächstes Gelenk: 4", f"Letzte Zeile sollte 'Nächstes Gelenk: 4' sein, ist {lines()[-1:]}"
+    mutants:
+      - |
+        nummer = input("Gelenk-Nr.: ")
+        print("Nächstes Gelenk:", nummer + "1")
+      - |
+        nummer = input("Gelenk-Nr.: ")
+        print("Nächstes Gelenk:", str(nummer) + str(1))
+      - |
+        nummer = int(input("Gelenk-Nr.: "))
+        print("Nächstes Gelenk:", nummer)
+    hints:
+      - "Teilziel: die Eingabe in eine Zahl umwandeln, bevor gerechnet wird."
+      - "`input()` liefert Text. Text plus Zahl geht nicht – eine ganze Zahl bekommst du mit `int()`."
+      - '`nummer = int(input("Gelenk-Nr.: "))`'
+  - type: exercise
+    mode: make
+    prompt: |
+      Frage Länge und Breite einer rechteckigen Arbeitsfläche in Metern ab (Kommazahlen erlaubt). Wandle beide mit `float()` um und speichere sie wieder in `laenge` und `breite`. Gib dann die Fläche mit zwei Nachkommastellen aus.
+
+      Bei den Eingaben `1.5` und `2` soll die letzte Zeile lauten:
+      ```
+      Fläche: 3.00 m²
+      ```
+    starter: |
+      laenge = input("Länge in m: ")
+      breite = input("Breite in m: ")
+      # umwandeln, Fläche berechnen, ausgeben
+    stdin: ["1.5", "2"]
+    solution: |
+      laenge = float(input("Länge in m: "))
+      breite = float(input("Breite in m: "))
+      flaeche = laenge * breite
+      print(f"Fläche: {flaeche:.2f} m²")
+    tests:
+      - name: Eingaben als Kommazahlen
+        code: |
+          assert type(laenge) == float and laenge == 1.5, f"laenge sollte die Kommazahl 1.5 sein, ist {laenge!r}"
+          assert type(breite) == float and breite == 2.0, f"breite sollte die Kommazahl 2.0 sein, ist {breite!r}"
+      - name: Ausgabe der Fläche
+        code: |
+          assert lines() and lines()[-1] == "Fläche: 3.00 m²", f"Letzte Zeile sollte 'Fläche: 3.00 m²' sein, ist {lines()[-1:]}"
+    mutants:
+      - |
+        laenge = input("Länge in m: ")
+        breite = input("Breite in m: ")
+        flaeche = laenge * breite
+        print(f"Fläche: {flaeche:.2f} m²")
+      - |
+        laenge = int(input("Länge in m: "))
+        breite = int(input("Breite in m: "))
+        flaeche = laenge * breite
+        print(f"Fläche: {flaeche:.2f} m²")
+      - |
+        laenge = float(input("Länge in m: "))
+        breite = float(input("Breite in m: "))
+        flaeche = laenge * breite
+        print(f"Fläche: {flaeche} m²")
+      - |
+        laenge = float(input("Länge in m: "))
+        breite = float(input("Breite in m: "))
+        flaeche = laenge + breite
+        print(f"Fläche: {flaeche:.2f} m²")
+    hints:
+      - "Teilziel: Eingaben umwandeln → Fläche berechnen → formatiert ausgeben."
+      - "Kommazahlen mit `float()`, die Fläche ist Länge mal Breite, zwei Nachkommastellen mit `:.2f` im f-String."
+      - |
+        ```python
+        laenge = float(input("Länge in m: "))
+        breite = float(input("Breite in m: "))
+        ```
+      - |
+        ```python
+        flaeche = laenge * breite
+        print(f"Fläche: {flaeche:.2f} m²")
+        ```
+    explanation: |
+      `int()` würde bei `1.5` mit `ValueError` abbrechen – deshalb `float()`, sobald Kommazahlen möglich sind.
+cards:
+  - id: m01-c-input-ist-text
+    concept: input-eingabe
+    variants:
+      - type: predict
+        intro: Eingegeben wird `7`.
+        code: |
+          k = input("k: ")
+          print(k + k)
+        stdin: ["7"]
+        options:
+          - |
+            k: 7
+            77
+          - |
+            k: 7
+            14
+          - |
+            k: 7
+            7 7
+        answer: |
+          k: 7
+          77
+        explanation: "`input()` liefert den Text `\"7\"`; `+` verkettet."
+      - type: predict
+        intro: Eingegeben wird `7`.
+        code: |
+          k = int(input("k: "))
+          print(k + k)
+        stdin: ["7"]
+        options:
+          - |
+            k: 7
+            14
+          - |
+            k: 7
+            77
+          - |
+            k: 7
+            7 7
+        answer: |
+          k: 7
+          14
+        explanation: Nach `int()` ist `k` eine Zahl, also wird addiert.
+  - id: m01-c-input-umwandeln
+    concept: input-eingabe
+    variants:
+      - type: quiz
+        question: Der Nutzer soll eine Geschwindigkeit wie `0.75` eingeben. Welche Zeile ist richtig?
+        options:
+          - text: '`v = float(input("v: "))`'
+            correct: true
+            why: "`float()` wandelt Texte mit Kommazahlen um."
+          - text: '`v = int(input("v: "))`'
+            correct: false
+            why: '`int("0.75")` bricht mit `ValueError` ab.'
+          - text: '`v = input("v: ")`'
+            correct: false
+            why: Dann ist `v` Text, und Rechnen damit schlägt fehl oder liefert Unsinn.
+      - type: quiz
+        question: 'Was ist der Typ von `input("Zahl: ")`, wenn `42` eingetippt wird?'
+        options:
+          - text: "`str`"
+            correct: true
+            why: "`input()` liefert immer Text."
+          - text: "`int`"
+            correct: false
+            why: Dafür müsste man `int(input(…))` schreiben.
+          - text: "`float`"
+            correct: false
+            why: Auch eine Kommazahl käme als Text an.

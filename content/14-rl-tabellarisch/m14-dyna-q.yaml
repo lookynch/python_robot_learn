@@ -1,0 +1,392 @@
+id: m14-dyna-q
+title: Dyna-Q – lernen, planen, handeln
+minutes: 12
+goals:
+  - Erlebte Übergänge in einem Tabellenmodell speichern
+  - Mit simulierten Übergängen aus dem Modell zusätzliche Q-Updates rechnen
+  - Den Effekt der Planungsschritte auf die Lerngeschwindigkeit messen
+concepts: [dyna-q-planen, q-learning-update]
+steps:
+  - type: text
+    body: |
+      ## Ein Gedächtnis für die Welt
+
+      Q-Learning nutzt jede Erfahrung **einmal** und vergisst sie dann. Dyna-Q (Sutton & Barto, Kapitel 8) merkt sich zusätzlich, was passiert ist:
+
+      $$\text{Modell}(s, a) \leftarrow (r, s')$$
+
+      Das ist ein gelerntes **Modell der Welt** – hier nur eine Tabelle für eine deterministische Umgebung. Nach jedem echten Schritt macht der Agent:
+
+      1. ein normales Q-Learning-Update (**direktes RL**),
+      2. das Modell aktualisieren (**Modelllernen**),
+      3. $n$-mal: ein bekanntes Paar $(s, a)$ zufällig ziehen, $(r, s')$ aus dem Modell holen und damit ein Q-Update rechnen (**Planen**).
+
+      Planen kostet Rechenzeit, aber keine neuen Versuche in der echten Welt.
+  - type: example
+    intro: |
+      Das Labyrinth aus Sutton & Barto (Beispiel 8.1): Schritte kosten nichts, das Ziel bringt +1. Ein paar Zufallsschritte füllen das Modell.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      MAZE = [".......#G",
+              "..#....#.",
+              "S.#....#.",
+              "..#......",
+              ".....#...",
+              "........."]
+      env = GridWorld(MAZE, step_reward=0, goal_reward=1, max_steps=2000)
+      rng = np.random.default_rng(0)
+
+      model = {}
+      s = env.reset()
+      for t in range(6):
+          a = int(rng.integers(4))
+          s2, r, done = env.step(a)
+          model[(s, a)] = (r, s2, done)
+          s = s2
+
+      for (s, a), (r, s2, done) in model.items():
+          print(f"Zustand {s:2d}, {GridWorld.ACTION_NAMES[a]:6s} -> {s2:2d}, r = {r}")
+      env.render(title="Dyna-Labyrinth")
+    subgoals:
+      - lines: [4, 11]
+        label: Labyrinth anlegen
+      - lines: [13, 19]
+        label: Erlebte Übergänge ins Modell schreiben
+      - lines: [21, 23]
+        label: Modell ausgeben
+    after: |
+      Das Modell ist ein Dictionary: Schlüssel `(s, a)`, Wert `(r, s2, done)`. Ein Schritt gegen die Wand steht als `s -> s` drin – auch das ist Wissen über die Welt.
+  - type: predict
+    code: |
+      model = {}
+      model[(0, 1)] = (0, 1, False)
+      model[(1, 1)] = (0, 2, False)
+      model[(0, 1)] = (0, 1, False)
+      model[(2, 3)] = (0, 1, False)
+      print(len(model))
+    options: ["3", "4", "2", "1"]
+    answer: "3"
+    explanation: |
+      Der Schlüssel `(0, 1)` kommt zweimal vor – die zweite Zuweisung **überschreibt** den Eintrag. Für eine deterministische Welt reicht ein Eintrag pro Paar.
+  - type: explain
+    question: |
+      Warum lernt Dyna-Q mit Planen in **viel weniger Episoden** als reines Q-Learning?
+    options:
+      - text: Jede echte Erfahrung wird viele Male wiederverwendet, und der Wert des Ziels breitet sich so schneller rückwärts aus.
+        correct: true
+        why: Q-Learning schiebt den Zielwert pro echtem Durchlauf nur ein Feld zurück; Planen wiederholt diese Updates „im Kopf“.
+      - text: Das Modell kennt Übergänge, die der Agent noch nie erlebt hat.
+        correct: false
+        why: Das Tabellenmodell enthält nur Erlebtes. Es verallgemeinert nicht.
+      - text: Planen ersetzt die Erkundung, deshalb braucht Dyna-Q kein ε-greedy.
+        correct: false
+        why: Dyna-Q erkundet weiterhin ε-greedy; ohne Erkundung würde das Modell nie vollständig.
+      - text: Die Planungsschritte sind genauer als echte Schritte.
+        correct: false
+        why: Sie sind höchstens so gut wie das Modell – in einer deterministischen Welt gleich gut, nicht besser.
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue die Planungsfunktion: $n$-mal ein bekanntes Paar ziehen, Ergebnis aus dem Modell holen, Q-Learning-Update rechnen.
+    lines:
+      - "import numpy as np"
+      - "def plan(Q, model, n, alpha, gamma, rng):"
+      - "    keys = list(model)"
+      - "    for _ in range(n):"
+      - "        s, a = keys[rng.integers(len(keys))]"
+      - "        r, s2, done = model[(s, a)]"
+      - "        target = r if done else r + gamma * np.max(Q[s2])"
+      - "        Q[s, a] += alpha * (target - Q[s, a])"
+    distractors:
+      - "        target = r if done else r + gamma * np.max(Q[s])"
+    tests:
+      - name: Wert des Ziels breitet sich rückwärts aus
+        code: |
+          import numpy as np
+          Q = np.zeros((3, 4))
+          model = {(0, 1): (0.0, 1, False), (1, 1): (1.0, 2, True)}
+          plan(Q, model, 200, 0.5, 0.9, np.random.default_rng(0))
+          assert close(Q[1, 1], 1.0, 1e-3), f"Q[1, 1] sollte gegen 1 gehen (Schritt ins Ziel), ist {Q[1, 1]:.3f}"
+          assert close(Q[0, 1], 0.9, 1e-3), f"Q[0, 1] sollte gegen 0.9 gehen (ein Schritt vor dem Ziel), ist {Q[0, 1]:.3f}"
+          assert np.count_nonzero(Q) == 2, "Nur die beiden Paare aus dem Modell dürfen sich ändern."
+      - name: Ohne Planungsschritte keine Änderung
+        code: |
+          import numpy as np
+          Q = np.zeros((3, 4))
+          plan(Q, {(0, 1): (1.0, 1, True)}, 0, 0.5, 0.9, np.random.default_rng(0))
+          assert np.count_nonzero(Q) == 0, "Mit n = 0 darf sich Q nicht ändern."
+  - type: exercise
+    mode: modify
+    prompt: |
+      `dyna_q` ist bisher reines Q-Learning. Ergänze an den zwei markierten Stellen: (1) den Übergang ins Modell schreiben, (2) `plan` mit `n_plan` Schritten aufrufen. Getestet wird, ob der Agent mit 20 Planungsschritten ab der dritten Episode im Mittel unter 40 Schritte braucht.
+    starter: |
+      import numpy as np
+
+      def plan(Q, model, n, alpha, gamma, rng):
+          keys = list(model)
+          for _ in range(n):
+              s, a = keys[rng.integers(len(keys))]
+              r, s2, done = model[(s, a)]
+              target = r if done else r + gamma * np.max(Q[s2])
+              Q[s, a] += alpha * (target - Q[s, a])
+
+      def dyna_q(env, episodes, n_plan, alpha=0.1, gamma=0.95, eps=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          model = {}
+          steps = []
+          for k in range(episodes):
+              s, done, n = env.reset(), False, 0
+              while not done:
+                  if rng.random() < eps:
+                      a = int(rng.integers(4))
+                  else:
+                      a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+                  s2, r, done = env.step(a)
+                  target = r if done else r + gamma * np.max(Q[s2])
+                  Q[s, a] += alpha * (target - Q[s, a])
+                  # (1) Modell aktualisieren
+                  # (2) planen
+                  s, n = s2, n + 1
+              steps.append(n)
+          return steps
+    solution: |
+      import numpy as np
+
+      def plan(Q, model, n, alpha, gamma, rng):
+          keys = list(model)
+          for _ in range(n):
+              s, a = keys[rng.integers(len(keys))]
+              r, s2, done = model[(s, a)]
+              target = r if done else r + gamma * np.max(Q[s2])
+              Q[s, a] += alpha * (target - Q[s, a])
+
+      def dyna_q(env, episodes, n_plan, alpha=0.1, gamma=0.95, eps=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          model = {}
+          steps = []
+          for k in range(episodes):
+              s, done, n = env.reset(), False, 0
+              while not done:
+                  if rng.random() < eps:
+                      a = int(rng.integers(4))
+                  else:
+                      a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+                  s2, r, done = env.step(a)
+                  target = r if done else r + gamma * np.max(Q[s2])
+                  Q[s, a] += alpha * (target - Q[s, a])
+                  model[(s, a)] = (r, s2, done)
+                  plan(Q, model, n_plan, alpha, gamma, rng)
+                  s, n = s2, n + 1
+              steps.append(n)
+          return steps
+    tests:
+      - name: Planen beschleunigt das Lernen
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          MAZE = [".......#G", "..#....#.", "S.#....#.", "..#......", ".....#...", "........."]
+          env = GridWorld(MAZE, step_reward=0, goal_reward=1, max_steps=2000)
+          steps = dyna_q(env, 15, 20, seed=0)
+          assert len(steps) == 15, f"dyna_q sollte 15 Episodenlängen liefern, liefert {len(steps)}"
+          m = float(np.mean(steps[2:]))
+          assert m < 40, f"Ab Episode 3 braucht der Agent im Mittel {m:.0f} Schritte – mit 20 Planungsschritten sollten es unter 40 sein (kürzester Weg: 14)."
+    mutants:
+      - |
+        import numpy as np
+
+        def plan(Q, model, n, alpha, gamma, rng):
+            keys = list(model)
+            for _ in range(n):
+                s, a = keys[rng.integers(len(keys))]
+                r, s2, done = model[(s, a)]
+                target = r if done else r + gamma * np.max(Q[s2])
+                Q[s, a] += alpha * (target - Q[s, a])
+
+        def dyna_q(env, episodes, n_plan, alpha=0.1, gamma=0.95, eps=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            Q = np.zeros((env.n_states, 4))
+            model = {}
+            steps = []
+            for k in range(episodes):
+                s, done, n = env.reset(), False, 0
+                while not done:
+                    if rng.random() < eps:
+                        a = int(rng.integers(4))
+                    else:
+                        a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+                    s2, r, done = env.step(a)
+                    target = r if done else r + gamma * np.max(Q[s2])
+                    Q[s, a] += alpha * (target - Q[s, a])
+                    model[(s, a)] = (r, s, done)
+                    plan(Q, model, n_plan, alpha, gamma, rng)
+                    s, n = s2, n + 1
+                steps.append(n)
+            return steps
+      - |
+        import numpy as np
+
+        def plan(Q, model, n, alpha, gamma, rng):
+            keys = list(model)
+            for _ in range(n):
+                s, a = keys[rng.integers(len(keys))]
+                r, s2, done = model[(s, a)]
+                target = r if done else r + gamma * np.max(Q[s2])
+                Q[s, a] += alpha * (target - Q[s, a])
+
+        def dyna_q(env, episodes, n_plan, alpha=0.1, gamma=0.95, eps=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            Q = np.zeros((env.n_states, 4))
+            model = {}
+            steps = []
+            for k in range(episodes):
+                s, done, n = env.reset(), False, 0
+                while not done:
+                    if rng.random() < eps:
+                        a = int(rng.integers(4))
+                    else:
+                        a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+                    s2, r, done = env.step(a)
+                    target = r if done else r + gamma * np.max(Q[s2])
+                    Q[s, a] += alpha * (target - Q[s, a])
+                    model[(s, a)] = (r, s2, done)
+                    plan(Q, model, 1, alpha, gamma, rng)
+                    s, n = s2, n + 1
+                steps.append(n)
+            return steps
+    hints:
+      - "Teilziel: Erlebtes speichern, dann im Modell üben."
+      - Das Modell bekommt unter dem Schlüssel `(s, a)` genau das, was die Welt geantwortet hat. `plan` braucht die Anzahl `n_plan`.
+      - "(1) `model[(s, a)] = (r, s2, done)`"
+      - "(2) `plan(Q, model, n_plan, alpha, gamma, rng)`"
+  - type: example
+    title: Wie viel Planen lohnt sich?
+    intro: |
+      Gleiches Labyrinth, $n = 0$ (reines Q-Learning), $5$ und $20$ Planungsschritte pro echtem Schritt. Die y-Achse ist logarithmisch.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      MAZE = [".......#G", "..#....#.", "S.#....#.", "..#......", ".....#...", "........."]
+      env = GridWorld(MAZE, step_reward=0, goal_reward=1, max_steps=2000)
+
+      def dyna_q(n_plan, episodes=20, alpha=0.1, gamma=0.95, eps=0.1):
+          rng = np.random.default_rng(0)
+          Q, model, steps = np.zeros((env.n_states, 4)), {}, []
+          for k in range(episodes):
+              s, done, n = env.reset(), False, 0
+              while not done:
+                  if rng.random() < eps:
+                      a = int(rng.integers(4))
+                  else:
+                      a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+                  s2, r, done = env.step(a)
+                  model[(s, a)] = (r, s2, done)
+                  Q[s, a] += alpha * ((r if done else r + gamma * np.max(Q[s2])) - Q[s, a])
+                  keys = list(model)
+                  for _ in range(n_plan):
+                      ps, pa = keys[rng.integers(len(keys))]
+                      pr, ps2, pd = model[(ps, pa)]
+                      Q[ps, pa] += alpha * ((pr if pd else pr + gamma * np.max(Q[ps2])) - Q[ps, pa])
+                  s, n = s2, n + 1
+              steps.append(n)
+          return Q, steps
+
+      fig = lab.Figure(title="Schritte pro Episode", xlabel="Episode", ylabel="Schritte", logy=True)
+      for n_plan in (0, 5, 20):
+          Q, steps = dyna_q(n_plan)
+          fig.line(steps, label=f"n = {n_plan}")
+      fig.hline(14, label="kürzester Weg")
+      fig.show()
+
+      s, path = env.reset(), [env.start]
+      while not env.is_terminal(s) and len(path) < 40:
+          s, r, done = env.step(int(np.argmax(Q[s])))
+          path.append(s)
+      env.render(values=np.max(Q, axis=1), policy=np.argmax(Q, axis=1), path=path, title="n = 20: Werte und Pfad")
+    heavy: true
+    subgoals:
+      - lines: [12, 18]
+        label: Echten Schritt ausführen
+      - lines: [19, 20]
+        label: Modell und Q aktualisieren
+      - lines: [21, 25]
+        label: Planen
+      - lines: [30, 35]
+        label: Lernkurven vergleichen
+      - lines: [37, 41]
+        label: Greedy-Pfad zeigen
+    after: |
+      Ohne Planen braucht der Agent viele Episoden, mit Planen wenige: In Sutton & Barto erreicht der Agent mit $n = 50$ nach etwa drei Episoden den kürzesten Weg, ohne Planen erst nach etwa 25. Die erste Episode ist bei allen lang – vorher gibt es nichts zu planen. Die Werte fallen vom Ziel aus mit $\gamma = 0.95$ pro Schritt ab.
+  - type: quiz
+    question: |
+      Nach dem Training wird im Labyrinth eine neue Abkürzung frei. Was passiert mit Dyna-Q?
+    options:
+      - text: Es bemerkt die Abkürzung erst, wenn es sie beim Erkunden zufällig ausprobiert – das Modell kennt sie nicht.
+        correct: true
+        why: Das Tabellenmodell enthält nur Erlebtes. Sutton & Barto (Abschnitt 8.3) zeigen genau dieses Problem und Dyna-Q+, das lange nicht besuchte Paare mit einem Bonus belohnt.
+      - text: Es findet sie sofort durch Planen.
+        correct: false
+        why: Planen nutzt nur bekannte Übergänge – neue Wege kommen darin nicht vor.
+      - text: Das Modell aktualisiert sich automatisch aus `env.P`.
+        correct: false
+        why: Dyna-Q ist modellbasiert mit **gelerntem** Modell; `env.P` kennt es nicht.
+  - type: text
+    body: |
+      ## Ausblick: World Models
+
+      Dyna-Q enthält schon das Grundrezept modellbasierten Lernens: **Erfahrung sammeln → Modell lernen → im Modell planen → besser handeln.**
+
+      Für einen Roboterarm reicht eine Tabelle nicht: Zustände sind kontinuierlich, und kein Paar $(s, a)$ kommt zweimal exakt vor. In Modul 16 ersetzt du die Tabelle deshalb durch ein **neuronales Netz**, das $s' \approx f(s, a)$ vorhersagt und auch für nie gesehene Zustände eine Antwort hat – und das Planen erledigt dann MPC mit CEM aus Modul 11.
+cards:
+  - id: m14-c-dyna-schritte
+    concept: dyna-q-planen
+    variants:
+      - type: quiz
+        question: Welche drei Teile hat ein Dyna-Q-Schritt?
+        options:
+          - text: Direktes Q-Update, Modell aktualisieren, $n$ Planungs-Updates aus dem Modell
+            correct: true
+            why: So kombiniert Dyna echtes und simuliertes Lernen.
+          - text: Modell aus `env.P` lesen, Value Iteration, handeln
+            correct: false
+            why: Das wäre Planen mit bekanntem Modell (Modul 13), kein Dyna.
+          - text: Episode sammeln, Returns mitteln, ε senken
+            correct: false
+            why: Das beschreibt Monte-Carlo-Control.
+      - type: quiz
+        question: Was steht im Tabellenmodell von Dyna-Q unter dem Schlüssel $(s, a)$?
+        options:
+          - text: Die zuletzt erlebte Belohnung und der Folgezustand
+            correct: true
+            why: In einer deterministischen Welt reicht das, um den Schritt zu simulieren.
+          - text: Der Q-Wert von $(s, a)$
+            correct: false
+            why: Der steht in `Q`. Das Modell beschreibt die Welt, nicht ihren Wert.
+          - text: Die Wahrscheinlichkeit, $a$ zu wählen
+            correct: false
+            why: Das wäre eine Policy, kein Modell.
+  - id: m14-c-dyna-modell
+    concept: dyna-q-planen
+    variants:
+      - type: predict
+        code: |
+          model = {}
+          for s, a, s2 in [(0, 1, 1), (1, 1, 2), (1, 1, 2), (2, 0, 2)]:
+              model[(s, a)] = (0, s2)
+          print(len(model))
+        options: ["3", "4", "2", "1"]
+        answer: "3"
+        explanation: Der doppelte Übergang `(1, 1)` überschreibt nur seinen Eintrag.
+      - type: predict
+        code: |
+          model = {(0, 1): (0, 1), (1, 2): (1, 5)}
+          r, s2 = model[(1, 2)]
+          print(r, s2)
+        options: ["1 5", "0 1", "(1, 5)", "5 1"]
+        answer: "1 5"
+        explanation: Das Tupel `(1, 5)` wird in `r` und `s2` entpackt.

@@ -1,0 +1,330 @@
+id: m19-gymnasium-mujoco
+title: Gymnasium und MuJoCo – Reacher-v5
+minutes: 11
+goals:
+  - Die Gymnasium-Schnittstelle mit terminated und truncated anwenden
+  - Reacher2D aus lab.envs in eine Gymnasium-artige Umgebung verpacken
+  - Reacher-v5 (MuJoCo) mit Reacher2D vergleichen
+concepts: [gymnasium-api, terminated-truncated]
+steps:
+  - type: text
+    body: |
+      ## Die Standard-Schnittstelle
+
+      **Gymnasium** (Farama Foundation) ist die Standard-API für RL-Umgebungen in Python, aktuell Version 1.4.0 vom 05.10.2026 ([PyPI](https://pypi.org/project/gymnasium/)). Die Schleife sieht so aus ([Doku](https://gymnasium.farama.org/introduction/basic_usage/)) – nur außerhalb dieser App lauffähig:
+
+      ```python
+      import gymnasium as gym
+
+      env = gym.make("Reacher-v5")
+      obs, info = env.reset(seed=0)
+      episode_over = False
+      while not episode_over:
+          action = env.action_space.sample()      # hier kommt deine Policy hin
+          obs, reward, terminated, truncated, info = env.step(action)
+          episode_over = terminated or truncated
+      env.close()
+      ```
+
+      *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Zwei Arten, aufzuhören
+
+      - `terminated = True`: Die Episode ist **wirklich** zu Ende – Ziel erreicht, Pendel umgefallen, Absturz. Danach gibt es keine Zukunft mehr.
+      - `truncated = True`: Die Episode wurde **künstlich** abgebrochen, meist durch ein Zeitlimit. Die Welt ginge eigentlich weiter.
+
+      Reacher-v5 terminiert laut Doku **nie**; jede Episode wird nach 50 Schritten abgeschnitten ([Reacher-Doku](https://gymnasium.farama.org/environments/mujoco/reacher/)). `lab.envs.Reacher2D.step` kennt nur ein `done` – das ist dort „Ziel erreicht“, also `terminated`.
+  - type: explain
+    question: |
+      Warum ist die Unterscheidung für TD-Lernen (Q-Learning, Actor-Critic) wichtig?
+    options:
+      - text: Bei terminated ist der Wert danach 0, das Ziel ist nur $r$; bei truncated geht die Welt weiter, also $r + \gamma V(s')$.
+        correct: true
+        why: Genau. Wer ein Zeitlimit wie ein echtes Ende behandelt, bringt dem Agenten bei, dass kurz vor Schluss „nichts mehr kommt“ – das verfälscht die Werte.
+      - text: Bei truncated muss man die ganze Episode verwerfen.
+        correct: false
+        why: Die Daten sind gültig; nur das Bootstrapping am Ende muss richtig behandelt werden.
+      - text: Die Unterscheidung ist nur für die Anzeige wichtig.
+        correct: false
+        why: Sie ändert das Lernziel und damit, was der Agent lernt.
+      - text: Bei terminated wird $r + \gamma V(s')$ benutzt, bei truncated nur $r$.
+        correct: false
+        why: Genau umgekehrt – nach einem echten Ende gibt es keinen Folgewert.
+  - type: exercise
+    mode: make
+    prompt: |
+      Verpacke `Reacher2D` Gymnasium-artig. Ergänze `step`:
+
+      - Schrittzähler `self.t` um 1 erhöhen,
+      - `terminated` ist das `done` von `Reacher2D` (Ziel erreicht),
+      - `truncated` ist `True`, sobald `self.t` den Wert `self.max_steps` erreicht.
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      class GymReacher:
+          def __init__(self, max_steps=50):
+              self.env = Reacher2D()
+              self.max_steps = max_steps
+              self.t = 0
+
+          def reset(self, seed=None):
+              if seed is not None:
+                  self.env.rng = np.random.default_rng(seed)
+              self.t = 0
+              return self.env.reset(), {}
+
+          def step(self, action):
+              obs, reward, done = self.env.step(action)
+              # Zähler erhöhen, terminated und truncated bestimmen
+              terminated = False
+              truncated = False
+              return obs, reward, terminated, truncated, {}
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      class GymReacher:
+          def __init__(self, max_steps=50):
+              self.env = Reacher2D()
+              self.max_steps = max_steps
+              self.t = 0
+
+          def reset(self, seed=None):
+              if seed is not None:
+                  self.env.rng = np.random.default_rng(seed)
+              self.t = 0
+              return self.env.reset(), {}
+
+          def step(self, action):
+              obs, reward, done = self.env.step(action)
+              self.t += 1
+              terminated = done
+              truncated = self.t >= self.max_steps
+              return obs, reward, terminated, truncated, {}
+    tests:
+      - name: Zeitlimit genau nach max_steps
+        code: |
+          env = GymReacher(max_steps=5)
+          env.reset(seed=0)
+          flags = [env.step(np.zeros(2))[3] for _ in range(5)]
+          assert flags == [False, False, False, False, True], f"truncated nach Schritt 1..5 sollte [F, F, F, F, T] sein, ist {flags}"
+      - name: Kein falsches terminated
+        code: |
+          env = GymReacher(max_steps=3)
+          env.reset(seed=1)
+          term = [env.step(np.zeros(2))[2] for _ in range(3)]
+          assert term == [False, False, False], f"Ohne Zielerreichen darf terminated nicht True sein, ist {term}"
+      - name: Ziel erreicht heißt terminated
+        code: |
+          env = GymReacher(max_steps=10)
+          env.reset()
+          env.env.reset(goal=(2.0, 0.0))
+          _, _, term, trunc, _ = env.step(np.zeros(2))
+          assert term is True or term == True, "Spitze liegt auf dem Ziel – terminated sollte True sein."
+          assert not trunc, "Nach einem Schritt von 10 darf truncated noch nicht True sein."
+      - name: reset setzt den Zähler zurück
+        code: |
+          env = GymReacher(max_steps=2)
+          env.reset(seed=0)
+          env.step(np.zeros(2)); env.step(np.zeros(2))
+          env.reset(seed=0)
+          trunc = env.step(np.zeros(2))[3]
+          assert not trunc, "Nach reset() sollte der erste Schritt nicht truncated sein."
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        class GymReacher:
+            def __init__(self, max_steps=50):
+                self.env = Reacher2D()
+                self.max_steps = max_steps
+                self.t = 0
+            def reset(self, seed=None):
+                if seed is not None:
+                    self.env.rng = np.random.default_rng(seed)
+                self.t = 0
+                return self.env.reset(), {}
+            def step(self, action):
+                obs, reward, done = self.env.step(action)
+                self.t += 1
+                return obs, reward, done, self.t > self.max_steps, {}
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        class GymReacher:
+            def __init__(self, max_steps=50):
+                self.env = Reacher2D()
+                self.max_steps = max_steps
+                self.t = 0
+            def reset(self, seed=None):
+                if seed is not None:
+                    self.env.rng = np.random.default_rng(seed)
+                self.t = 0
+                return self.env.reset(), {}
+            def step(self, action):
+                obs, reward, done = self.env.step(action)
+                self.t += 1
+                truncated = self.t >= self.max_steps
+                return obs, reward, done or truncated, truncated, {}
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        class GymReacher:
+            def __init__(self, max_steps=50):
+                self.env = Reacher2D()
+                self.max_steps = max_steps
+                self.t = 0
+            def reset(self, seed=None):
+                if seed is not None:
+                    self.env.rng = np.random.default_rng(seed)
+                return self.env.reset(), {}
+            def step(self, action):
+                obs, reward, done = self.env.step(action)
+                self.t += 1
+                return obs, reward, done, self.t >= self.max_steps, {}
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        class GymReacher:
+            def __init__(self, max_steps=50):
+                self.env = Reacher2D()
+                self.max_steps = max_steps
+                self.t = 0
+            def reset(self, seed=None):
+                if seed is not None:
+                    self.env.rng = np.random.default_rng(seed)
+                self.t = 0
+                return self.env.reset(), {}
+            def step(self, action):
+                obs, reward, done = self.env.step(action)
+                self.t += 1
+                return obs, reward, self.t >= self.max_steps, done, {}
+    hints:
+      - "Teilziel: zählen → echtes Ende übernehmen → Zeitlimit prüfen."
+      - "`done` von Reacher2D heißt „Ziel erreicht“ – das ist ein echtes Ende. Das Zeitlimit ist ein künstlicher Abbruch."
+      - "`self.t += 1`, dann `terminated = done` und `truncated = self.t >= self.max_steps`"
+  - type: text
+    body: |
+      ## Reacher-v5 vs. Reacher2D
+
+      | | `lab.envs.Reacher2D` | MuJoCo `Reacher-v5` |
+      |---|---|---|
+      | Physik | kinematisch | Starrkörperdynamik (MuJoCo) |
+      | Aktion | Gelenk**geschwindigkeiten** (rad/s) | Gelenk**momente** (N·m), je in $[-1, 1]$ |
+      | Beobachtung | $[q_1, q_2, g_x, g_y]$ | 10 Werte: $\cos q$, $\sin q$, Ziel, $\dot q$, Vektor Spitze→Ziel |
+      | Belohnung | $-\lVert p - g \rVert - 0{,}01\lVert u\rVert^2$ | $-\lVert p - g \rVert - 0{,}1\lVert a\rVert^2$ |
+      | Zeitschritt | 0,05 s | 0,02 s (2 × 0,01 s) |
+      | Ende | done bei Ziel | nur truncated nach 50 Schritten |
+
+      Quelle: [Reacher-Doku](https://gymnasium.farama.org/environments/mujoco/reacher/); Stand: Oktober 2026.
+  - type: quiz
+    question: |
+      Warum enthält die Beobachtung von Reacher-v5 $\cos q$ und $\sin q$ statt des Winkels $q$ selbst?
+    options:
+      - text: Der Winkel springt bei ±π, obwohl der Arm sich kaum bewegt; cos und sin ändern sich stetig.
+        correct: true
+        why: Für ein neuronales Netz sind $-3{,}14$ und $+3{,}14$ weit auseinander, physikalisch aber fast dieselbe Stellung. cos/sin vermeiden diesen Sprung.
+      - text: MuJoCo kann intern keine Winkel speichern.
+        correct: false
+        why: MuJoCo rechnet natürlich mit Gelenkwinkeln; die Darstellung ist eine Wahl für das Lernen.
+      - text: Damit die Beobachtung kürzer wird.
+        correct: false
+        why: Sie wird sogar länger (2 Werte pro Winkel).
+  - type: text
+    body: |
+      ## MuJoCo und MJX
+
+      **MuJoCo** ist die Physik-Engine hinter Reacher-v5, Apache-2.0-lizenziert, aktuell Version 3.16.0 vom 14.10.2026 ([PyPI](https://pypi.org/project/mujoco/)). In Colab genügt:
+
+      ```bash
+      pip install "gymnasium[mujoco]"
+      ```
+
+      **MJX** ist eine JAX-Variante von MuJoCo, die Tausende Umgebungen parallel auf GPU/TPU rechnet (`pip install mujoco-mjx`). Für **eine** Szene ist MJX laut Doku langsamer als normales MuJoCo, und nicht alle Features werden unterstützt ([MJX-Doku](https://mujoco.readthedocs.io/en/stable/mjx.html)). Fang mit normalem MuJoCo an. *Stand: Oktober 2026.*
+  - type: quiz
+    question: |
+      Du überträgst deinen MPC-Planer von `Reacher2D` auf `Reacher-v5`. Was ändert sich grundlegend?
+    options:
+      - text: Die Aktion ist ein Drehmoment; der Arm hat Trägheit, also brauchst du ein Modell der Dynamik mit Geschwindigkeiten im Zustand.
+        correct: true
+        why: Bei Reacher2D setzt die Aktion direkt die Geschwindigkeit; bei Reacher-v5 beschleunigt sie nur – wie beim TwoLinkArm aus Modul 9.
+      - text: Nichts, nur der Name der Umgebung.
+        correct: false
+        why: Aktionsbedeutung, Beobachtung und Zeitschritt sind verschieden.
+      - text: MPC funktioniert mit MuJoCo grundsätzlich nicht.
+        correct: false
+        why: MPC braucht nur ein (gelerntes oder echtes) Modell; das kann man auch für Reacher-v5 lernen, wie in Modul 16.
+cards:
+  - id: m19-c-step-tupel
+    concept: gymnasium-api
+    variants:
+      - type: quiz
+        question: |
+          Was liefert `env.step(action)` in Gymnasium?
+        options:
+          - text: "`(obs, reward, terminated, truncated, info)`"
+            correct: true
+            why: Fünf Werte; das Ende ist in terminated und truncated aufgeteilt.
+          - text: "`(obs, reward, done)`"
+            correct: false
+            why: So sieht `lab.envs` aus (und frühere Gym-Versionen mit vier Werten inkl. info).
+          - text: "`(obs, info)`"
+            correct: false
+            why: Das liefert `env.reset()`.
+      - type: quiz
+        question: |
+          Wann endet die Schleife `while not episode_over` in Gymnasium korrekt?
+        options:
+          - text: Wenn `terminated or truncated` wahr ist
+            correct: true
+            why: Beide Fälle beenden die Episode – nur ihre Bedeutung für das Lernen ist verschieden.
+          - text: Nur wenn `terminated` wahr ist
+            correct: false
+            why: Bei Reacher-v5 wäre das nie der Fall – die Schleife liefe endlos.
+          - text: Wenn `reward` positiv wird
+            correct: false
+            why: Bei Reacher-v5 ist die Belohnung immer ≤ 0; sie entscheidet nicht über das Ende.
+  - id: m19-c-term-trunc
+    concept: terminated-truncated
+    variants:
+      - type: quiz
+        question: |
+          Ein CartPole-Stab fällt um. Welche Flags sind gesetzt?
+        options:
+          - text: terminated = True, truncated = False
+            correct: true
+            why: Umfallen ist ein echtes Ende der Aufgabe.
+          - text: terminated = False, truncated = True
+            correct: false
+            why: truncated wäre ein Zeitlimit, kein Umfallen.
+          - text: beide False
+            correct: false
+            why: Dann würde die Episode weiterlaufen.
+      - type: quiz
+        question: |
+          Ein Reacher-v5-Arm wird nach 50 Schritten gestoppt. Welches TD-Ziel ist für den letzten Übergang richtig?
+        options:
+          - text: $r + \gamma V(s')$, weil nur abgeschnitten wurde
+            correct: true
+            why: Die Welt ginge weiter; der Folgewert existiert.
+          - text: Nur $r$, weil die Episode zu Ende ist
+            correct: false
+            why: Das gilt nur bei terminated, nicht bei einem Zeitlimit.
+          - text: Der Übergang wird verworfen.
+            correct: false
+            why: Er ist ein gültiger Datenpunkt.
+      - type: quiz
+        question: |
+          Ein Roboter erreicht sein Ziel, und die Aufgabe ist damit erledigt. Welches TD-Ziel gilt für diesen letzten Übergang?
+        options:
+          - text: Nur $r$
+            correct: true
+            why: terminated – es gibt keinen Folgezustand mit Wert.
+          - text: $r + \gamma V(s')$
+            correct: false
+            why: Nach einem echten Ende gibt es keine Zukunft, die man bootstrappen könnte.
+          - text: $\gamma V(s')$
+            correct: false
+            why: Die Belohnung des letzten Schritts gehört immer dazu.

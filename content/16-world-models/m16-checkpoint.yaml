@@ -1,0 +1,216 @@
+id: m16-checkpoint
+title: "Checkpoint: World Models I"
+kind: checkpoint
+minutes: 12
+goals:
+  - Gelerntes Dynamikmodell, Compounding Error, Ensembles und Planen auf dem Modell sicher anwenden
+concepts: [wm-world-model, wm-modellbasiert, wm-datensatz, wm-delta-vorhersage, wm-normalisierung, wm-compounding, wm-ensemble, wm-mpc-gelernt, wm-modell-ausnutzung, wm-iteration]
+steps:
+  - type: quiz
+    question: |
+      Ein Dynamikmodell soll für den Reacher $s' $ aus $(s, a)$ vorhersagen. Warum lässt man das Netz besser $\Delta s = s' - s$ ausgeben?
+    options:
+      - text: Weil $s'$ fast gleich $s$ ist – das Netz muss dann nur die kleine Änderung lernen, das Kopieren übernimmt `s +`.
+        correct: true
+        why: Kleine, einfache Ziele; im Versuch des Moduls war der Fehler damit etwa 40-mal kleiner.
+      - text: Weil $\Delta s$ keine Normalisierung braucht.
+        correct: false
+        why: Gerade $\Delta s$ ist winzig und muss normalisiert werden.
+      - text: Weil man mit $\Delta s$ keine Validierungsdaten braucht.
+        correct: false
+        why: Validierung auf getrennten Episoden ist immer nötig.
+  - type: predict
+    code: |
+      def model(s, a):
+          return 3 * s - a
+
+      s = 1
+      states = [s]
+      for a in [1, 2]:
+          s = model(s, a)
+          states.append(s)
+      print(states)
+    options: ["[1, 2, 4]", "[2, 4]", "[1, 2, 1]", "[1, 3, 9]"]
+    answer: "[1, 2, 4]"
+    explanation: 1 → 3·1 − 1 = 2 → 3·2 − 2 = 4. Der Startzustand gehört zum Rollout.
+  - type: fill
+    prompt: |
+      Ergänze die spaltenweise Normalisierung, sodass jede Spalte Mittelwert 0 und Streuung 1 hat.
+    code: |
+      import numpy as np
+      X = np.array([[2.0, 100.0], [4.0, 300.0]])
+      mx, sx = X.mean(axis=___), X.std(axis=0)
+      print((X - ___) / sx)
+    blanks:
+      - answer: "0"
+        options: ["0", "1", "None"]
+      - answer: mx
+        options: [mx, sx, "X.mean()"]
+    expect_output: |
+      [[-1. -1.]
+       [ 1.  1.]]
+  - type: quiz
+    question: |
+      Ein Modell hat auf Validierungsdaten einen Einschrittfehler der Spitze von 1 cm. Nach 30 Schritten offener Schleife liegt die Vorhersage 15 cm daneben. Was ist die Ursache?
+    options:
+      - text: Compounding Error – jede Vorhersage wird zur Eingabe des nächsten Schritts, Fehler werden weitergereicht und das Modell gerät in ungewohnte Zustände.
+        correct: true
+        why: Das ist normal für gelernte Modelle; dagegen helfen kurze Horizonte und Neuplanen.
+      - text: Das Modell ist überangepasst; auf Validierungsdaten wäre der Fehler größer.
+        correct: false
+        why: Der Einschrittfehler wurde ja gerade auf Validierungsdaten gemessen.
+      - text: Ein Fehler im Code – Mehrschrittfehler müssen genau 30 cm (30 × 1 cm) sein.
+        correct: false
+        why: Fehler können sich verstärken oder dämpfen; ein exaktes Vielfaches ist nicht zu erwarten.
+  - type: parsons
+    prompt: |
+      Berechne die Kosten von zwei Aktionsfolgen (Länge 2) in einem Modell: Nach **jedem** Schritt wird der Abstand zum Ziel 2,0 addiert. Erwartete Ausgabe: `[1. 3.]`.
+    lines:
+      - "import numpy as np"
+      - "def model(s, a):"
+      - "    return s + a"
+      - "U = np.array([[[1.0], [1.0]], [[0.5], [0.0]]])"
+      - "S = np.zeros((2, 1))"
+      - "cost = np.zeros(2)"
+      - "for t in range(2):"
+      - "    S = model(S, U[:, t])"
+      - "    cost += np.abs(S[:, 0] - 2.0)"
+      - "print(cost)"
+    distractors:
+      - "    S = model(np.zeros((2, 1)), U[:, t])"
+      - "    cost = np.abs(S[:, 0] - 2.0)"
+    expect_output: "[1. 3.]"
+  - type: predict
+    intro: |
+      `P` enthält die Vorhersagen von 3 Ensemble-Mitgliedern (Zeilen) für 2 Zustände (Spalten).
+    code: |
+      import numpy as np
+      P = np.array([[1.0, 4.0], [1.0, 2.0], [1.0, 0.0]])
+      print(np.round(P.std(axis=0), 2))
+    options: ["[0.   1.63]", "[1.5 0.5 0.5]", "[1. 2.]", "[1.63 0.  ]"]
+    answer: "[0.   1.63]"
+    explanation: |
+      Streuung über die Modelle (Achse 0): Beim ersten Zustand sind sich alle einig (0), beim zweiten nicht (1,63). Dort lagen vermutlich keine Trainingsdaten.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe einen CEM-Schritt `cem_step(mu, sd, cost_fn, rng, n=200, n_elite=20)`:
+
+      1. Ziehe `n` Stichproben `U = mu + sd * rng.standard_normal((n,) + np.shape(mu))`.
+      2. Wähle die `n_elite` Stichproben mit den **niedrigsten** Kosten `cost_fn(U)` (ein Wert pro Stichprobe).
+      3. Gib Mittelwert und Standardabweichung der Elite (über Achse 0) zurück.
+    starter: |
+      import numpy as np
+
+      def cem_step(mu, sd, cost_fn, rng, n=200, n_elite=20):
+          # dein Code
+          pass
+
+      def cost(U):
+          return np.sum((U - np.array([3.0, -1.0])) ** 2, axis=-1)
+
+      rng = np.random.default_rng(0)
+      mu, sd = np.zeros(2), 2 * np.ones(2)
+      for _ in range(10):
+          mu, sd = cem_step(mu, sd, cost, rng)
+      print(np.round(mu, 2))
+    solution: |
+      import numpy as np
+
+      def cem_step(mu, sd, cost_fn, rng, n=200, n_elite=20):
+          U = mu + sd * rng.standard_normal((n,) + np.shape(mu))
+          elite = U[np.argsort(cost_fn(U))[:n_elite]]
+          return elite.mean(axis=0), elite.std(axis=0)
+
+      def cost(U):
+          return np.sum((U - np.array([3.0, -1.0])) ** 2, axis=-1)
+
+      rng = np.random.default_rng(0)
+      mu, sd = np.zeros(2), 2 * np.ones(2)
+      for _ in range(10):
+          mu, sd = cem_step(mu, sd, cost, rng)
+      print(np.round(mu, 2))
+    tests:
+      - name: Formen
+        code: |
+          def _c(U):
+              return np.sum(U ** 2, axis=-1)
+          m, s = cem_step(np.zeros(3), np.ones(3), _c, np.random.default_rng(1))
+          assert np.shape(m) == (3,) and np.shape(s) == (3,), f"Erwartet zwei Arrays der Form (3,), bekommen {np.shape(m)} und {np.shape(s)}"
+      - name: Findet das Minimum
+        code: |
+          def _c(U):
+              return np.sum((U - np.array([-2.0, 0.5])) ** 2, axis=-1)
+          r = np.random.default_rng(2)
+          m, s = np.zeros(2), 2 * np.ones(2)
+          for _ in range(10):
+              m, s = cem_step(m, s, _c, r)
+          assert close(m, [-2.0, 0.5], 0.1), f"Nach 10 Schritten sollte mu nahe [-2, 0.5] liegen, ist {np.round(m, 3)}"
+      - name: Verteilung zieht sich zusammen
+        code: |
+          def _c(U):
+              return np.sum((U - 1.0) ** 2, axis=-1)
+          r = np.random.default_rng(3)
+          m, s = np.zeros(1), 2 * np.ones(1)
+          for _ in range(8):
+              m, s = cem_step(m, s, _c, r)
+          assert np.all(s < 0.3), f"Die Standardabweichung der Elite sollte schrumpfen, ist {s}"
+      - name: Nutzt Horizont-Folgen
+        code: |
+          def _c(U):
+              return np.sum((U - 0.5) ** 2, axis=(1, 2))
+          m, s = cem_step(np.zeros((4, 2)), np.ones((4, 2)), _c, np.random.default_rng(4))
+          assert np.shape(m) == (4, 2), f"Für Aktionsfolgen der Form (4, 2) soll mu dieselbe Form haben, ist {np.shape(m)}"
+    mutants:
+      - |
+        import numpy as np
+        def cem_step(mu, sd, cost_fn, rng, n=200, n_elite=20):
+            U = mu + sd * rng.standard_normal((n,) + np.shape(mu))
+            elite = U[np.argsort(cost_fn(U))[-n_elite:]]
+            return elite.mean(axis=0), elite.std(axis=0)
+      - |
+        import numpy as np
+        def cem_step(mu, sd, cost_fn, rng, n=200, n_elite=20):
+            U = mu + sd * rng.standard_normal((n,) + np.shape(mu))
+            elite = U[np.argsort(cost_fn(U))[:n_elite]]
+            return elite.mean(axis=0), sd
+      - |
+        import numpy as np
+        def cem_step(mu, sd, cost_fn, rng, n=200, n_elite=20):
+            U = mu + sd * rng.standard_normal((n,) + np.shape(mu))
+            return U.mean(axis=0), U.std(axis=0)
+    hints:
+      - "Teilziel: Stichproben ziehen → nach Kosten sortieren → Elite zusammenfassen."
+      - "`np.argsort(kosten)` liefert die Indizes von klein nach groß; die ersten `n_elite` sind die besten."
+      - |
+        ```python
+        U = mu + sd * rng.standard_normal((n,) + np.shape(mu))
+        elite = U[np.argsort(cost_fn(U))[:n_elite]]
+        ```
+      - "`return elite.mean(axis=0), elite.std(axis=0)`"
+  - type: quiz
+    question: |
+      Ein Ensemble aus 5 Modellen ist sich bei einem Zustand $s^*$ stark uneinig. Wie sollte ein Planer damit umgehen?
+    options:
+      - text: Pläne durch $s^*$ als riskant behandeln – z. B. die Kosten über die Modelle mitteln (wie PETS) oder dort neue Daten sammeln.
+        correct: true
+        why: Große Streuung bedeutet hohe epistemische Unsicherheit – das Modell weiß dort wenig.
+      - text: Das Modell mit der günstigsten Vorhersage nehmen.
+        correct: false
+        why: Das ist maximale Modellausnutzung – genau der optimistische Fehler wird gewählt.
+      - text: Die Streuung ignorieren; der Mittelwert ist immer richtig.
+        correct: false
+        why: Der Mittelwert kann außerhalb der Daten genauso falsch sein wie jedes einzelne Modell.
+  - type: quiz
+    question: |
+      Ein Arm startet immer bei $q = (0, 0)$. Ein Modell aus 120 Zufallsübergängen führt MPC zu einem fernen Ziel – der Arm verfehlt es. Was ist der beste nächste Schritt?
+    options:
+      - text: Die Übergänge der MPC-Episode zum Datensatz hinzufügen, neu trainieren und wieder planen.
+        correct: true
+        why: Die Lernschleife sammelt Daten dort, wo der Planer hinwill.
+      - text: Mehr CEM-Iterationen pro Schritt.
+        correct: false
+        why: Besser im falschen Modell zu optimieren hilft nicht – eher im Gegenteil.
+      - text: Den Planungshorizont auf 100 Schritte erhöhen.
+        correct: false
+        why: Längere offene Rollouts vergrößern den Compounding Error.

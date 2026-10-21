@@ -1,0 +1,439 @@
+id: m11-swing-up
+title: "Höhepunkt: Pendel-Swing-up mit MPPI"
+minutes: 12
+goals:
+  - MPPI und MPC zu einem Echtzeit-Planer verbinden
+  - Den Plan per Warmstart von Schritt zu Schritt weiterverwenden
+  - Das Pendel aus der hängenden Lage nach oben schwingen und halten
+concepts: [plan-warmstart, plan-unteraktuiert, plan-mppi, plan-mpc]
+steps:
+  - type: text
+    body: |
+      ## Ein schwacher Motor muss Schwung holen
+
+      Das Pendel hängt, der Motor schafft höchstens 2 N·m, die Schwerkraft bis zu 5 N·m. Kein PD-Regler und kein konstantes Moment bringen es direkt hoch – ein Planer muss **erfinden**, dass Hin- und Herpumpen Energie aufbaut.
+
+      Rezept: MPC mit **einem** MPPI-Update pro Zeitschritt (64 Samples, Horizont 15 Schritte = 0,75 s). Damit ein einziges Update reicht, braucht es einen Trick – den **Warmstart**: Der Plan von eben ist auch jetzt noch fast richtig, nur um einen Schritt verschoben.
+
+      $$
+      \mu = (u_0, u_1, \dots, u_{H-1}) \;\xrightarrow{u_0 \text{ ausführen}}\; (u_1, \dots, u_{H-1}, 0)
+      $$
+
+      Zuerst ohne Warmstart – als Vergleich.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          c = f(A)
+          w = np.exp(-(c - c.min()) / lam)
+          return np.average(A, axis=0, weights=w)
+
+      env = Pendulum()
+      s = env.reset()
+      rng = np.random.default_rng(0)
+      states = [s]
+      for k in range(100):
+          mu = np.zeros(15)
+          def f(A):
+              return rollout_costs(env.dynamics, env.cost, s, A)
+          mu = mppi_update(f, mu, 1.0, 64, 1.0, rng)
+          s = env.dynamics(s, mu[0])
+          states.append(s)
+
+      states = np.array(states)
+      print("max |θ| in den letzten 20 Schritten:", round(float(np.max(np.abs(angle_normalize(states[-20:, 0])))), 2))
+      env.render(states, title="MPPI ohne Warmstart")
+    subgoals:
+      - lines: [4, 16]
+        label: Bausteine aus den letzten Lektionen
+      - lines: [22, 23]
+        label: Jeden Schritt kalt starten
+      - lines: [24, 26]
+        label: Ein MPPI-Update vom aktuellen Zustand
+      - lines: [27, 28]
+        label: Erste Aktion ausführen
+    after: |
+      Das Pendel wackelt unten herum (max $|\theta| \approx 2.5$ rad). Ein einziges Update mit 64 Samples aus $N(0, 1)$ ist zu wenig, um jedes Mal von vorn eine gute 15-Schritte-Folge zu finden. `def f(A)` steht **in** der Schleife, damit `f` immer vom aktuellen `s` aus simuliert.
+  - type: predict
+    code: |
+      import numpy as np
+      mu = np.array([1.0, 2.0, 3.0])
+      mu = np.append(mu[1:], 0.0)
+      print(mu)
+    options: ["[2. 3. 0.]", "[0. 1. 2.]", "[1. 2. 3. 0.]", "[0. 2. 3.]"]
+    answer: "[2. 3. 0.]"
+    explanation: |
+      `mu[1:]` wirft die gerade ausgeführte erste Aktion weg, `np.append(…, 0.0)` hängt hinten einen neuen Wert an – die Länge bleibt $H$. `[0. 1. 2.]` wäre die Verschiebung in die falsche Richtung.
+  - type: explain
+    question: |
+      Warum hilft der Warmstart so stark?
+    options:
+      - text: Jedes Update verfeinert den Plan von gestern weiter – über viele Zeitschritte summieren sich die Verbesserungen, statt jedes Mal neu bei null zu beginnen.
+        correct: true
+        why: MPC mit Warmstart verteilt die Optimierung über die Zeit. Ein Update pro Schritt genügt dann, weil die Startverteilung schon in der Nähe einer guten Lösung liegt.
+      - text: Weil der verschobene Plan genau optimal ist
+        correct: false
+        why: Er ist nur ein guter Startpunkt – am Ende fehlt ein Schritt (mit 0 aufgefüllt), und der Zustand weicht ab.
+      - text: Weil dadurch mehr Samples gezogen werden
+        correct: false
+        why: Die Samplezahl bleibt 64; nur ihr Mittelpunkt ist besser gewählt.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ändere `swing_up` so, dass der Plan **warm gestartet** wird:
+
+      - die Zeile, die `mu` jeden Schritt auf null setzt, entfernen,
+      - nach dem Ausführen von `u` den Plan um einen Schritt verschieben und hinten `0.0` anhängen.
+
+      Ziel: Nach 100 Schritten (5 s) steht das Pendel oben.
+    starter: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          c = f(A)
+          w = np.exp(-(c - c.min()) / lam)
+          return np.average(A, axis=0, weights=w)
+
+      def swing_up(T, N, H, lam, rng):
+          env = Pendulum()
+          s = env.reset()
+          mu = np.zeros(H)
+          states, actions = [s], []
+          for k in range(T):
+              mu = np.zeros(H)
+              def f(A):
+                  return rollout_costs(env.dynamics, env.cost, s, A)
+              mu = mppi_update(f, mu, 1.0, N, lam, rng)
+              u = mu[0]
+              s = env.dynamics(s, u)
+              states.append(s)
+              actions.append(u)
+          return np.array(states), np.array(actions)
+
+      states, actions = swing_up(100, 64, 15, 1.0, np.random.default_rng(0))
+      Pendulum().render(states, title="Swing-up mit MPPI")
+    solution: |
+      import numpy as np
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          c = f(A)
+          w = np.exp(-(c - c.min()) / lam)
+          return np.average(A, axis=0, weights=w)
+
+      def swing_up(T, N, H, lam, rng):
+          env = Pendulum()
+          s = env.reset()
+          mu = np.zeros(H)
+          states, actions = [s], []
+          for k in range(T):
+              def f(A):
+                  return rollout_costs(env.dynamics, env.cost, s, A)
+              mu = mppi_update(f, mu, 1.0, N, lam, rng)
+              u = mu[0]
+              s = env.dynamics(s, u)
+              states.append(s)
+              actions.append(u)
+              mu = np.append(mu[1:], 0.0)
+          return np.array(states), np.array(actions)
+
+      states, actions = swing_up(100, 64, 15, 1.0, np.random.default_rng(0))
+      Pendulum().render(states, title="Swing-up mit MPPI")
+    tests:
+      - name: Zustände passen zum Modell
+        code: |
+          S_t, U_t = swing_up(10, 16, 5, 1.0, np.random.default_rng(3))
+          env_t = Pendulum()
+          assert np.shape(S_t) == (11, 2) and np.shape(U_t) == (10,), f"Formen (11, 2) und (10,) erwartet, bekommen {np.shape(S_t)} und {np.shape(U_t)}"
+          for k in range(10):
+              assert close(S_t[k + 1], env_t.dynamics(S_t[k], U_t[k])), f"states[{k + 1}] passt nicht zu dynamics(states[{k}], actions[{k}])"
+      - name: Pendel steht nach 5 s oben
+        code: |
+          S_t, U_t = swing_up(100, 64, 15, 1.0, np.random.default_rng(0))
+          rest = np.abs(angle_normalize(S_t[-20:, 0]))
+          assert rest.max() < 0.3, f"In den letzten 20 Schritten sollte |θ| < 0.3 rad sein, maximal {rest.max():.2f} rad – wird der Plan warm gestartet?"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Pendulum, angle_normalize
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            c = f(A)
+            w = np.exp(-(c - c.min()) / lam)
+            return np.average(A, axis=0, weights=w)
+        def swing_up(T, N, H, lam, rng):
+            env = Pendulum()
+            s = env.reset()
+            mu = np.zeros(H)
+            states, actions = [s], []
+            for k in range(T):
+                def f(A):
+                    return rollout_costs(env.dynamics, env.cost, s, A)
+                mu = mppi_update(f, mu, 1.0, N, lam, rng)
+                u = mu[0]
+                s = env.dynamics(s, u)
+                states.append(s)
+                actions.append(u)
+                mu = np.append(0.0, mu[:-1])
+            return np.array(states), np.array(actions)
+      - |
+        import numpy as np
+        from lab.envs import Pendulum, angle_normalize
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            c = f(A)
+            w = np.exp(-(c - c.min()) / lam)
+            return np.average(A, axis=0, weights=w)
+        def swing_up(T, N, H, lam, rng):
+            env = Pendulum()
+            s = env.reset()
+            mu = np.zeros(H)
+            states, actions = [s], []
+            for k in range(T):
+                def f(A):
+                    return rollout_costs(env.dynamics, env.cost, s, A)
+                mu = mppi_update(f, mu, 1.0, N, lam, rng)
+                u = mu[0]
+                s = env.dynamics(s, u)
+                states.append(s)
+                actions.append(u)
+            return np.array(states), np.array(actions)
+      - |
+        import numpy as np
+        from lab.envs import Pendulum, angle_normalize
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def mppi_update(f, mu, sigma, N, lam, rng):
+            A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+            c = f(A)
+            w = np.exp(-(c - c.min()) / lam)
+            return np.average(A, axis=0, weights=w)
+        def swing_up(T, N, H, lam, rng):
+            env = Pendulum()
+            s = env.reset()
+            mu = np.zeros(H)
+            states, actions = [s], []
+            for k in range(T):
+                def f(A):
+                    return rollout_costs(env.dynamics, env.cost, s, A)
+                mu = mppi_update(f, mu, 1.0, N, lam, rng)
+                u = mu[-1]
+                s = env.dynamics(s, u)
+                states.append(s)
+                actions.append(u)
+                mu = np.append(mu[1:], 0.0)
+            return np.array(states), np.array(actions)
+    hints:
+      - "Teilziel: `mu` über die Schleife hinweg behalten und nach jedem ausgeführten Schritt verschieben."
+      - Die Zeile `mu = np.zeros(H)` **in** der Schleife wirft den alten Plan weg. Die Verschiebung kommt nach `actions.append(u)`.
+      - "`mu[1:]` ist der Plan ohne die gerade ausgeführte Aktion."
+      - "Als letzte Zeile im Schleifenrumpf: `mu = np.append(mu[1:], 0.0)`"
+  - type: example
+    intro: |
+      Was hat der Planer erfunden? Wir zeichnen Winkel und **wirksames** Moment (das Modell begrenzt $u$ auf ±2 N·m; der Mittelwert $\mu$ darf darüber liegen).
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum, angle_normalize
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def mppi_update(f, mu, sigma, N, lam, rng):
+          A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+          c = f(A)
+          w = np.exp(-(c - c.min()) / lam)
+          return np.average(A, axis=0, weights=w)
+
+      env = Pendulum()
+      s = env.reset()
+      rng = np.random.default_rng(0)
+      mu = np.zeros(15)
+      states, actions = [s], []
+      for k in range(100):
+          def f(A):
+              return rollout_costs(env.dynamics, env.cost, s, A)
+          mu = mppi_update(f, mu, 1.0, 64, 1.0, rng)
+          s = env.dynamics(s, mu[0])
+          states.append(s)
+          actions.append(mu[0])
+          mu = np.append(mu[1:], 0.0)
+
+      theta = angle_normalize(np.array(states)[:, 0])
+      print("zum ersten Mal oben (|θ| < 0.3) nach Schritt", int(np.argmax(np.abs(theta) < 0.3)))
+      t = np.arange(101) * env.dt
+      fig = lab.Figure(title="Swing-up", xlabel="t in s", ylabel="θ in rad / u in N·m")
+      fig.line(theta, x=t, label="θ (0 = oben)")
+      fig.line(np.clip(actions, -2, 2), x=t[:-1], label="wirksames u")
+      fig.hline(0.0)
+      fig.show()
+    subgoals:
+      - lines: [22, 31]
+        label: MPPI-MPC mit Warmstart
+      - lines: [33, 34]
+        label: Erfolg messen
+      - lines: [35, 39]
+        label: Winkel und Moment plotten
+    after: |
+      Das Moment springt fast nur zwischen −2 und +2 N·m (**Bang-Bang**): Der Planer drückt meist mit voller Kraft und wechselt die Richtung im Takt der Schwingung – so pumpt er in mehreren Schwüngen Energie hinein. Nach etwa 3,5 s ist das Pendel oben und wird dort mit kleinen Momenten gehalten. Niemand hat diese Strategie programmiert – sie folgt aus Modell, Kosten und Suche.
+  - type: fill
+    fading: true
+    prompt: |
+      Prüfe, ob das Pendel oben ist. Die gespeicherten Winkel sind nicht normiert (nach einer vollen Umdrehung steht dort etwa $2\pi$).
+    code: |
+      import numpy as np
+      from lab.envs import angle_normalize
+      states = np.array([[6.20, 0.1], [6.25, 0.05], [6.30, 0.0]])
+      theta = ___(states[:, ___])
+      print(np.round(theta, 2), bool(np.all(np.abs(theta) < 0.3)))
+    blanks:
+      - answer: "angle_normalize"
+        options: ["angle_normalize", "np.abs", "np.cos"]
+      - answer: "0"
+        options: ["0", "1", "-1"]
+    expect_output: "[-0.08 -0.03  0.02] True"
+    explanation: |
+      Spalte 0 ist der Winkel, Spalte 1 die Winkelgeschwindigkeit. Erst nach der Normierung sieht man, dass $6.25$ rad fast genau oben ist.
+  - type: quiz
+    question: |
+      Warum braucht der Swing-up einen Horizont von mindestens etwa 0,5–1 s und nicht nur 2–3 Schritte?
+    options:
+      - text: Ausholen erhöht kurzfristig die Kosten; erst über eine halbe Schwingung hinweg zahlt es sich aus – das muss im Horizont sichtbar sein.
+        correct: true
+        why: Mit zu kurzem Horizont wählt der Planer immer das kurzfristig Billigste und pumpt nie Energie auf.
+      - text: Weil MPPI mit kurzen Folgen nicht rechnen kann
+        correct: false
+        why: Rechnen kann es – es optimiert dann nur das falsche, kurzsichtige Ziel.
+      - text: Weil das Pendel sonst instabil simuliert wird
+        correct: false
+        why: Die Simulation hängt vom Zeitschritt `dt` ab, nicht vom Planungshorizont.
+cards:
+  - id: m11-c-warmstart-shift
+    concept: plan-warmstart
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          mu = np.array([0.5, -1.0, 2.0, 1.5])
+          print(np.append(mu[1:], 0.0))
+        options: ["[-1.   2.   1.5  0. ]", "[ 0.   0.5 -1.   2. ]", "[ 0.5 -1.   2.   1.5  0. ]", "[0.5 0.  2.  1.5]"]
+        answer: "[-1.   2.   1.5  0. ]"
+        explanation: Erste (ausgeführte) Aktion weg, hinten eine 0 anhängen – Länge bleibt 4.
+      - type: predict
+        code: |
+          import numpy as np
+          mu = np.zeros((3, 2))
+          mu[0] = [1.0, 1.0]
+          mu = np.vstack([mu[1:], np.zeros((1, 2))])
+          print(mu.shape, mu[0])
+        options: ["(3, 2) [0. 0.]", "(3, 2) [1. 1.]", "(2, 2) [0. 0.]", "(4, 2) [1. 1.]"]
+        answer: "(3, 2) [0. 0.]"
+        explanation: Für Aktionsvektoren (Form `(H, 2)`) verschiebt man mit `np.vstack` – die ausgeführte Zeile `[1, 1]` fällt weg.
+  - id: m11-c-warmstart-warum
+    concept: plan-warmstart
+    variants:
+      - type: quiz
+        question: Was bewirkt der Warmstart in MPC?
+        options:
+          - text: Die Optimierung wird über die Zeitschritte fortgesetzt statt jedes Mal neu begonnen.
+            correct: true
+            why: Der verschobene Plan ist ein guter Startpunkt; jedes Update verbessert ihn weiter.
+          - text: Der Planer braucht kein Modell mehr.
+            correct: false
+            why: Jedes Update simuliert weiterhin Rollouts im Modell.
+          - text: Der Plan wird exakt optimal.
+            correct: false
+            why: Er wird nur besser – optimal garantiert kein Sampling-Planer.
+      - type: quiz
+        question: MPPI ohne Warmstart bekommt das Pendel mit 64 Samples nicht hoch. Was hilft **am meisten**?
+        options:
+          - text: Den Plan des letzten Schritts verschoben als Startwert nutzen
+            correct: true
+            why: Genau das macht im Beispiel den Unterschied zwischen Wackeln und Swing-up.
+          - text: Die Temperatur λ sehr groß machen
+            correct: false
+            why: Dann werden die Samples fast ungewichtet gemittelt – der Plan verbessert sich kaum.
+          - text: Den Horizont auf 2 Schritte verkürzen
+            correct: false
+            why: Dann ist der Planer zu kurzsichtig, um Schwung zu holen.
+  - id: m11-c-bang-bang
+    concept: plan-unteraktuiert
+    variants:
+      - type: quiz
+        question: Warum liegt das wirksame Moment beim Swing-up meist an der Grenze ±2 N·m?
+        options:
+          - text: Um möglichst schnell Energie aufzubauen, nutzt der Planer die volle Motorkraft in Bewegungsrichtung.
+            correct: true
+            why: Der Motor ist der Engpass – jedes Stück darunter kostet Zeit, und Zeit unten kostet viel.
+          - text: Weil die Kostenfunktion große Momente belohnt
+            correct: false
+            why: "$0.001\\,u^2$ bestraft große Momente sogar – nur sehr schwach im Vergleich zu $\\theta^2$."
+          - text: Weil MPPI nur die Werte −2 und +2 sampeln kann
+            correct: false
+            why: Gesampelt wird normalverteilt; die Grenze kommt vom Motor (Clipping im Modell).
+      - type: quiz
+        question: Warum kann der Planer das hängende Pendel nicht einfach mit konstantem Moment hochdrücken?
+        options:
+          - text: Das maximale Motormoment (2 N·m) ist kleiner als das maximale Schwerkraftmoment (5 N·m).
+            correct: true
+            why: Deshalb muss er durch Hin- und Herpumpen Energie aufbauen.
+          - text: Weil die Kostenfunktion konstante Momente verbietet
+            correct: false
+            why: Sie bestraft Momente nur sehr schwach ($0.001\,u^2$); das Hindernis ist physikalisch.
+          - text: Weil das Modell keine Schwerkraft enthält
+            correct: false
+            why: Die Schwerkraft steckt im Term $\frac{3g}{2l}\sin\theta$ – sie ist gerade das Problem.

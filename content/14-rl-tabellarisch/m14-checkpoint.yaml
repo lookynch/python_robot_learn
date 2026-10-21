@@ -1,0 +1,183 @@
+id: m14-checkpoint
+title: "Checkpoint: modellfreies RL"
+kind: checkpoint
+minutes: 15
+goals:
+  - Monte Carlo, TD(0), SARSA, Q-Learning und Dyna-Q sicher unterscheiden und anwenden
+concepts: [mc-prediction, td0-update, sarsa-update, q-learning-update, on-vs-off-policy, epsilon-zerfall, zustands-diskretisierung, terminal-vs-abbruch, dyna-q-planen]
+steps:
+  - type: predict
+    code: |
+      G = 0.0
+      returns = []
+      for r in reversed([1, 0, 2]):
+          G = r + 0.5 * G
+          returns.append(G)
+      returns.reverse()
+      print(returns)
+    options: ["[1.5, 1.0, 2.0]", "[2.0, 1.0, 1.5]", "[3.0, 2.0, 2.0]", "[1.0, 0.0, 2.0]"]
+    answer: "[1.5, 1.0, 2.0]"
+    explanation: |
+      Rückwärts: $G_2 = 2$, $G_1 = 0 + 0.5 \cdot 2 = 1$, $G_0 = 1 + 0.5 \cdot 1 = 1.5$. `reverse()` bringt die Liste in zeitliche Reihenfolge.
+  - type: quiz
+    question: |
+      Welches Verfahren kann seinen Wert **erst am Episodenende** aktualisieren?
+    options:
+      - text: Monte Carlo
+        correct: true
+        why: Sein Ziel ist der vollständige Return $G_t$.
+      - text: TD(0)
+        correct: false
+        why: TD nutzt $r + \gamma V(s')$ und aktualisiert nach jedem Schritt.
+      - text: Q-Learning
+        correct: false
+        why: Q-Learning ist ein TD-Verfahren und aktualisiert nach jedem Schritt.
+      - text: SARSA
+        correct: false
+        why: Auch SARSA aktualisiert nach jedem Schritt.
+  - type: predict
+    code: |
+      V = [0.0, 2.0, 4.0]
+      alpha, gamma = 0.5, 0.5
+      s, r, s2 = 1, 1.0, 2
+      V[s] += alpha * (r + gamma * V[s2] - V[s])
+      print(V[s])
+    options: ["2.5", "3.0", "1.5", "4.0"]
+    answer: "2.5"
+    explanation: |
+      Ziel $= 1 + 0.5 \cdot 4 = 3$, $\delta = 3 - 2 = 1$, neuer Wert $2 + 0.5 \cdot 1 = 2.5$.
+  - type: fill
+    prompt: |
+      Ergänze das **SARSA**-Ziel. Die ε-greedy Policy hat in `s2` die Aktion `a2 = 0` gewählt.
+    code: |
+      import numpy as np
+      Q = np.array([[0.0, 0.0], [2.0, 6.0]])
+      s, a, r, s2, a2 = 0, 1, 1.0, 1, 0
+      alpha, gamma = 0.5, 1.0
+      target = r + gamma * ___
+      Q[s, a] += alpha * (target - Q[s, a])
+      print(Q[s, a])
+    blanks:
+      - answer: "Q[s2, a2]"
+        options: ["Q[s2, a2]", "np.max(Q[s2])", "Q[s, a2]", "Q[s2, a]"]
+    expect_output: "1.5"
+    explanation: |
+      SARSA nutzt den Wert der **tatsächlich gewählten** nächsten Aktion: $Q(s', a') = 2$, Ziel $= 3$, neuer Wert $0.5 \cdot 3 = 1.5$. `np.max(Q[s2])` wäre Q-Learning.
+  - type: quiz
+    question: |
+      Beim Cliff Walking mit festem $\varepsilon = 0.1$: Welcher Agent hat **während des Lernens** den besseren mittleren Return?
+    options:
+      - text: SARSA, weil es den sicheren Weg mit Abstand zur Klippe lernt
+        correct: true
+        why: On-policy bezieht die eigenen Zufallsschritte ein und meidet deshalb die Kante.
+      - text: Q-Learning, weil es den optimalen Weg findet
+        correct: false
+        why: Der Weg an der Kante ist für die greedy Policy optimal, aber mit ε-Zufallsschritten stürzt der Agent dort oft.
+      - text: Beide gleich, weil sie dieselbe Policy lernen
+        correct: false
+        why: Sie lernen verschiedene Policies – das ist der Kern des Beispiels.
+  - type: predict
+    code: |
+      eps0, eps_min, decay = 1.0, 0.1, 0.5
+      print([max(eps_min, eps0 * decay ** k) for k in range(5)])
+    options:
+      - "[1.0, 0.5, 0.25, 0.125, 0.1]"
+      - "[1.0, 0.5, 0.25, 0.125, 0.0625]"
+      - "[0.5, 0.25, 0.125, 0.1, 0.1]"
+      - "[1.0, 0.5, 0.0, 0.0, 0.0]"
+    answer: "[1.0, 0.5, 0.25, 0.125, 0.1]"
+    explanation: |
+      Bei $k = 4$ wäre $0.5^4 = 0.0625$ – die Untergrenze hebt es auf 0.1.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `q_update(Q, s, a, r, s2, done, alpha, gamma)`, die `Q[s, a]` per Q-Learning aktualisiert (in-place). Bei `done=True` ist das Ziel nur `r`.
+    starter: |
+      import numpy as np
+
+      def q_update(Q, s, a, r, s2, done, alpha, gamma):
+          pass
+    solution: |
+      import numpy as np
+
+      def q_update(Q, s, a, r, s2, done, alpha, gamma):
+          target = r if done else r + gamma * np.max(Q[s2])
+          Q[s, a] += alpha * (target - Q[s, a])
+    tests:
+      - name: Normaler Schritt
+        code: |
+          import numpy as np
+          Q = np.array([[1.0, 0.0], [3.0, 5.0]])
+          q_update(Q, 0, 0, -1.0, 1, False, 0.5, 0.9)
+          assert close(Q[0, 0], 2.25), f"Ziel = −1 + 0.9·5 = 3.5, Q[0, 0] = 1 + 0.5·2.5 = 2.25 erwartet, ist {Q[0, 0]}"
+          assert close(Q[1], [3.0, 5.0]) and close(Q[0, 1], 0.0), f"Nur Q[s, a] darf sich ändern, Q ist {Q.tolist()}"
+      - name: Endzustand
+        code: |
+          import numpy as np
+          Q = np.array([[0.0, 2.0], [9.0, 9.0]])
+          q_update(Q, 0, 1, 1.0, 1, True, 0.5, 1.0)
+          assert close(Q[0, 1], 1.5), f"Bei done ist das Ziel nur r = 1 → Q[0, 1] = 2 + 0.5·(1 − 2) = 1.5 erwartet, ist {Q[0, 1]}"
+      - name: Größter Wert, nicht Index
+        code: |
+          import numpy as np
+          Q = np.array([[0.0, 0.0, 0.0], [0.5, 0.2, 0.1]])
+          q_update(Q, 0, 2, 0.0, 1, False, 1.0, 1.0)
+          assert close(Q[0, 2], 0.5), f"Ziel = 0 + max(0.5, 0.2, 0.1) = 0.5 erwartet, Q[0, 2] ist {Q[0, 2]}"
+    mutants:
+      - |
+        import numpy as np
+
+        def q_update(Q, s, a, r, s2, done, alpha, gamma):
+            target = r + gamma * np.max(Q[s2])
+            Q[s, a] += alpha * (target - Q[s, a])
+      - |
+        import numpy as np
+
+        def q_update(Q, s, a, r, s2, done, alpha, gamma):
+            target = r if done else r + gamma * np.argmax(Q[s2])
+            Q[s, a] += alpha * (target - Q[s, a])
+      - |
+        import numpy as np
+
+        def q_update(Q, s, a, r, s2, done, alpha, gamma):
+            target = r if done else r + gamma * np.max(Q[s])
+            Q[s, a] += alpha * (target - Q[s, a])
+      - |
+        import numpy as np
+
+        def q_update(Q, s, a, r, s2, done, alpha, gamma):
+            target = r if done else r + gamma * Q[s2, a]
+            Q[s, a] += alpha * (target - Q[s, a])
+    hints:
+      - "Teilziel: TD-Ziel mit Terminal-Check, dann Q[s, a] verschieben."
+      - Q-Learning nimmt den **größten** Q-Wert im Folgezustand.
+      - "`target = r if done else r + gamma * np.max(Q[s2])`"
+  - type: quiz
+    question: |
+      CartPole, Episode endet bei `max_steps = 200`, der Stab steht noch. Was gilt für das letzte TD-Ziel?
+    options:
+      - text: Es bootstrappt weiter mit $\gamma \max_{a'} Q(s', a')$, weil nur das Zeitlimit erreicht ist.
+        correct: true
+        why: Ein Zeitlimit ist kein echter Endzustand.
+      - text: Es ist nur $r$, weil `done` wahr ist.
+        correct: false
+        why: "`done` mischt Sturz und Zeitlimit – nur beim Sturz ist das Ziel $r$."
+      - text: Der Übergang wird verworfen.
+        correct: false
+        why: Er ist eine gültige Erfahrung und wird normal gelernt.
+  - type: quiz
+    question: |
+      Was unterscheidet Dyna-Q von Q-Learning?
+    options:
+      - text: Es speichert erlebte Übergänge in einem Modell und rechnet daraus zusätzliche Q-Updates.
+        correct: true
+        why: Direktes RL plus Planen mit dem gelernten Modell.
+      - text: Es nutzt die wahren Übergangswahrscheinlichkeiten `env.P`.
+        correct: false
+        why: Das Modell wird aus Erfahrung gelernt, nicht vorgegeben.
+      - text: Es lernt mit dem vollständigen Return wie Monte Carlo.
+        correct: false
+        why: Dyna-Q nutzt Ein-Schritt-Q-Learning-Updates, real und simuliert.
+      - text: Es braucht keine Erkundung mehr.
+        correct: false
+        why: Ohne Erkundung bleibt auch das Modell lückenhaft.

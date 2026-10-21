@@ -1,0 +1,373 @@
+id: m14-monte-carlo
+title: Monte Carlo – aus ganzen Episoden lernen
+minutes: 10
+goals:
+  - Returns einer Episode rückwärts berechnen
+  - Werte als Mittelwert beobachteter Returns schätzen (MC-Prediction)
+  - Mit Q-Werten und ε-greedy eine Policy verbessern (MC-Control)
+concepts: [mc-prediction, mc-control]
+steps:
+  - type: text
+    body: |
+      ## Lernen ohne Modell
+
+      In Modul 13 kanntest du `env.P` – alle Übergangswahrscheinlichkeiten. Ein echter Roboter kennt sie nicht. Er kann nur **ausprobieren**: handeln, Belohnung sehen, weitermachen.
+
+      **Monte Carlo (MC)** nutzt genau das: Spiele viele Episoden und mittle für jeden Zustand die Returns, die danach tatsächlich kamen.
+
+      $$V(s) \approx \text{Mittelwert aller beobachteten } G_t \text{ mit } s_t = s$$
+
+      Als laufender Mittelwert nach dem $N$-ten Besuch:
+
+      $$V(s) \leftarrow V(s) + \tfrac{1}{N(s)}\,\big(G - V(s)\big)$$
+
+      Kein Modell, keine Bellman-Gleichung – nur Erfahrung. Der Preis: $G_t$ ist erst am **Episodenende** bekannt.
+  - type: example
+    intro: |
+      Eine Episode mit Zufallspolicy in der Standard-Gitterwelt (4×4, Falle `X` kostet −100 und setzt auf den Start zurück). Danach wird der Return **rückwärts** aufsummiert: $G_t = r_t + \gamma G_{t+1}$ (Konvention aus Modul 13).
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld()
+      rng = np.random.default_rng(0)
+
+      s = env.reset()
+      episode = []                  # Liste von (s, a, r)
+      done = False
+      while not done:
+          a = int(rng.integers(4))  # Zufallspolicy
+          s2, r, done = env.step(a)
+          episode.append((s, a, r))
+          s = s2
+
+      gamma = 0.9
+      G = 0.0
+      for s, a, r in reversed(episode):
+          G = r + gamma * G
+      print("Schritte:", len(episode))
+      print("Return ab Start:", round(G, 2))
+    subgoals:
+      - lines: [4, 5]
+        label: Umgebung und Zufall festlegen
+      - lines: [7, 14]
+        label: Episode sammeln
+      - lines: [16, 19]
+        label: Return rückwärts berechnen
+      - lines: [20, 21]
+        label: Ergebnis ausgeben
+    after: |
+      Rückwärts ist bequem: Jeder Schritt braucht nur den Return des **nächsten** Schritts. Vorwärts müsstest du für jedes $t$ die ganze restliche Summe neu bilden.
+  - type: trace
+    intro: |
+      Verfolge die Rückwärtsrechnung für drei Belohnungen mit $\gamma = 0.5$.
+    code: |
+      rewards = [-1, -1, 4]
+      gamma = 0.5
+      G = 0.0
+      returns = []
+      for r in reversed(rewards):
+          G = r + gamma * G
+          returns.append(G)
+      returns.reverse()
+      print(returns)
+    questions:
+      - line: 6
+        hit: 2
+        var: G
+        answer: "1.0"
+        prompt: Welchen Wert hat `G` nach dem **zweiten** Durchlauf von Zeile 6?
+      - line: 8
+        var: returns
+        answer: "[-0.5, 1.0, 4.0]"
+        prompt: Wie sieht `returns` nach dem Umdrehen aus?
+    after: |
+      Zuerst kommt die letzte Belohnung (4), dann $-1 + 0.5 \cdot 4 = 1$, dann $-1 + 0.5 \cdot 1 = -0.5$. `reverse()` stellt die zeitliche Reihenfolge $G_0, G_1, G_2$ wieder her.
+  - type: explain
+    question: |
+      Warum kann Monte Carlo einen Wert erst am **Ende** der Episode aktualisieren?
+    options:
+      - text: Das Lernziel $G_t$ enthält alle zukünftigen Belohnungen – die sind vorher unbekannt.
+        correct: true
+        why: Genau. MC benutzt den echten Return als Ziel, und der steht erst fest, wenn die Episode vorbei ist.
+      - text: Weil `env.step` während der Episode keine Belohnung zurückgibt.
+        correct: false
+        why: "`step` liefert nach jedem Schritt `r`. Es fehlen nur die **späteren** Belohnungen."
+      - text: Weil MC das Modell `env.P` erst am Ende einlesen darf.
+        correct: false
+        why: MC braucht `env.P` überhaupt nicht – das ist gerade der Vorteil.
+      - text: Weil ein laufender Mittelwert nur einmal pro Episode berechnet werden kann.
+        correct: false
+        why: Der Mittelwert lässt sich jederzeit aktualisieren – nur das Ziel $G_t$ fehlt vorher.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `returns(rewards, gamma)`, die für eine Liste von Belohnungen $r_0, \dots, r_{T-1}$ die Liste $[G_0, G_1, \dots, G_{T-1}]$ zurückgibt, mit $G_t = r_t + \gamma\, G_{t+1}$ und $G_T = 0$.
+
+      Beispiel: `returns([-1, -1, 4], 0.5)` → `[-0.5, 1.0, 4.0]`.
+    starter: |
+      def returns(rewards, gamma):
+          G = 0.0
+          out = []
+          # rückwärts über rewards laufen
+          return out
+    solution: |
+      def returns(rewards, gamma):
+          G = 0.0
+          out = []
+          for r in reversed(rewards):
+              G = r + gamma * G
+              out.append(G)
+          out.reverse()
+          return out
+    tests:
+      - name: Beispiel aus dem Text
+        code: |
+          res = returns([-1, -1, 4], 0.5)
+          assert close(res, [-0.5, 1.0, 4.0]), f"returns([-1, -1, 4], 0.5) sollte [-0.5, 1.0, 4.0] sein, ist {res}"
+      - name: Ohne Diskont
+        code: |
+          res = returns([1, 1, 1], 1.0)
+          assert close(res, [3.0, 2.0, 1.0]), f"returns([1, 1, 1], 1.0) sollte [3, 2, 1] sein, ist {res}"
+      - name: Diskont 0.9
+        code: |
+          res = returns([0, 0, 10], 0.9)
+          assert close(res, [8.1, 9.0, 10.0]), f"returns([0, 0, 10], 0.9) sollte [8.1, 9.0, 10.0] sein, ist {res}"
+      - name: Leere Episode
+        code: |
+          res = returns([], 0.9)
+          assert list(res) == [], f"Für eine leere Liste sollte [] herauskommen, nicht {res}"
+    mutants:
+      - |
+        def returns(rewards, gamma):
+            G = 0.0
+            out = []
+            for r in reversed(rewards):
+                G = r + gamma * G
+                out.append(G)
+            return out
+      - |
+        def returns(rewards, gamma):
+            G = 0.0
+            out = []
+            for r in rewards:
+                G = r + gamma * G
+                out.append(G)
+            return out
+      - |
+        def returns(rewards, gamma):
+            G = 0.0
+            out = []
+            for r in reversed(rewards):
+                G = gamma * (r + G)
+                out.append(G)
+            out.reverse()
+            return out
+    hints:
+      - "Teilziel: Return rückwärts berechnen, dann in zeitliche Reihenfolge bringen."
+      - Laufe mit `reversed(rewards)` von hinten nach vorne; jeder neue Return ist $r + \gamma \cdot$ (vorheriger Return).
+      - "In der Schleife: `G = r + gamma * G` und `out.append(G)`. Danach `out.reverse()`."
+  - type: text
+    body: |
+      ## Von Werten zu Entscheidungen
+
+      Mit $V(s)$ allein kannst du ohne Modell nicht handeln: Für $\arg\max_a$ müsstest du wissen, **wohin** jede Aktion führt – das steht in `env.P`, das du nicht hast.
+
+      Deshalb schätzt MC-Control direkt **Aktionswerte** $Q(s, a)$: den mittleren Return, wenn man in $s$ die Aktion $a$ wählt und danach der Policy folgt. Gehandelt wird **ε-greedy** bezüglich $Q$ (wie bei den Bandits): meist die beste Aktion, mit Wahrscheinlichkeit $\varepsilon$ eine zufällige – sonst würden manche Aktionen nie ausprobiert.
+
+      Schleife: Episode spielen → alle $Q(s, a)$ der Episode mitteln → nächste Episode mit dem besseren $Q$.
+  - type: example
+    intro: |
+      MC-Control in der Standard-Gitterwelt. Hier wird **jeder** Besuch eines Paars $(s, a)$ gemittelt (every-visit MC).
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      def eps_greedy(Q, s, eps, rng):
+          if rng.random() < eps:
+              return int(rng.integers(4))
+          return int(np.argmax(Q[s]))
+
+      env = GridWorld(max_steps=100)
+      rng = np.random.default_rng(0)
+      Q = np.zeros((env.n_states, 4))
+      N = np.zeros((env.n_states, 4))
+      returns = []
+      for k in range(200):
+          s, episode, done = env.reset(), [], False
+          while not done:
+              a = eps_greedy(Q, s, 0.1, rng)
+              s2, r, done = env.step(a)
+              episode.append((s, a, r))
+              s = s2
+          G = 0.0
+          for s, a, r in reversed(episode):
+              G = r + 1.0 * G
+              N[s, a] += 1
+              Q[s, a] += (G - Q[s, a]) / N[s, a]
+          returns.append(G)
+
+      lab.plot(returns, title="Return pro Episode", xlabel="Episode", ylabel="Return")
+      policy = np.argmax(Q, axis=1)
+      s, path = env.reset(), [env.start]
+      while not env.is_terminal(s) and len(path) < 20:
+          s, r, done = env.step(int(policy[s]))
+          path.append(s)
+      env.render(values=np.max(Q, axis=1), policy=policy, path=path, title="Greedy-Policy nach 200 Episoden")
+    subgoals:
+      - lines: [5, 8]
+        label: ε-greedy wählen
+      - lines: [10, 14]
+        label: Tabellen anlegen
+      - lines: [15, 21]
+        label: Episode sammeln
+      - lines: [22, 27]
+        label: Returns mitteln
+      - lines: [29, 35]
+        label: Lernkurve und Pfad zeigen
+    after: |
+      Anfangs ist $Q = 0$, `argmax` wählt also immer Aktion 0 (hoch): Der Agent läuft gegen den Rand, bis das Zeitlimit von 100 Schritten greift (Return −100). Erst die ε-Zufallsschritte und die dabei gelernten negativen Werte lösen ihn. Am Ende führt die greedy Policy in 6 Schritten zum Ziel (Return −5, der Schritt ins Ziel kostet nichts). Die Kurve bleibt zackig: Mit $\varepsilon = 0.1$ macht der Agent weiterhin Zufallsschritte.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den Kern von MC-Control: Return rückwärts aufsummieren und $Q$ als laufenden Mittelwert aktualisieren. Getestet wird, ob die greedy Policy danach das Ziel erreicht.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def mc_control(env, episodes, seed, gamma=1.0, eps=0.1):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          N = np.zeros((env.n_states, 4))
+          for k in range(episodes):
+              s, episode, done = env.reset(), [], False
+              while not done:
+                  if rng.random() < eps:
+                      a = int(rng.integers(4))
+                  else:
+                      a = int(np.argmax(Q[s]))
+                  s2, r, done = env.step(a)
+                  episode.append((s, a, r))
+                  s = s2
+              G = 0.0
+              for s, a, r in reversed(episode):
+                  G = ___
+                  N[s, a] += 1
+                  Q[s, a] += ___
+          return Q
+    blanks:
+      - answer: "r + gamma * G"
+        options: ["r + gamma * G", "gamma * G", "r"]
+      - answer: "(G - Q[s, a]) / N[s, a]"
+        options: ["(G - Q[s, a]) / N[s, a]", "G / N[s, a]", "(Q[s, a] - G) / N[s, a]"]
+    tests:
+      - name: Greedy-Policy erreicht das Ziel
+        code: |
+          env = GridWorld(max_steps=100)
+          for seed in (0, 1):
+              Q = mc_control(env, 200, seed)
+              s, n = env.reset(), 0
+              while not env.is_terminal(s) and n < 12:
+                  s, r, done = env.step(int(np.argmax(Q[s])))
+                  n += 1
+              assert env.char(s) == "G", f"Seed {seed}: Die greedy Policy erreicht das Ziel nicht in 12 Schritten (endet auf '{env.char(s)}')."
+    explanation: |
+      `gamma * G` vergisst die aktuelle Belohnung, `r` allein vergisst die Zukunft. `G / N` ist kein Mittelwert, und `Q - G` schiebt den Wert **weg** vom beobachteten Return.
+  - type: quiz
+    question: |
+      Was braucht Monte-Carlo-Control **nicht**?
+    options:
+      - text: Die Übergangswahrscheinlichkeiten `env.P`
+        correct: true
+        why: MC lernt nur aus erlebten Episoden – das macht es modellfrei.
+      - text: Episoden, die irgendwann enden
+        correct: false
+        why: Doch – ohne Episodenende gibt es keinen vollständigen Return $G_t$.
+      - text: Erkundung, z. B. ε-greedy
+        correct: false
+        why: Ohne Erkundung werden manche Aktionen nie ausprobiert und ihre Q-Werte nie korrigiert.
+      - text: Eine Tabelle für $Q(s, a)$
+        correct: false
+        why: Tabellarisches MC speichert genau so eine Tabelle (hier `Q` mit Form `(n_states, 4)`).
+cards:
+  - id: m14-c-return-rueckwaerts
+    concept: mc-prediction
+    variants:
+      - type: predict
+        code: |
+          G = 0.0
+          for r in reversed([2, 0, 4]):
+              G = r + 0.5 * G
+          print(G)
+        options: ["3.0", "6.0", "4.0", "2.5"]
+        answer: "3.0"
+        explanation: "Rückwärts: 4 → 0 + 0.5·4 = 2 → 2 + 0.5·2 = 3."
+      - type: predict
+        code: |
+          G = 0.0
+          for r in reversed([-1, -1, -1]):
+              G = r + 1.0 * G
+          print(G)
+        options: ["-3.0", "-1.0", "-1.75", "3.0"]
+        answer: "-3.0"
+        explanation: Mit $\gamma = 1$ ist der Return einfach die Summe der Belohnungen.
+      - type: predict
+        code: |
+          G = 0.0
+          for r in reversed([0, 0, 1]):
+              G = r + 0.9 * G
+          print(round(G, 2))
+        options: ["0.81", "1.0", "0.9", "0.0"]
+        answer: "0.81"
+        explanation: Die Belohnung 1 kommt zwei Schritte später, also $0.9^2 \cdot 1 = 0.81$.
+  - id: m14-c-mc-mittelwert
+    concept: mc-prediction
+    variants:
+      - type: predict
+        code: |
+          V, N = 2.0, 3
+          G = 6.0
+          N += 1
+          V += (G - V) / N
+          print(V)
+        options: ["3.0", "6.0", "4.0", "3.33"]
+        answer: "3.0"
+        explanation: "Laufender Mittelwert: 2 + (6 − 2)/4 = 3."
+      - type: predict
+        code: |
+          V, N = 10.0, 1
+          G = 4.0
+          N += 1
+          V += (G - V) / N
+          print(V)
+        options: ["7.0", "4.0", "14.0", "8.0"]
+        answer: "7.0"
+        explanation: "Mittelwert aus 10 und 4: 10 + (4 − 10)/2 = 7."
+  - id: m14-c-q-statt-v
+    concept: mc-control
+    variants:
+      - type: quiz
+        question: Warum schätzt modellfreies Control $Q(s, a)$ statt nur $V(s)$?
+        options:
+          - text: Um ohne Modell die beste Aktion per $\arg\max_a Q(s, a)$ wählen zu können.
+            correct: true
+            why: Mit $V$ bräuchte man `env.P`, um vorherzusagen, wohin jede Aktion führt.
+          - text: Weil $Q$ weniger Speicher braucht als $V$.
+            correct: false
+            why: "$Q$ hat `n_actions`-mal so viele Einträge wie $V$."
+          - text: Weil $V$ nur für deterministische Umgebungen definiert ist.
+            correct: false
+            why: $V$ ist auch für stochastische Umgebungen definiert.
+      - type: quiz
+        question: Ein Roboter kennt nur $V(s)$, aber kein Modell. Was fehlt ihm, um zu handeln?
+        options:
+          - text: Das Wissen, in welchen Zustand jede Aktion führt.
+            correct: true
+            why: Ohne $P(s' \mid s, a)$ lässt sich aus $V$ keine Aktion bewerten – deshalb $Q$.
+          - text: Eine Belohnungsfunktion für den aktuellen Schritt.
+            correct: false
+            why: Selbst mit bekannter Belohnung fehlt der Blick auf den Folgezustand.
+          - text: Nichts – er wählt einfach den Zustand mit dem größten $V$.
+            correct: false
+            why: Er wählt Aktionen, nicht Zustände – und weiß nicht, welche Aktion wohin führt.

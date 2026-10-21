@@ -1,0 +1,307 @@
+id: m09-task-space
+title: Kräfte an der Spitze – τ = Jᵀ F
+minutes: 9
+goals:
+  - Eine Kraft an der Spitze in Gelenkmomente umrechnen
+  - Die Spitze mit einer virtuellen Feder im kartesischen Raum führen
+  - Erklären, warum dafür $J^T$ und nicht $J^{-1}$ gebraucht wird
+concepts: [jacobi-transponiert]
+steps:
+  - type: text
+    body: |
+      ## Von der Kraft zum Moment
+
+      Soll die Spitze mit der Kraft $F = (F_x, F_y)$ drücken, welche Gelenkmomente braucht man? Prinzip der virtuellen Arbeit: Die Arbeit an der Spitze $F^T \Delta p$ muss gleich der Arbeit der Gelenke $\tau^T \Delta q$ sein. Mit $\Delta p = J\,\Delta q$ folgt für alle $\Delta q$:
+
+      $$\tau = J(q)^T F$$
+
+      Damit kann man im **kartesischen Raum** regeln (task-space control): eine virtuelle Feder zwischen Spitze und Ziel,
+
+      $$F = K_p\,(x_{\text{ref}} - \mathrm{fk}(q)) - K_d\,\dot x, \qquad \dot x = J\dot q$$
+
+      und dann $\tau = J^T F$. Keine IK nötig.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+
+      J = jacobian([0.0, 0.0])           # gestreckt auf der x-Achse
+      F = np.array([0.0, 1.0])           # 1 N nach oben
+      tau = J.T @ F
+      print(f"{tau[0]:.1f} {tau[1]:.1f}")
+    options: ["2.0 1.0", "1.0 2.0", "1.0 1.0", "0.0 1.0"]
+    answer: "2.0 1.0"
+    explanation: |
+      Moment = Kraft mal Hebelarm: Gelenk 1 sitzt 2 m von der Spitze entfernt, Gelenk 2 nur 1 m. Genau das rechnet $J^T F$ aus.
+  - type: example
+    intro: |
+      Eine virtuelle Feder zieht die Spitze des (schwerkraftfreien) Arms zum Ziel.
+    code: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      arm = TwoLinkArm()
+      x_ref = np.array([-0.4, 1.3])
+      state = arm.reset(q=(0.3, 1.2))
+      states = [state]
+      for k in range(300):
+          q, qd = state[:2], state[2:]
+          J = jacobian(q)
+          F = 50.0 * (x_ref - fk(q)) - 10.0 * (J @ qd)
+          state = arm.dynamics(state, J.T @ F)
+          states.append(state)
+      print("Abstand zum Ziel:", round(float(np.linalg.norm(x_ref - fk(state[:2]))), 4), "m")
+      arm.render(np.array(states), target=x_ref, title="Virtuelle Feder an der Spitze")
+    subgoals:
+      - lines: [11, 14]
+        label: Arm, Ziel und Start festlegen
+      - lines: [16, 18]
+        label: Kraft der virtuellen Feder berechnen
+      - lines: 19
+        label: Kraft über Jᵀ in Gelenkmomente umrechnen
+      - lines: [21, 22]
+        label: Ergebnis prüfen und animieren
+    after: |
+      Die Spitze läuft ziemlich direkt zum Ziel, ohne dass wir je eine IK gelöst haben. $K_p$ ist hier eine kartesische Steifigkeit (N/m), $K_d$ eine Dämpfung (N·s/m).
+  - type: explain
+    question: |
+      Warum $\tau = J^T F$ und nicht $\tau = J^{-1} F$?
+    options:
+      - text: Kräfte und Momente transformieren „dual“ zu Geschwindigkeiten – aus der Gleichheit der Arbeit $F^T J \Delta q = \tau^T \Delta q$ folgt $J^T$. Das gilt auch in Singularitäten.
+        correct: true
+        why: $J$ bildet Gelenk- auf Spitzengeschwindigkeiten ab, $J^T$ Spitzenkräfte auf Gelenkmomente. Keine Inversion nötig.
+      - text: Weil $J^{-1} = J^T$ für Roboterarme.
+        correct: false
+        why: Das gilt für Rotationsmatrizen, nicht für Jacobi-Matrizen.
+      - text: Weil $J^T$ schneller zu berechnen ist; physikalisch wäre $J^{-1}$ richtiger.
+        correct: false
+        why: $J^T$ ist die physikalisch richtige Abbildung, $J^{-1}$ wäre falsch.
+  - type: fill
+    fading: true
+    prompt: |
+      Der Arm steht bei $q = (0, \pi/2)$ und soll ein Gewicht halten, das mit 5 N nach unten zieht. Die Spitze muss also mit $F = (0, 5)$ nach **oben** drücken. Ergänze die Momentberechnung.
+    code: |
+      import numpy as np
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      J = jacobian([0.0, np.pi / 2])
+      F = np.array([0.0, 5.0])
+      tau = ___
+    blanks:
+      - answer: "J.T @ F"
+        options: ["J.T @ F", "J @ F", "np.linalg.solve(J, F)"]
+    tests:
+      - name: Haltemomente
+        code: |
+          assert close(tau, [5.0, 0.0]), f"Erwartet τ ≈ (5, 0) N·m, bekommen {tau}"
+    explanation: |
+      Die Spitze sitzt bei $(1, 1)$, der Ellbogen bei $(1, 0)$: Die senkrechte Kraft wirkt mit Hebelarm 1 m um die Basis, aber **durch** den Ellbogen hindurch (Glied 2 steht senkrecht). Also $\tau = (5, 0)$ N·m.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `task_space_controller(state, x_ref, Kp=50.0, Kd=10.0)`: virtuelle Feder mit Dämpfer an der Spitze, umgerechnet über $J^T$. `fk` und `jacobian` sind gegeben. Der Code fährt damit nacheinander drei Ziele an.
+    starter: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+          q, qd = state[:2], state[2:]
+          pass
+
+      arm = TwoLinkArm()
+      state = arm.reset(q=(0.3, 1.2))
+      states = [state]
+      for x_ref in [np.array([1.2, 0.6]), np.array([0.5, -1.0]), np.array([-1.0, 0.8])]:
+          for k in range(150):
+              state = arm.dynamics(state, task_space_controller(state, x_ref))
+              states.append(state)
+      arm.render(np.array(states), target=(-1.0, 0.8), title="Drei Ziele nacheinander")
+    solution: |
+      import numpy as np
+      from lab.envs import TwoLinkArm
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+          q, qd = state[:2], state[2:]
+          J = jacobian(q)
+          F = Kp * (x_ref - fk(q)) - Kd * (J @ qd)
+          return J.T @ F
+
+      arm = TwoLinkArm()
+      state = arm.reset(q=(0.3, 1.2))
+      states = [state]
+      for x_ref in [np.array([1.2, 0.6]), np.array([0.5, -1.0]), np.array([-1.0, 0.8])]:
+          for k in range(150):
+              state = arm.dynamics(state, task_space_controller(state, x_ref))
+              states.append(state)
+      arm.render(np.array(states), target=(-1.0, 0.8), title="Drei Ziele nacheinander")
+    tests:
+      - name: Am Ziel in Ruhe kein Moment
+        code: |
+          import numpy as np
+          q = np.array([0.4, 0.9])
+          tau = np.asarray(task_space_controller(np.array([0.4, 0.9, 0.0, 0.0]), fk(q)), dtype=float)
+          assert close(tau, [0.0, 0.0]), f"Steht die Spitze in Ruhe am Ziel, sollte τ = 0 sein, ist {np.round(tau, 3)}"
+      - name: Feder über Jᵀ
+        code: |
+          import numpy as np
+          q = np.array([0.0, np.pi / 2])
+          tau = np.asarray(task_space_controller(np.array([0.0, np.pi / 2, 0.0, 0.0]), fk(q) + np.array([0.0, 0.1]), Kp=50.0), dtype=float)
+          assert close(tau, [5.0, 0.0], tol=1e-6), f"Ziel 0.1 m über der Spitze bei q = (0, π/2): erwartet τ = Jᵀ·(0, 5) = (5, 0), bekommen {np.round(tau, 3)}"
+      - name: Erreicht Ziele
+        code: |
+          import numpy as np
+          from lab.envs import TwoLinkArm
+          _arm = TwoLinkArm()
+          for xr in [(1.2, 0.6), (-0.4, 1.3), (0.5, -1.0), (-1.2, -0.5)]:
+              xr = np.array(xr)
+              s = _arm.reset(q=(0.3, 1.2))
+              for k in range(300):
+                  s = _arm.dynamics(s, task_space_controller(s, xr))
+              d = np.linalg.norm(fk(s[:2]) - xr)
+              assert d < 0.01, f"Ziel {xr}: nach 3 s noch {d:.3f} m entfernt (J statt Jᵀ? Dämpfung?)"
+    mutants:
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+            q, qd = state[:2], state[2:]
+            J = jacobian(q)
+            return J @ (Kp * (x_ref - fk(q)) - Kd * (J @ qd))
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+            q, qd = state[:2], state[2:]
+            J = jacobian(q)
+            return J.T @ (Kp * (x_ref - fk(q)))
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+            q, qd = state[:2], state[2:]
+            J = jacobian(q)
+            return J.T @ (Kp * (fk(q) - x_ref) - Kd * (J @ qd))
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        def task_space_controller(state, x_ref, Kp=50.0, Kd=10.0):
+            q, qd = state[:2], state[2:]
+            J = jacobian(q)
+            return J.T @ (Kp * (x_ref - fk(q)) + Kd * (J @ qd))
+    hints:
+      - "Teilziel: Kraft der virtuellen Feder berechnen, dann über Jᵀ in Gelenkmomente umrechnen."
+      - "Feder: `Kp * (x_ref - fk(q))`. Dämpfer: Spitzengeschwindigkeit $\\dot x = J\\dot q$, also `- Kd * (J @ qd)`."
+      - |
+        ```python
+        J = jacobian(q)
+        F = Kp * (x_ref - fk(q)) - Kd * (J @ qd)
+        ```
+      - "`return J.T @ F`"
+    explanation: |
+      Die Dämpfung darf man auch direkt in den Gelenken ansetzen (`J.T @ (Kp * (x_ref - fk(q))) - Kd * qd`) – das stabilisiert ebenfalls, bremst dann aber jede Gelenkbewegung und nicht nur die Bewegung der Spitze.
+  - type: quiz
+    question: |
+      Der Arm ist gestreckt auf der x-Achse ($q = (0, 0)$). An der Spitze zieht eine Kraft $F = (3, 0)$ N **in Richtung des Arms**. Welche Gelenkmomente braucht man, um sie zu halten?
+    options:
+      - text: Keine – $\tau = J^T F = (0, 0)$, die Kraft wird von der Struktur getragen
+        correct: true
+        why: Die erste Zeile von $J$ ist null; radiale Kräfte erzeugen um die Gelenke kein Moment.
+      - text: $\tau = (6, 3)$ N·m
+        correct: false
+        why: Das wäre eine **senkrechte** Kraft von 3 N.
+      - text: Unendlich große Momente, weil der Arm singulär ist
+        correct: false
+        why: Mit $J^T$ gibt es in Singularitäten kein Problem – dort braucht man im Gegenteil für radiale Kräfte gar kein Moment.
+cards:
+  - id: m09-c-jt-f
+    concept: jacobi-transponiert
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          J = np.array([[0.0, 0.0], [2.0, 1.0]])
+          F = np.array([0.0, -4.0])
+          print(J.T @ F)
+        options: ["[-8. -4.]", "[ 0. -8.]", "[-4. -8.]", "[0. 0.]"]
+        answer: "[-8. -4.]"
+        explanation: $\tau = J^T F$; Hebelarme 2 m und 1 m, Kraft nach unten → negative Momente (im Uhrzeigersinn).
+      - type: predict
+        code: |
+          import numpy as np
+          J = np.array([[0.0, 0.0], [1.5, 0.5]])
+          F = np.array([0.0, 2.0])
+          print(J.T @ F)
+        options: ["[3. 1.]", "[1. 3.]", "[0. 0.]", "[2. 2.]"]
+        answer: "[3. 1.]"
+        explanation: Gestreckter Arm mit $l_1 = 1$ und $l_2 = 0.5$, also Hebelarme 1.5 m und 0.5 m.
+  - id: m09-c-task-space-feder
+    concept: jacobi-transponiert
+    variants:
+      - type: quiz
+        question: Was braucht ein kartesischer PD-Regler $\tau = J^T F$ **nicht**?
+        options:
+          - text: Eine inverse Kinematik
+            correct: true
+            why: Der Fehler wird direkt im kartesischen Raum gebildet und über $J^T$ umgerechnet.
+          - text: Die Vorwärtskinematik
+            correct: false
+            why: Für $x_{\text{ref}} - \mathrm{fk}(q)$ braucht er sie.
+          - text: Die Jacobi-Matrix
+            correct: false
+            why: Sie steckt in $J^T F$ und in $\dot x = J\dot q$.
+      - type: quiz
+        question: Wie berechnet man die Spitzengeschwindigkeit $\dot x$ für den D-Anteil?
+        options:
+          - text: $\dot x = J(q)\,\dot q$
+            correct: true
+            why: Die Jacobi-Matrix bildet Gelenk- auf Spitzengeschwindigkeiten ab.
+          - text: $\dot x = J^T \dot q$
+            correct: false
+            why: $J^T$ bildet Kräfte auf Momente ab, nicht Geschwindigkeiten.
+          - text: $\dot x = \mathrm{fk}(\dot q)$
+            correct: false
+            why: Die FK ist nichtlinear – auf Geschwindigkeiten angewandt ergibt sie keinen Sinn.

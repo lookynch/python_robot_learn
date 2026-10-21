@@ -1,0 +1,36 @@
+id: m17
+number: 17
+title: World Models II – latente Modelle
+summary: |
+  Vom Zustand zum Bild: Der Arm wird als 16×16-Bild beobachtet, ein winziger Autoencoder komprimiert es, und die Dynamik wird im latenten Raum gelernt. Dazu die Ideen hinter Ha & Schmidhuber (V-M-C), Dreamer (RSSM, Lernen in der Vorstellung) und TD-MPC (latentes Modell + Wertfunktion + MPPI) – als Spielversionen und Konzept.
+depth: spiel
+lessons:
+  - m17-beobachtungen
+  - m17-autoencoder
+  - m17-latente-dynamik
+  - m17-ha-schmidhuber
+  - m17-dreamer
+  - m17-td-mpc
+  - m17-checkpoint
+concepts:
+  - id: lwm-beobachtung-bild
+    name: Bilder als Beobachtung
+    description: Statt des Zustands sieht der Agent eine hochdimensionale Beobachtung (Pixel); der Zustand ist darin nur indirekt enthalten, Geschwindigkeiten sind in einem Einzelbild nicht sichtbar.
+  - id: lwm-autoencoder
+    name: Autoencoder und latenter Raum
+    description: Encoder komprimiert die Beobachtung zu einem kleinen Vektor z, Decoder rekonstruiert sie; trainiert nur mit dem Rekonstruktionsfehler (selbstüberwacht).
+  - id: lwm-latente-dynamik
+    name: Latente Dynamik
+    description: Ein Modell z′ = f(z, a) sagt den nächsten latenten Zustand voraus; Planen und Vorstellung laufen im kleinen latenten Raum statt in Pixeln.
+  - id: lwm-vmc
+    name: V-M-C (Ha & Schmidhuber)
+    description: Vision (VAE) komprimiert Bilder, Memory (MDN-RNN) sagt die Zukunft im latenten Raum voraus, ein kleiner Controller wählt Aktionen; der Controller kann im „Traum“ des Modells trainiert werden.
+  - id: lwm-rssm
+    name: RSSM
+    description: Recurrent State-Space Model aus PlaNet/Dreamer – latenter Zustand aus deterministischem Gedächtnis h (RNN) und stochastischem Teil z; Prior p(z|h) zum Vorstellen, Posterior q(z|h, o) beim Beobachten.
+  - id: lwm-imagination
+    name: Lernen in der Vorstellung
+    description: Actor und Critic werden auf im Modell vorgestellten Trajektorien trainiert; λ-Returns verbinden belohnte Schritte mit dem Wert am Horizontende.
+  - id: lwm-td-mpc
+    name: TD-MPC
+    description: Latentes Modell ohne Decoder, trainiert über Belohnung, Wert und latente Konsistenz; geplant wird mit MPPI über einen kurzen Horizont plus gelernte Wertfunktion am Ende.

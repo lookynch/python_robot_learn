@@ -1,0 +1,371 @@
+id: m16-daten-sammeln
+title: Daten sammeln mit Zufallsaktionen
+minutes: 8
+goals:
+  - Einen Zustand $s = [q_1, q_2, x, y]$ für das Modell festlegen
+  - Übergänge $(s, a, s')$ mit Zufallsaktionen in Arrays sammeln
+  - Abdeckung des Zustandsraums und saubere Validierungsdaten beurteilen
+concepts: [wm-datensatz]
+steps:
+  - type: text
+    body: |
+      ## Was soll das Modell kennen?
+
+      `Reacher2D` liefert die Gelenkwinkel $q = (q_1, q_2)$ in rad, Aktion $a$ = Gelenkgeschwindigkeiten in rad/s (begrenzt auf ±2).
+
+      Für unser Modell wählen wir als **Zustand**
+
+      $$s = [q_1,\ q_2,\ x,\ y]$$
+
+      also Winkel **plus gemessene Position der Spitze** in m (wie mit einer Kamera oder einem Marker). Das Modell soll selbst lernen, wie Aktionen die Spitze bewegen – Vorwärtskinematik bekommt es nicht verraten.
+
+      Ein Datensatz besteht aus drei Arrays gleicher Länge: `S` (Zustände), `A` (Aktionen), `S2` (Folgezustände).
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = [], [], []
+      for episode in range(20):
+          env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+          s = observe(env)
+          for t in range(25):
+              a = rng.uniform(-2, 2, 2)
+              env.step(a)
+              s2 = observe(env)
+              S.append(s)
+              A.append(a)
+              S2.append(s2)
+              s = s2
+      S, A, S2 = np.array(S), np.array(A), np.array(S2)
+      print(S.shape, A.shape, S2.shape)
+      lab.scatter(S[:, 2], S[:, 3], title="Gesehene Positionen der Spitze", xlabel="x in m", ylabel="y in m")
+    subgoals:
+      - lines: [7, 8]
+        label: Zustand definieren
+      - lines: [12, 14]
+        label: Episode mit zufälligem Start beginnen
+      - lines: [15, 22]
+        label: Zufallsaktion ausführen und Übergang speichern
+      - lines: [23, 25]
+        label: In Arrays umwandeln und Abdeckung prüfen
+    after: |
+      500 Übergänge aus 20 kurzen Episoden. Die Punktwolke zeigt, **wo** das Modell später Daten gesehen hat – dort kann es gut sein, anderswo nicht.
+  - type: predict
+    code: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+      rng = np.random.default_rng(0)
+      S, A = [], []
+      for episode in range(3):
+          env.reset(q=(0.0, 0.0), goal=(1.0, 1.0))
+          for t in range(4):
+              a = rng.uniform(-2, 2, 2)
+              S.append(np.concatenate([env.q, env.fk(env.q)]))
+              A.append(a)
+              env.step(a)
+      print(np.array(S).shape, np.array(A).shape)
+    options:
+      - "(12, 4) (12, 2)"
+      - "(3, 4) (3, 2)"
+      - "(4, 12) (2, 12)"
+      - "(12, 2) (12, 2)"
+    answer: "(12, 4) (12, 2)"
+    explanation: |
+      3 Episoden × 4 Schritte = 12 Übergänge. Jede Zeile von `S` hat 4 Einträge ($q_1, q_2, x, y$), jede Zeile von `A` 2.
+  - type: explain
+    question: |
+      Warum startet jede Episode in einer **zufälligen** Stellung, statt eine lange Episode ab $q = (0, 0)$ zu fahren?
+    options:
+      - text: Zufallsaktionen bewegen den Arm kaum vom Start weg; zufällige Starts verteilen die Daten über den ganzen Zustandsraum.
+        correct: true
+        why: Zufallsaktionen mitteln sich weg – der Arm „zittert“ um den Start. Ohne breite Abdeckung kennt das Modell nur eine kleine Region.
+      - text: Weil `env.reset` sonst einen Fehler wirft.
+        correct: false
+        why: "`reset(q=(0, 0))` funktioniert problemlos – es geht um die Verteilung der Daten."
+      - text: Damit die Übergänge innerhalb einer Episode unabhängig voneinander sind.
+        correct: false
+        why: Innerhalb einer Episode bleiben aufeinanderfolgende Übergänge stark korreliert, egal wo sie startet.
+      - text: Weil ein neuronales Netz nur Daten aus kurzen Episoden lernen kann.
+        correct: false
+        why: Das Netz sieht nur einzelne Übergänge – wie lang die Episoden waren, ist ihm egal.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Lücken, sodass jeder Übergang korrekt gespeichert wird und die Episode vom **neuen** Zustand aus weiterläuft.
+    code: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+      rng = np.random.default_rng(0)
+      S, S2 = [], []
+      for episode in range(2):
+          env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+          s = env.q.copy()
+          for t in range(5):
+              env.step(rng.uniform(-2, 2, 2))
+              s2 = env.q.copy()
+              S.append(___)
+              S2.append(s2)
+              s = ___
+      S, S2 = np.array(S), np.array(S2)
+    blanks:
+      - answer: s
+        options: [s, s2, env.q]
+      - answer: s2
+        options: [s2, s, "s + s2"]
+    tests:
+      - name: Übergänge verändern den Zustand
+        code: |
+          assert np.all(np.abs(S2 - S).sum(axis=1) > 0), "S und S2 sind teilweise gleich – wird vielleicht der Folgezustand als Zustand gespeichert?"
+      - name: Episode läuft weiter
+        code: |
+          for e in range(2):
+              assert close(S[e * 5 + 1:(e + 1) * 5], S2[e * 5:(e + 1) * 5 - 1]), "Innerhalb einer Episode muss der Zustand eines Übergangs der Folgezustand des vorherigen sein."
+    explanation: |
+      `env.q` wäre beim Speichern schon der **neue** Winkel (der Schritt ist ausgeführt) – und ohne `.copy()` würde die Liste nur Verweise auf dasselbe Array enthalten.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `collect(n_episodes, steps, rng)`. Für jede Episode: Reset auf eine zufällige Stellung (beide Winkel gleichverteilt in $[-\pi, \pi]$, Ziel `(1.0, 1.0)`), dann `steps` Zufallsaktionen aus $[-2, 2]^2$. Gib `S, A, S2` als NumPy-Arrays zurück (Zustand über `observe(env)`).
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          # dein Code
+          return np.array(S), np.array(A), np.array(S2)
+
+      S, A, S2 = collect(4, 10, np.random.default_rng(0))
+      print(S.shape, A.shape, S2.shape)
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s)
+                  A.append(a)
+                  S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      S, A, S2 = collect(4, 10, np.random.default_rng(0))
+      print(S.shape, A.shape, S2.shape)
+    tests:
+      - name: Formen
+        code: |
+          S_, A_, S2_ = collect(3, 5, np.random.default_rng(7))
+          assert np.shape(S_) == (15, 4) and np.shape(A_) == (15, 2) and np.shape(S2_) == (15, 4), f"Für 3 Episoden × 5 Schritte erwartet (15, 4), (15, 2), (15, 4), bekommen {np.shape(S_)}, {np.shape(A_)}, {np.shape(S2_)}"
+      - name: Übergänge passen zur Physik
+        code: |
+          S_, A_, S2_ = collect(3, 5, np.random.default_rng(7))
+          assert close(S2_[:, :2], S_[:, :2] + np.clip(A_, -2, 2) * 0.05), "S2 muss der Zustand NACH der Aktion A aus Zustand S sein."
+          assert close(S_[:, 2:], env.fk(S_[:, :2])), "Die Spalten 3–4 von S müssen die Position der Spitze sein – nutze observe(env)."
+      - name: Episoden laufen weiter
+        code: |
+          S_, A_, S2_ = collect(3, 5, np.random.default_rng(7))
+          for e in range(3):
+              assert close(S_[e * 5 + 1:(e + 1) * 5], S2_[e * 5:(e + 1) * 5 - 1]), "Innerhalb einer Episode muss jeder Zustand der Folgezustand des vorherigen Übergangs sein (s = s2 vergessen?)."
+      - name: Zufällige Starts
+        code: |
+          S_, A_, S2_ = collect(6, 3, np.random.default_rng(7))
+          starts = S_[::3, :2]
+          assert np.ptp(starts[:, 0]) > 1.0 and np.ptp(starts[:, 1]) > 1.0, f"Die Startwinkel sollten zufällig in [-pi, pi] liegen, bekommen {starts}"
+          assert np.all(np.abs(starts) <= np.pi + 1e-9), "Startwinkel außerhalb von [-pi, pi]."
+      - name: Zufallsaktionen in beide Richtungen
+        code: |
+          S_, A_, S2_ = collect(5, 20, np.random.default_rng(7))
+          assert A_.min() < -1.5 and A_.max() > 1.5 and np.all(np.abs(A_) <= 2), f"Aktionen sollen gleichverteilt in [-2, 2] sein, Bereich ist [{A_.min():.2f}, {A_.max():.2f}]"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s)
+                    A.append(a)
+                    S2.append(s2)
+            return np.array(S), np.array(A), np.array(S2)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(0, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s)
+                    A.append(a)
+                    S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=(0.0, 0.0), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s)
+                    A.append(a)
+                    S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    S.append(observe(env))
+                    A.append(a)
+                    S2.append(observe(env))
+            return np.array(S), np.array(A), np.array(S2)
+    hints:
+      - "Teilziel: zwei verschachtelte Schleifen – außen Episoden mit Reset, innen Schritte mit Zufallsaktion."
+      - Merke dir den Zustand **vor** `env.step`, speichere nach dem Schritt das Tripel und mache den Folgezustand zum neuen aktuellen Zustand.
+      - |
+        ```python
+        for _ in range(n_episodes):
+            env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+            s = observe(env)
+            for _ in range(steps):
+                ...
+        ```
+      - |
+        ```python
+                a = rng.uniform(-2, 2, 2)
+                env.step(a)
+                s2 = observe(env)
+                S.append(s); A.append(a); S2.append(s2)
+                s = s2
+        ```
+  - type: quiz
+    question: |
+      Du willst prüfen, wie gut dein Modell auf **neuen** Daten ist. Welche Validierungsdaten sind am aussagekräftigsten?
+    options:
+      - text: Eigene Episoden, die nicht zum Training benutzt werden.
+        correct: true
+        why: Aufeinanderfolgende Übergänge einer Episode sind fast gleich. Nur getrennte Episoden zeigen echte Verallgemeinerung.
+      - text: Jeder zweite Übergang aus denselben Episoden.
+        correct: false
+        why: Der Nachbar-Übergang ist im Training enthalten und fast identisch – der Validierungsfehler wird zu optimistisch.
+      - text: Die Trainingsdaten selbst, wenn man lange genug trainiert.
+        correct: false
+        why: Der Trainingsfehler sagt nichts über Overfitting (Modul 12).
+cards:
+  - id: m16-c-datensatz-form
+    concept: wm-datensatz
+    variants:
+      - type: quiz
+        question: Du sammelst 8 Episoden mit je 30 Schritten, Zustand $s \in \mathbb{R}^4$, Aktion $a \in \mathbb{R}^2$. Welche Form hat `A`?
+        options:
+          - text: "`(240, 2)`"
+            correct: true
+            why: 8 · 30 = 240 Übergänge, je 2 Aktionswerte.
+          - text: "`(8, 2)`"
+            correct: false
+            why: Gespeichert wird jeder Schritt, nicht jede Episode.
+          - text: "`(240, 4)`"
+            correct: false
+            why: Das wäre die Form von `S` oder `S2`.
+      - type: quiz
+        question: 5 Episoden mit je 40 Schritten, Zustand mit 4 Einträgen. Welche Form hat `S2`?
+        options:
+          - text: "`(200, 4)`"
+            correct: true
+            why: 5 · 40 = 200 Folgezustände mit je 4 Einträgen.
+          - text: "`(201, 4)`"
+            correct: false
+            why: Pro Übergang gibt es genau einen Folgezustand – das „+1“ gilt nur für einen einzelnen Rollout mit Startzustand.
+          - text: "`(5, 40)`"
+            correct: false
+            why: Die Übergänge werden flach gespeichert, ein Übergang pro Zeile.
+  - id: m16-c-abdeckung
+    concept: wm-datensatz
+    variants:
+      - type: quiz
+        question: Alle Trainingsdaten stammen aus Stellungen mit $|q_1| < 1$ rad. Wo ist dein Modell vermutlich unzuverlässig?
+        options:
+          - text: Bei $q_1 \approx 2{,}5$ rad.
+            correct: true
+            why: Dort lagen keine Daten – das Netz extrapoliert, und das geht meist schief.
+          - text: Bei $q_1 \approx 0$ rad.
+            correct: false
+            why: Mitten in den Trainingsdaten ist das Modell am besten.
+          - text: Nirgends, ein neuronales Netz verallgemeinert überall gleich gut.
+            correct: false
+            why: Netze interpolieren gut, extrapolieren aber schlecht.
+      - type: quiz
+        question: Warum liegen die Daten nach einer langen Zufallsepisode ab $q = (0, 0)$ fast alle nahe beim Start?
+        options:
+          - text: Unabhängige Zufallsaktionen heben sich im Mittel auf; der Arm macht nur eine kleine Irrfahrt.
+            correct: true
+            why: Die Auslenkung wächst bei einer Irrfahrt nur mit $\sqrt{T}$.
+          - text: Weil `Reacher2D` den Arm automatisch zurückstellt.
+            correct: false
+            why: Die Umgebung setzt nur bei `reset` zurück.
+          - text: Weil die Aktionen auf ±2 rad/s begrenzt sind und der Arm sich deshalb nicht bewegt.
+            correct: false
+            why: Mit 2 rad/s käme der Arm in 1,6 s halb herum – wenn die Aktionen in eine Richtung zeigten.

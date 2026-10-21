@@ -1,0 +1,311 @@
+id: m13-mdp
+title: Markov-Entscheidungsprozesse
+minutes: 10
+goals:
+  - Zustände, Aktionen, Übergänge und Belohnungen einer Gitterwelt benennen
+  - Das Übergangsmodell `env.P[s][a]` lesen und auswerten
+  - Eine Policy als Array darstellen und eine Episode damit ausführen
+concepts: [mdp-definition, mdp-policy]
+steps:
+  - type: text
+    body: |
+      ## Vom Bandit zur Welt mit Zuständen
+
+      Beim Bandit gab es keinen Zustand. Jetzt verändert jede Aktion die Welt – wie `next_state = step(state, action)` aus Modul 6, nur diskret und eventuell zufällig.
+
+      Ein **Markov-Entscheidungsprozess** (Markov Decision Process, MDP) besteht aus:
+
+      - Zuständen $s$ und Aktionen $a$,
+      - Übergangswahrscheinlichkeiten $P(s' \mid s, a)$,
+      - Belohnungen $r$ und Endzuständen (terminal states).
+
+      **Markov-Eigenschaft:** Was als Nächstes passiert, hängt nur vom aktuellen Zustand und der Aktion ab – nicht vom Weg dorthin.
+
+      Ein **Agent** wählt nach einer **Policy** $\pi$ Aktionen, bis eine Episode endet.
+  - type: example
+    intro: |
+      Die Gitterwelt aus `lab.envs`: 4×4 Felder, Zustand = `zeile * 4 + spalte`, Aktionen 0 = hoch, 1 = rechts, 2 = runter, 3 = links. Jeder Schritt kostet −1, das Ziel `G` beendet die Episode, die Falle `X` kostet −100 und setzt auf den Start zurück.
+    code: |
+      from lab.envs import GridWorld
+
+      env = GridWorld()
+      for row in env.layout:
+          print(row)
+      print("Zustände:", env.n_states, "Aktionen:", env.n_actions)
+      print("P[0][1] =", env.P[0][1])
+      print("P[14][1] =", env.P[14][1])
+      env.render(title="Gitterwelt")
+    subgoals:
+      - lines: 3
+        label: Umgebung anlegen
+      - lines: [4, 6]
+        label: Aufbau ansehen
+      - lines: [7, 8]
+        label: Übergangsmodell lesen
+    after: |
+      `env.P[s][a]` ist eine **Liste von Ergebnissen** `(p, s2, r, done)`: Wahrscheinlichkeit, nächster Zustand, Belohnung, Episode zu Ende. Von Feld 14 nach rechts erreicht man das Ziel 15: Belohnung 0, `done = True`. Dieses vollständige Modell nutzen wir in den nächsten Lektionen zum Planen.
+  - type: predict
+    intro: |
+      Was passiert, wenn der Agent im Startfeld oben links nach **oben** läuft?
+    code: |
+      from lab.envs import GridWorld
+      env = GridWorld()
+      print(env.P[0][0])
+    options:
+      - "[(1.0, 0, -1.0, False)]"
+      - "[(1.0, -4, -1.0, False)]"
+      - "[]"
+      - "[(1.0, 0, 0.0, True)]"
+    answer: "[(1.0, 0, -1.0, False)]"
+    explanation: |
+      Gegen den Rand (oder eine Wand) bleibt der Agent stehen – der Schritt kostet trotzdem −1. Es gibt keinen Zustand −4, und die Episode endet nicht.
+  - type: predict
+    intro: |
+      Mit `slip=0.2` rutscht der Agent mit Wahrscheinlichkeit 0,1 jeweils nach links oder rechts **quer** zur gewollten Richtung. Feld 4 liegt links neben der Wand (Feld 5).
+    code: |
+      from lab.envs import GridWorld
+      env = GridWorld(slip=0.2)
+      for outcome in env.P[4][1]:
+          print(outcome)
+    options:
+      - |
+        (0.8, 4, -1.0, False)
+        (0.1, 8, -1.0, False)
+        (0.1, 0, -1.0, False)
+      - |
+        (0.8, 5, -1.0, False)
+        (0.1, 8, -1.0, False)
+        (0.1, 0, -1.0, False)
+      - |
+        (1.0, 4, -1.0, False)
+      - |
+        (0.8, 4, -1.0, False)
+        (0.2, 3, -1.0, False)
+    answer: |
+      (0.8, 4, -1.0, False)
+      (0.1, 8, -1.0, False)
+      (0.1, 0, -1.0, False)
+    explanation: |
+      Gewollt ist „rechts“ – das blockiert die Wand, also bleibt man mit 0,8 auf Feld 4. Quer dazu: mit 0,1 runter (Feld 8), mit 0,1 hoch (Feld 0). Die Wahrscheinlichkeiten summieren sich zu 1.
+  - type: explain
+    question: |
+      Warum ist die Gitterwelt ein Markov-Prozess, wenn der Zustand nur die Feldnummer ist?
+    options:
+      - text: Wohin man kommt und welche Belohnung man bekommt, hängt nur vom aktuellen Feld und der Aktion ab – die Vorgeschichte ändert daran nichts.
+        correct: true
+        why: Genau das steht in `P[s][a]`; eine Tabelle über `s` und `a` reicht für die gesamte Dynamik.
+      - text: Weil alle Übergänge deterministisch sind.
+        correct: false
+        why: Auch mit `slip > 0` ist es ein MDP – Zufall ist erlaubt, solange er nur von `s` und `a` abhängt.
+      - text: Weil der Agent sich seinen Weg merkt.
+        correct: false
+        why: Die Markov-Eigenschaft ist eine Eigenschaft der Umgebung und ihres Zustands, nicht des Gedächtnisses des Agenten.
+      - text: Weil es nur 16 Zustände gibt.
+        correct: false
+        why: Auch unendlich viele Zustände (z. B. Winkel eines Pendels) können markovsch sein.
+  - type: example
+    intro: |
+      Eine deterministische **Policy** ist ein Array mit einer Aktion pro Zustand. `env.reset()` und `env.step(a)` führen eine Episode aus; `render` zeigt Policy-Pfeile und animiert den Pfad.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld()
+      pi = np.full(env.n_states, 2)       # überall: runter
+      pi[[0, 1, 14]] = 1                  # außer hier: rechts
+
+      s = env.reset()
+      path, total, done = [s], 0.0, False
+      while not done:
+          s, r, done = env.step(pi[s])
+          path.append(s)
+          total += r
+      print("Pfad:", path, "Return:", total)
+      env.render(policy=pi, path=path, title="Policy und Episode")
+    subgoals:
+      - lines: [5, 6]
+        label: Policy festlegen
+      - lines: [8, 9]
+        label: Episode starten
+      - lines: [10, 13]
+        label: Schritt für Schritt der Policy folgen
+      - lines: [14, 15]
+        label: Ergebnis zeigen
+    after: |
+      Sechs Schritte, fünfmal −1, der letzte ins Ziel gibt 0. `env.step` bricht außerdem nach `max_steps = 200` ab – so endet auch eine Policy, die im Kreis läuft.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `next_state_probs(env, s, a)`: ein Array der Länge `env.n_states`, das für jeden Zustand die Wahrscheinlichkeit angibt, nach Aktion `a` in Zustand `s` dort zu landen. Achtung: Mehrere Ergebnisse können im **selben** Zustand landen.
+    starter: |
+      import numpy as np
+
+      def next_state_probs(env, s, a):
+          probs = np.zeros(env.n_states)
+          for p, s2, r, done in env.P[s][a]:
+              pass  # dein Code
+          return probs
+    solution: |
+      import numpy as np
+
+      def next_state_probs(env, s, a):
+          probs = np.zeros(env.n_states)
+          for p, s2, r, done in env.P[s][a]:
+              probs[s2] += p
+          return probs
+    tests:
+      - name: Deterministische Welt
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld()
+          got = next_state_probs(env_t, 0, 1)
+          ref = np.zeros(16)
+          ref[1] = 1.0
+          assert close(got, ref), f"Von 0 nach rechts erwartet Feld 1 mit 1.0, bekommen {got}"
+      - name: Rutschen an der Ecke
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld(slip=0.2)
+          got = next_state_probs(env_t, 0, 0)
+          assert close(got[0], 0.9) and close(got[1], 0.1), f"Von 0 nach oben: erwartet P(0)=0.9, P(1)=0.1, bekommen P(0)={got[0]:.2f}, P(1)={got[1]:.2f}"
+          assert close(got.sum(), 1.0), f"Summe sollte 1 sein, ist {got.sum()}"
+      - name: Summe überall 1
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld(slip=0.4)
+          for s in range(16):
+              for a in range(4):
+                  assert close(next_state_probs(env_t, s, a).sum(), 1.0), f"Für s={s}, a={a} summieren sich die Wahrscheinlichkeiten nicht zu 1"
+    mutants:
+      - |
+        import numpy as np
+        def next_state_probs(env, s, a):
+            probs = np.zeros(env.n_states)
+            for p, s2, r, done in env.P[s][a]:
+                probs[s2] = p
+            return probs
+      - |
+        import numpy as np
+        def next_state_probs(env, s, a):
+            probs = np.zeros(env.n_states)
+            for p, s2, r, done in env.P[s][a]:
+                probs[s2] += 1
+            return probs
+      - |
+        import numpy as np
+        def next_state_probs(env, s, a):
+            probs = np.zeros(env.n_states)
+            p, s2, r, done = env.P[s][a][0]
+            probs[s2] = 1.0
+            return probs
+    hints:
+      - "Teilziel: über alle Ergebnisse laufen und Wahrscheinlichkeiten einsammeln."
+      - "Landen zwei Ergebnisse im selben Feld, addieren sich ihre Wahrscheinlichkeiten."
+      - "`probs[s2] += p`"
+    explanation: |
+      Oben links nach oben: 0,8 bleibt (Rand), 0,1 rutscht nach links (auch Rand → bleibt), 0,1 nach rechts. Mit `=` statt `+=` würde der zweite Eintrag für Feld 0 den ersten überschreiben.
+  - type: quiz
+    question: |
+      In der Standard-Gitterwelt läuft der Agent von Feld 10 nach rechts in die Falle `X`. Was liefert `env.step(1)`?
+    options:
+      - text: "`(0, -100.0, False)` – zurück zum Start, die Episode läuft weiter."
+        correct: true
+        why: Mit `trap_resets=True` (Standard) setzt die Falle zurück, statt die Episode zu beenden.
+      - text: "`(11, -100.0, True)` – die Episode endet in der Falle."
+        correct: false
+        why: Das gilt nur mit `trap_resets=False`.
+      - text: "`(11, -1.0, False)` – normaler Schritt."
+        correct: false
+        why: Die Falle kostet −100, nicht −1.
+      - text: "`(10, -1.0, False)` – die Falle ist eine Wand."
+        correct: false
+        why: Wände sind `#`; die Falle kann betreten werden.
+cards:
+  - id: m13-c-p-lesen
+    concept: mdp-definition
+    variants:
+      - type: predict
+        code: |
+          from lab.envs import GridWorld
+          env = GridWorld()
+          print(env.P[1][2])
+        options: ["[(1.0, 1, -1.0, False)]", "[(1.0, 5, -1.0, False)]", "[(1.0, 2, -1.0, False)]"]
+        answer: "[(1.0, 1, -1.0, False)]"
+        explanation: Unter Feld 1 liegt die Wand (Feld 5) – der Agent bleibt stehen und zahlt −1.
+      - type: predict
+        code: |
+          from lab.envs import GridWorld
+          env = GridWorld()
+          print(env.P[14][1])
+        options: ["[(1.0, 15, 0.0, True)]", "[(1.0, 15, -1.0, False)]", "[(1.0, 14, -1.0, False)]"]
+        answer: "[(1.0, 15, 0.0, True)]"
+        explanation: Feld 15 ist das Ziel – Belohnung 0 (`goal_reward`) und `done = True`.
+      - type: predict
+        code: |
+          from lab.envs import GridWorld
+          env = GridWorld()
+          print(len(env.P), len(env.P[0]))
+        options: ["16 4", "4 16", "16 16", "4 4"]
+        answer: "16 4"
+        explanation: Eine Liste pro Zustand (16), darin eine Ergebnisliste pro Aktion (4).
+  - id: m13-c-markov
+    concept: mdp-definition
+    variants:
+      - type: quiz
+        question: |
+          Ein Roboter-Zustand enthält nur die Gelenkwinkel, nicht die Geschwindigkeiten. Ist das markovsch?
+        options:
+          - text: Nein – bei gleicher Stellung hängt die nächste Stellung noch von der Geschwindigkeit ab.
+            correct: true
+            why: Für einen dynamischen Arm gehören Winkel **und** Winkelgeschwindigkeiten in den Zustand.
+          - text: Ja, Winkel beschreiben den Arm vollständig.
+            correct: false
+            why: Sie beschreiben die Lage, nicht die Bewegung.
+          - text: Ja, solange die Schrittweite klein ist.
+            correct: false
+            why: Kleine Schritte ändern nichts daran, dass Information fehlt.
+      - type: quiz
+        question: |
+          Was enthält ein Eintrag `(p, s2, r, done)` in `env.P[s][a]`?
+        options:
+          - text: Wahrscheinlichkeit, Folgezustand, Belohnung, Episodenende.
+            correct: true
+            why: So kodiert `lab.envs` das Modell $P(s', r \mid s, a)$.
+          - text: Policy, Zustand, Return, Diskont.
+            correct: false
+            why: Policy, Return und Diskont gehören zum Agenten, nicht zum Modell der Umgebung.
+          - text: Position, Geschwindigkeit, Reibung, Masse.
+            correct: false
+            why: Das wären Größen eines physikalischen Zustands.
+  - id: m13-c-policy
+    concept: mdp-policy
+    variants:
+      - type: quiz
+        question: |
+          `pi = np.array([1, 2, 2, 3])` in einer Welt mit 4 Zuständen. Was bedeutet `pi[2]`?
+        options:
+          - text: In Zustand 2 wird Aktion 2 (runter) gewählt.
+            correct: true
+            why: Eine deterministische Policy ist eine Tabelle Zustand → Aktion.
+          - text: Die Wahrscheinlichkeit von Zustand 2.
+            correct: false
+            why: Das wäre eine Verteilung über Zustände, keine Policy.
+          - text: Der Wert von Zustand 2.
+            correct: false
+            why: Werte stehen in `V`, nicht in `pi`.
+      - type: quiz
+        question: |
+          Wie stellt man eine **stochastische** Policy für 16 Zustände und 4 Aktionen dar?
+        options:
+          - text: Als Array `(16, 4)`, jede Zeile summiert zu 1.
+            correct: true
+            why: "`pi[s, a]` ist die Wahrscheinlichkeit, in `s` Aktion `a` zu wählen."
+          - text: Als Array `(16,)` mit Werten zwischen 0 und 1.
+            correct: false
+            why: Eine Zahl pro Zustand reicht nicht für 4 Aktionen.
+          - text: Als Array `(4,)`.
+            correct: false
+            why: Dann hinge die Wahl nicht vom Zustand ab.

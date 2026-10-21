@@ -1,0 +1,284 @@
+id: m06-feder-daempfer
+title: Masse-Feder-Dämpfer
+minutes: 9
+goals:
+  - Eine ODE 2. Ordnung als System 1. Ordnung mit Zustand `[x, v]` schreiben
+  - Den Masse-Feder-Dämpfer simulieren und das Dämpfungsverhalten im Plot erkennen
+  - Eine äußere Kraft in das Modell einbauen
+concepts: [ode-erste-ordnung, feder-daempfer, euler-explizit]
+steps:
+  - type: text
+    body: |
+      ## Von 2. zu 1. Ordnung
+
+      Eine Masse $m$ hängt an einer Feder (Steifigkeit $k$, N/m) und einem Dämpfer ($c$, N·s/m), dazu eine äußere Kraft $F$ (N):
+
+      $$
+      m\ddot x = -k x - c\dot x + F
+      $$
+
+      Euler kann nur $\dot{\text{Zustand}} = f(\text{Zustand})$. Der Trick: Nimm die Geschwindigkeit $v = \dot x$ mit in den Zustand. Dann
+
+      $$
+      \dot x = v, \qquad \dot v = \frac{-k x - c v + F}{m}
+      $$
+
+      Mit dem Zustand $[x, v]$ ist das wieder eine ODE 1. Ordnung – und dieselbe Euler-Schleife wie beim freien Fall funktioniert. So geht man mit **jeder** mechanischen Gleichung vor, auch mit dem Roboterarm später.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      m, k = 1.0, 4.0       # kg, N/m
+      dt = 0.01             # s
+
+      def f(state, c):
+          x, v = state
+          a = (-k * x - c * v) / m
+          return np.array([v, a])
+
+      ts = np.arange(1001) * dt
+      fig = lab.Figure(title="Masse-Feder-Dämpfer, x0 = 1 m", xlabel="t [s]", ylabel="x [m]")
+      for c in [0.4, 4.0, 10.0]:
+          state = np.array([1.0, 0.0])
+          xs = [state[0]]
+          for i in range(1000):
+              state = state + dt * f(state, c)
+              xs.append(state[0])
+          fig.line(xs, x=ts, label=f"c = {c}")
+          print(f"c = {c}: kleinstes x = {min(xs):.3f} m")
+      fig.show()
+    subgoals:
+      - lines: [4, 5]
+        label: Parameter festlegen
+      - lines: [7, 10]
+        label: Rechte Seite f(x) definieren
+      - lines: [14, 19]
+        label: Euler-Schleife
+      - lines: [20, 22]
+        label: Kurven vergleichen
+    after: |
+      - $c = 0{,}4$: schwingt (unterdämpft) und schießt bis $-0{,}75$ m über.
+      - $c = 4$: schnellste Rückkehr **ohne** Überschwingen – der **aperiodische Grenzfall** $c = 2\sqrt{km}$.
+      - $c = 10$: überdämpft, kriecht langsam zurück.
+  - type: explain
+    question: |
+      Warum reicht die Position $x$ allein nicht als Zustand?
+    options:
+      - text: Bei gleichem $x$ kann sich die Masse in verschiedene Richtungen und verschieden schnell bewegen – die Gleichung braucht $\dot x$, um $\ddot x$ zu berechnen.
+        correct: true
+        why: Eine ODE 2. Ordnung braucht zwei Anfangswerte. Deshalb sind $x$ **und** $v$ der Zustand.
+      - text: Weil NumPy-Arrays mindestens zwei Einträge haben müssen.
+        correct: false
+        why: Ein Array kann auch einen Eintrag haben. Der Grund ist physikalisch.
+      - text: Weil $v$ für den Plot gebraucht wird.
+        correct: false
+        why: Geplottet wird nur $x$. $v$ wird zum Weiterrechnen gebraucht.
+  - type: predict
+    code: |
+      import numpy as np
+
+      m, k, c = 1.0, 4.0, 0.4
+
+      def f(state):
+          x, v = state
+          return np.array([v, (-k * x - c * v) / m])
+
+      d = f(np.array([0.5, 1.0]))
+      print(d[0], d[1])
+    options: ["1.0 -2.4", "0.5 -2.4", "1.0 -1.6", "1.0 2.4"]
+    answer: "1.0 -2.4"
+    explanation: |
+      Der erste Eintrag ist $\dot x = v = 1{,}0$ – **nicht** $x$. Der zweite ist $(-4 \cdot 0{,}5 - 0{,}4 \cdot 1)/1 = -2{,}4$: Feder und Dämpfer ziehen beide in negative Richtung.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die rechte Seite des Feder-Dämpfer-Modells. Mit $m = 2$, $k = 4$, $c = 0{,}4$ und Zustand $[1, 2]$ soll `2.0 -2.4` herauskommen.
+    code: |
+      import numpy as np
+
+      m, k, c = 2.0, 4.0, 0.4
+
+      def f(state):
+          x, v = state
+          a = (___ * x - c * ___) / m
+          return np.array([___, a])
+
+      d = f(np.array([1.0, 2.0]))
+      print(round(d[0], 3), round(d[1], 3))
+    blanks:
+      - answer: "-k"
+        options: ["-k", "k", "-m"]
+      - answer: v
+        options: [v, x]
+      - answer: v
+        options: [v, x, a]
+    expect_output: "2.0 -2.4"
+    explanation: |
+      $a = (-4 \cdot 1 - 0{,}4 \cdot 2)/2 = -2{,}4$ m/s². Die Feder zieht **gegen** die Auslenkung (Minus), der Dämpfer **gegen** die Geschwindigkeit. Die Ableitung der Position ist die Geschwindigkeit.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Das Modell unten hat weder Dämpfung noch äußere Kraft. Ändere es so, dass
+
+      - `c = 8.0` N·s/m und `F = 4.0` N gesetzt sind und
+      - `f` die Beschleunigung $(-k x - c v + F)/m$ liefert.
+
+      Die Masse sollte sich dann bei $x = F/k = 0{,}5$ m einpendeln.
+    starter: |
+      import numpy as np
+
+      m = 2.0    # kg
+      k = 8.0    # N/m
+      c = 0.0    # N·s/m
+      F = 0.0    # N
+
+      def f(state):
+          x, v = state
+          a = -k * x / m
+          return np.array([v, a])
+    solution: |
+      import numpy as np
+
+      m = 2.0    # kg
+      k = 8.0    # N/m
+      c = 8.0    # N·s/m
+      F = 4.0    # N
+
+      def f(state):
+          x, v = state
+          a = (-k * x - c * v + F) / m
+          return np.array([v, a])
+    tests:
+      - name: Ruhe bei x = 0
+        code: |
+          d = f(np.array([0.0, 0.0]))
+          assert close(d, [0.0, 2.0]), f"In Ruhe bei x = 0 wirkt nur F: erwartet [0, 2.0], bekommen {d}"
+      - name: Feder und Dämpfer
+        code: |
+          d = f(np.array([1.0, 2.0]))
+          assert close(d, [2.0, -10.0]), f"Für [1, 2] erwartet [2.0, -10.0], bekommen {d}"
+      - name: Gleichgewicht nach 10 s
+        code: |
+          s = np.array([0.0, 0.0])
+          for i in range(1000):
+              s = s + 0.01 * f(s)
+          assert close(s[0], 0.5, tol=1e-3), f"Nach 10 s sollte x ≈ 0.5 m sein, ist {s[0]:.4f} m"
+    mutants:
+      - |
+        import numpy as np
+
+        m = 2.0
+        k = 8.0
+        c = 8.0
+        F = 4.0
+
+        def f(state):
+            x, v = state
+            a = (-k * x + c * v + F) / m
+            return np.array([v, a])
+      - |
+        import numpy as np
+
+        m = 2.0
+        k = 8.0
+        c = 8.0
+        F = 4.0
+
+        def f(state):
+            x, v = state
+            a = -k * x / m - c * v / m + F
+            return np.array([v, a])
+      - |
+        import numpy as np
+
+        m = 2.0
+        k = 8.0
+        c = 8.0
+        F = 4.0
+
+        def f(state):
+            x, v = state
+            a = (-k * x - c * v + F) / m
+            return np.array([x, a])
+    hints:
+      - "Teilziel: Parameter setzen, dann die rechte Seite f(x) erweitern."
+      - Alle Kräfte addieren und **gemeinsam** durch die Masse teilen; der Dämpfer wirkt gegen $v$.
+      - "`a = (-k * x - c * v + F) / m`"
+    explanation: |
+      Im Gleichgewicht ist $v = 0$ und $a = 0$, also $-k x + F = 0 \Rightarrow x = F/k$. Mit $c = 8 = 2\sqrt{k m}$ ist das System genau kritisch gedämpft.
+  - type: quiz
+    question: |
+      Masse $m = 1$ kg, Feder $k = 9$ N/m. Bei welcher Dämpfung $c$ liegt der aperiodische Grenzfall?
+    options:
+      - text: $c = 6$ N·s/m
+        correct: true
+        why: $c = 2\sqrt{km} = 2\sqrt 9 = 6$.
+      - text: $c = 3$ N·s/m
+        correct: false
+        why: Das ist $\sqrt{km}$ – der Faktor 2 fehlt. Bei $c = 3$ schwingt das System noch.
+      - text: $c = 9$ N·s/m
+        correct: false
+        why: Das ist $k$, nicht $2\sqrt{km}$. Bei $c = 9$ ist das System schon überdämpft.
+      - text: $c = 18$ N·s/m
+        correct: false
+        why: Das ist $2k$ – die Wurzel fehlt.
+cards:
+  - id: m06-c-erste-ordnung
+    concept: ode-erste-ordnung
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+
+          def f(state):
+              x, v = state
+              return np.array([v, -2.0 * x])
+
+          d = f(np.array([3.0, -1.0]))
+          print(d[0], d[1])
+        options: ["-1.0 -6.0", "3.0 -6.0", "-1.0 2.0", "-6.0 -1.0"]
+        answer: "-1.0 -6.0"
+        explanation: "Erster Eintrag: $\\dot x = v = -1$. Zweiter: $\\dot v = -2 \\cdot 3 = -6$."
+      - type: predict
+        code: |
+          import numpy as np
+
+          m, k, c = 2.0, 6.0, 1.0
+
+          def f(state):
+              x, v = state
+              return np.array([v, (-k * x - c * v) / m])
+
+          d = f(np.array([1.0, 2.0]))
+          print(d[0], d[1])
+        options: ["2.0 -4.0", "1.0 -4.0", "2.0 -8.0", "2.0 -2.0"]
+        answer: "2.0 -4.0"
+        explanation: "$\\dot v = (-6 \\cdot 1 - 1 \\cdot 2)/2 = -4$; $\\dot x = v = 2$."
+  - id: m06-c-daempfung
+    concept: feder-daempfer
+    variants:
+      - type: quiz
+        question: "$m = 1$ kg, $k = 4$ N/m, $c = 1$ N·s/m. Wie verhält sich $x(t)$ nach einer Auslenkung?"
+        options:
+          - text: gedämpfte Schwingung mit Überschwingen
+            correct: true
+            why: $c = 1 < 2\sqrt{km} = 4$ – unterdämpft.
+          - text: kriecht ohne Überschwingen zurück
+            correct: false
+            why: Das passiert erst ab $c \ge 4$.
+          - text: schwingt mit konstanter Amplitude
+            correct: false
+            why: Das gilt nur für $c = 0$.
+      - type: quiz
+        question: "$m = 4$ kg, $k = 1$ N/m, $c = 10$ N·s/m. Wie verhält sich $x(t)$?"
+        options:
+          - text: überdämpft, kein Überschwingen
+            correct: true
+            why: $2\sqrt{km} = 4 < 10$.
+          - text: gedämpfte Schwingung
+            correct: false
+            why: Dafür müsste $c < 4$ sein.
+          - text: die Amplitude wächst
+            correct: false
+            why: Ein positiver Dämpfer entzieht immer Energie.

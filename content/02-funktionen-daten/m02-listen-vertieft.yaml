@@ -1,0 +1,307 @@
+id: m02-listen-vertieft
+title: Listen vertieft – Slicing, Sortieren, Aliasing
+minutes: 10
+goals:
+  - Mit negativen Indizes und Slicing Teile einer Liste auswählen
+  - "`sorted`, `.sort()`, `in`, `sum`, `min`, `max` einsetzen"
+  - Verstehen, dass `b = a` bei Listen keine Kopie erzeugt
+concepts: [m02-slicing, m02-sorted-in, m02-aliasing]
+steps:
+  - type: text
+    body: |
+      ## Von hinten zählen und Stücke ausschneiden
+
+      Negative Indizes zählen von hinten: `werte[-1]` ist das letzte Element, `werte[-2]` das vorletzte.
+
+      **Slicing** schneidet eine Teilliste aus – nach demselben Muster wie `range`:
+
+      | Ausdruck | Bedeutung |
+      |---|---|
+      | `werte[1:3]` | Index 1 bis **ausschließlich** 3 |
+      | `werte[:2]` | die ersten 2 |
+      | `werte[-3:]` | die letzten 3 |
+      | `werte[::2]` | jedes zweite |
+
+      Ein Slice ist immer eine **neue** Liste; die alte bleibt unverändert.
+  - type: example
+    code: |
+      winkel = [0.0, 0.3, 0.6, 0.9, 1.2]
+      print(winkel[-1])
+      print(winkel[1:3])
+      print(winkel[:2])
+      print(winkel[::2])
+    subgoals:
+      - lines: 1
+        label: Messreihe anlegen
+      - lines: 2
+        label: Letztes Element lesen
+      - lines: [3, 5]
+        label: Teillisten ausschneiden
+    after: |
+      Wie bei `range(1, 3)` gehört der Stop-Index nicht dazu: `winkel[1:3]` enthält die Elemente mit Index 1 und 2.
+  - type: predict
+    code: |
+      messungen = [5, 8, 2, 9, 4]
+      print(messungen[-2])
+      print(messungen[1:4])
+    options:
+      - |
+        9
+        [8, 2, 9]
+      - |
+        4
+        [8, 2, 9, 4]
+      - |
+        9
+        [5, 8, 2, 9]
+      - |
+        2
+        [8, 2]
+    answer: |
+      9
+      [8, 2, 9]
+    explanation: |
+      `[-2]` ist das vorletzte Element (9). `[1:4]` nimmt die Indizes 1, 2, 3 – Index 4 ist ausgeschlossen.
+  - type: text
+    body: |
+      ## Fertige Helfer
+
+      Summe und Maximum hast du selbst mit einer Schleife berechnet. Python hat dafür fertige Funktionen: `sum(werte)`, `min(werte)`, `max(werte)`.
+
+      Zum Sortieren gibt es zwei Wege:
+
+      - `sorted(werte)` **liefert eine neue**, sortierte Liste; `werte` bleibt, wie es ist.
+      - `werte.sort()` sortiert **die Liste selbst** und gibt `None` zurück.
+
+      `x in werte` prüft, ob `x` enthalten ist, und liefert `True` oder `False`.
+  - type: predict
+    code: |
+      werte = [3, 1, 2]
+      neu = sorted(werte)
+      print(werte, neu)
+      print(2 in werte, 5 in werte)
+      print(werte.sort())
+    options:
+      - |
+        [3, 1, 2] [1, 2, 3]
+        True False
+        None
+      - |
+        [1, 2, 3] [1, 2, 3]
+        True False
+        [1, 2, 3]
+      - |
+        [3, 1, 2] [1, 2, 3]
+        True False
+        [1, 2, 3]
+      - |
+        [3, 1, 2] [1, 2, 3]
+        False False
+        None
+    answer: |
+      [3, 1, 2] [1, 2, 3]
+      True False
+      None
+    explanation: |
+      `sorted` lässt das Original in Ruhe. `.sort()` sortiert `werte` an Ort und Stelle und gibt `None` zurück – deshalb ist `liste = liste.sort()` ein klassischer Fehler.
+  - type: text
+    body: |
+      ## Zwei Namen, eine Liste
+
+      Listen sind **veränderlich** (mutable): `append`, `sort` oder `werte[0] = …` ändern die Liste selbst.
+
+      Bei `b = a` entsteht **keine Kopie**. Beide Namen zeigen auf **dieselbe** Liste – das nennt man **Aliasing**. Jede Änderung über `b` sieht man auch über `a`.
+
+      Das gilt in Python für jede Zuweisung. Bei Zahlen und Strings merkst du es nur nie, weil man sie nicht verändern kann: `x = x + 1` erzeugt einen **neuen** Wert und gibt ihn `x`.
+
+      Eine echte Kopie bekommst du mit `a.copy()` (oder `a[:]`). Und übergibst du eine Liste an eine Funktion, arbeitet die Funktion mit **derselben** Liste.
+  - type: trace
+    code: |
+      a = [1, 2, 3]
+      b = a
+      c = a.copy()
+      b.append(4)
+      print(a, c)
+    questions:
+      - line: 4
+        var: a
+        prompt: Nach `b.append(4)` – welchen Wert hat `a`?
+        answer: "[1, 2, 3, 4]"
+      - line: 4
+        var: c
+        prompt: Und `c`?
+        answer: "[1, 2, 3]"
+    after: |
+      `a` und `b` sind zwei Namen für dieselbe Liste. `c` ist eine eigene Liste mit (damals) gleichem Inhalt.
+  - type: explain
+    question: |
+      Warum enthält `a` am Ende die 4, obwohl nur `b.append(4)` aufgerufen wurde?
+    options:
+      - text: "`b = a` hat keine neue Liste erzeugt; `a` und `b` bezeichnen dasselbe Listenobjekt."
+        correct: true
+        why: Genau – es gibt nur eine Liste mit zwei Namen.
+      - text: "`append` hängt das Element an alle Listen im Programm an."
+        correct: false
+        why: "`c` hat die 4 nicht bekommen. `append` ändert nur die eine Liste, auf der es aufgerufen wird."
+      - text: Python synchronisiert Variablen, die einmal gleich waren.
+        correct: false
+        why: Es wird nichts synchronisiert. Beide Namen zeigen von Anfang an auf dasselbe Objekt – `append` verändert dieses eine Objekt.
+  - type: fill
+    fading: true
+    prompt: |
+      Ein Abstandssensor liefert eine Messreihe. Wähle die **letzten drei** Messungen aus und prüfe, ob der Wert 16 darunter ist. Erwartet: `[14, 13, 16] True`.
+    code: |
+      daten = [10, 12, 11, 15, 14, 13, 16]
+      letzte = daten[___]
+      print(letzte, 16 ___ letzte)
+    blanks:
+      - answer: "-3:"
+        options: ["-3:", "3:", ":-3", "-3"]
+      - answer: in
+        options: [in, "==", not in]
+    expect_output: "[14, 13, 16] True"
+  - type: parsons
+    fading: true
+    prompt: |
+      Der Ist-Wert soll eine **Kopie** des Soll-Werts werden und dann angepasst werden – ohne den Soll-Wert zu verändern.
+    lines:
+      - "soll = [0.0, 0.5, 1.0]"
+      - "ist = soll.copy()"
+      - "ist[0] = 0.1"
+      - "print(soll)"
+      - "print(ist)"
+    distractors:
+      - "ist = soll"
+    expect_output: |
+      [0.0, 0.5, 1.0]
+      [0.1, 0.5, 1.0]
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein robuster Sensorwert entsteht, wenn man Ausreißer weglässt. Schreibe `ohne_ausreisser(werte)`, die eine **neue**, sortierte Liste ohne den kleinsten und ohne den größten Wert zurückgibt. Die übergebene Liste darf **nicht** verändert werden.
+
+      Beispiel: `ohne_ausreisser([5, 1, 9, 3])` → `[3, 5]`
+    starter: |
+      def ohne_ausreisser(werte):
+          # dein Code
+          pass
+    solution: |
+      def ohne_ausreisser(werte):
+          sortiert = sorted(werte)
+          return sortiert[1:-1]
+    tests:
+      - name: Beispiel
+        code: |
+          ergebnis = ohne_ausreisser([5, 1, 9, 3])
+          assert ergebnis == [3, 5], f"ohne_ausreisser([5, 1, 9, 3]) sollte [3, 5] sein, liefert {ergebnis}"
+      - name: Original unverändert
+        code: |
+          w = [4, 2, 8, 6]
+          ohne_ausreisser(w)
+          assert w == [4, 2, 8, 6], f"Die übergebene Liste wurde verändert: {w}"
+      - name: Randfall zwei Werte
+        code: |
+          ergebnis = ohne_ausreisser([1.5, 0.5])
+          assert ergebnis == [], f"Bei zwei Werten bleibt nichts übrig, erwartet [], bekommen {ergebnis}"
+    mutants:
+      - |
+        def ohne_ausreisser(werte):
+            werte.sort()
+            return werte[1:-1]
+      - |
+        def ohne_ausreisser(werte):
+            return werte[1:-1]
+      - |
+        def ohne_ausreisser(werte):
+            sortiert = sorted(werte)
+            return sortiert[1:]
+    hints:
+      - "Teilziel: sortierte Kopie erzeugen, dann vorne und hinten je ein Element abschneiden."
+      - "`sorted(werte)` liefert eine neue Liste – das Original bleibt unverändert."
+      - Ein Slice von Index 1 bis ausschließlich zum letzten Element ist `[1:-1]`.
+  - type: quiz
+    question: |
+      Was gibt das Programm aus?
+    code: |
+      a = [1, 2]
+      b = a
+      b[0] = 9
+      print(a)
+    options:
+      - text: "`[9, 2]`"
+        correct: true
+        why: "`a` und `b` sind dieselbe Liste."
+      - text: "`[1, 2]`"
+        correct: false
+        why: Das wäre richtig, wenn `b = a.copy()` dastünde.
+      - text: Ein Fehler, weil `b` keine eigene Liste ist.
+        correct: false
+        why: "`b` ist ein gültiger Name für die Liste – über ihn darf man sie auch ändern."
+cards:
+  - id: m02-c-slicing
+    concept: m02-slicing
+    variants:
+      - type: predict
+        code: |
+          q = [10, 20, 30, 40]
+          print(q[-1], q[:2])
+        options: ["40 [10, 20]", "40 [10, 20, 30]", "10 [10, 20]"]
+        answer: "40 [10, 20]"
+        explanation: "`[-1]` ist das letzte Element, `[:2]` die ersten zwei."
+      - type: predict
+        code: |
+          q = [1, 2, 3, 4, 5, 6]
+          print(q[1:5:2])
+        options: ["[2, 4]", "[2, 4, 6]", "[1, 3, 5]"]
+        answer: "[2, 4]"
+        explanation: Start bei Index 1, Schrittweite 2, Index 5 ausgeschlossen → Indizes 1 und 3.
+      - type: predict
+        code: |
+          q = [7, 8, 9]
+          print(q[-2:])
+        options: ["[8, 9]", "[9]", "[7, 8]"]
+        answer: "[8, 9]"
+        explanation: Die letzten zwei Elemente.
+  - id: m02-c-aliasing
+    concept: m02-aliasing
+    variants:
+      - type: predict
+        code: |
+          def nullen(liste):
+              for i in range(len(liste)):
+                  liste[i] = 0
+
+          q = [0.5, 1.0]
+          nullen(q)
+          print(q)
+        options: ["[0, 0]", "[0.5, 1.0]", "None"]
+        answer: "[0, 0]"
+        explanation: Die Funktion bekommt dieselbe Liste, nicht eine Kopie – Änderungen bleiben sichtbar.
+      - type: predict
+        code: |
+          a = [3, 4]
+          b = a.copy()
+          b.append(5)
+          print(a)
+        options: ["[3, 4]", "[3, 4, 5]", "[5]"]
+        answer: "[3, 4]"
+        explanation: "`copy()` erzeugt eine eigene Liste; `append` auf `b` betrifft `a` nicht."
+  - id: m02-c-sort-none
+    concept: m02-sorted-in
+    variants:
+      - type: predict
+        code: |
+          w = [2, 3, 1]
+          w = w.sort()
+          print(w)
+        options: ["None", "[1, 2, 3]", "[2, 3, 1]"]
+        answer: "None"
+        explanation: "`.sort()` sortiert an Ort und Stelle und gibt `None` zurück – das überschreibt `w`."
+      - type: predict
+        code: |
+          w = [2, 3, 1]
+          s = sorted(w)
+          print(w[0], s[0])
+        options: ["2 1", "1 1", "2 2"]
+        answer: "2 1"
+        explanation: "`sorted` erzeugt eine neue Liste; `w` bleibt unverändert."

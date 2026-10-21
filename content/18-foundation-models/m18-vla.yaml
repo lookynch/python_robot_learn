@@ -1,0 +1,234 @@
+id: m18-vla
+title: Vision-Language-Action-Modelle
+minutes: 10
+goals:
+  - Erklären, wie ein VLA aus Bild und Sprachbefehl Aktionen macht
+  - Aktionen in Tokens umwandeln und zurück, Quantisierungsfehler abschätzen
+  - RT-2, OpenVLA, π0/π0.5 und SmolVLA grob einordnen
+concepts: [vla-modell, aktions-diskretisierung]
+steps:
+  - type: text
+    body: |
+      ## Die Idee
+
+      Ein **Vision-Language-Model** (VLM) hat aus Milliarden Bild-Text-Paaren im Netz gelernt, was ein „roter Becher“ ist. Ein **Vision-Language-Action-Modell** (VLA) nutzt dieses Wissen und wird zusätzlich auf Roboter-Demonstrationen trainiert:
+
+      $$
+      (\text{Kamerabild},\ \text{„leg den Becher in die Schale“}) \;\longmapsto\; a_t
+      $$
+
+      Ausgabe ist direkt eine Aktion – oder eine kurze Folge von Aktionen. Es gibt **kein** explizites World Model und keinen Planer: Ein VLA ist eine **Policy**, gelernt durch Imitation (nächste Lektion).
+  - type: text
+    body: |
+      ## RT-2: Aktionen als Text
+
+      RT-2 (Google DeepMind, Juli 2023) baute auf den VLMs PaLI-X (55 Mrd. Parameter) und PaLM-E (12 Mrd.) auf. Der Trick: Jede der 7 kontinuierlichen Aktionsdimensionen (Δ-Position, Δ-Rotation, Greifer) wird **gleichmäßig in 256 Intervalle** (Bins) zerlegt; dazu kommt ein Abbruch-Befehl. Eine Aktion ist dann eine Zeichenkette aus 8 Zahlen wie `1 128 91 241 5 101 127 217` – das Sprachmodell „spricht“ Aktionen.
+
+      Berichtet wird bessere Generalisierung auf neue Objekte und auf Befehle, die nicht in den Roboterdaten vorkamen ([arXiv:2307.15818](https://arxiv.org/abs/2307.15818), [Projektseite](https://robotics-transformer2.github.io/); Stand: Oktober 2026).
+  - type: predict
+    intro: |
+      Eine einfache Diskretisierung: Bereich $[\text{low}, \text{high}]$ in `n` gleich breite Bins teilen.
+    code: |
+      def zu_token(a, low=-1.0, high=1.0, n=256):
+          b = int((a - low) / (high - low) * n)
+          return min(max(b, 0), n - 1)
+
+      print(zu_token(0.0), zu_token(1.0), zu_token(-1.0))
+    options: ["128 255 0", "128 256 0", "127 255 0", "0.0 1.0 -1.0"]
+    answer: "128 255 0"
+    explanation: |
+      $0{,}0$ liegt in der Mitte: $(0+1)/2 \cdot 256 = 128$. Für $1{,}0$ ergibt die Formel 256 – das gibt es bei Bins 0…255 nicht, deshalb wird auf 255 begrenzt.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe die Rückrichtung `zu_aktion(b, low=-1.0, high=1.0, n=256)`: Sie soll die **Mitte** von Bin `b` als Aktion zurückgeben. Dann ist der Fehler nach `zu_token` → `zu_aktion` höchstens eine halbe Bin-Breite.
+    starter: |
+      def zu_token(a, low=-1.0, high=1.0, n=256):
+          b = int((a - low) / (high - low) * n)
+          return min(max(b, 0), n - 1)
+
+      def zu_aktion(b, low=-1.0, high=1.0, n=256):
+          # Mitte von Bin b zurückgeben
+          pass
+    solution: |
+      def zu_token(a, low=-1.0, high=1.0, n=256):
+          b = int((a - low) / (high - low) * n)
+          return min(max(b, 0), n - 1)
+
+      def zu_aktion(b, low=-1.0, high=1.0, n=256):
+          breite = (high - low) / n
+          return low + (b + 0.5) * breite
+    tests:
+      - name: Erster und letzter Bin
+        code: |
+          r0, r255 = zu_aktion(0), zu_aktion(255)
+          assert r0 is not None, "zu_aktion gibt nichts zurück."
+          assert close(r0, -1 + 1 / 256), f"Mitte von Bin 0 ist {-1 + 1/256}, bekommen {r0}"
+          assert close(r255, 1 - 1 / 256), f"Mitte von Bin 255 ist {1 - 1/256}, bekommen {r255}"
+      - name: Anderer Bereich
+        code: |
+          r = zu_aktion(3, low=0.0, high=0.1, n=10)
+          assert close(r, 0.035), f"Bin 3 von [0, 0.1] mit 10 Bins hat die Mitte 0.035, bekommen {r}"
+      - name: Fehler höchstens halbe Bin-Breite
+        code: |
+          import numpy as np
+          for a in np.linspace(-1, 1, 101):
+              fehler = abs(zu_aktion(zu_token(a)) - a)
+              assert fehler <= 1 / 256 + 1e-9, f"Für a = {a:.3f} ist der Fehler {fehler:.5f} > halbe Bin-Breite {1/256:.5f}"
+    mutants:
+      - |
+        def zu_token(a, low=-1.0, high=1.0, n=256):
+            b = int((a - low) / (high - low) * n)
+            return min(max(b, 0), n - 1)
+        def zu_aktion(b, low=-1.0, high=1.0, n=256):
+            return low + b * (high - low) / n
+      - |
+        def zu_token(a, low=-1.0, high=1.0, n=256):
+            b = int((a - low) / (high - low) * n)
+            return min(max(b, 0), n - 1)
+        def zu_aktion(b, low=-1.0, high=1.0, n=256):
+            return (b + 0.5) * (high - low) / n
+      - |
+        def zu_token(a, low=-1.0, high=1.0, n=256):
+            b = int((a - low) / (high - low) * n)
+            return min(max(b, 0), n - 1)
+        def zu_aktion(b, low=-1.0, high=1.0, n=256):
+            return low + (b + 0.5) * (high - low) / (n - 1)
+      - |
+        def zu_token(a, low=-1.0, high=1.0, n=256):
+            b = int((a - low) / (high - low) * n)
+            return min(max(b, 0), n - 1)
+        def zu_aktion(b, low=-1.0, high=1.0, n=256):
+            return -1.0 + (b + 0.5) * 2.0 / 256
+    hints:
+      - "Teilziel: Bin-Breite berechnen, dann vom unteren Rand aus zur Bin-Mitte gehen."
+      - "Bin-Breite = `(high - low) / n`. Bin `b` beginnt bei `low + b * breite`; die Mitte liegt eine halbe Breite weiter."
+      - "`return low + (b + 0.5) * breite`"
+    explanation: |
+      Bei 256 Bins auf $[-1, 1]$ ist der größte Fehler $1/256 \approx 0{,}004$ – bei einem Arbeitsbereich von z. B. ±10 cm pro Schritt also etwa 0,4 mm. Für viele Greifaufgaben reicht das, für sehr feine Bewegungen nicht.
+  - type: text
+    body: |
+      ## Offene VLAs
+
+      - **OpenVLA** (Juni 2024): 7 Mrd. Parameter, Llama 2 plus Bild-Encoder aus DINOv2 und SigLIP, trainiert auf 970 000 echten Roboter-Demonstrationen; offen, Feintuning per LoRA auf Consumer-GPUs ([arXiv:2406.09246](https://arxiv.org/abs/2406.09246)).
+      - **π0** (Physical Intelligence, Okt. 2024): statt Tokens erzeugt ein **Flow-Matching**-Teil kontinuierliche Aktionen; Aufgaben wie Wäschefalten ([arXiv:2410.24164](https://arxiv.org/abs/2410.24164)). **π0.5** (Apr. 2025) zielt auf Generalisierung in fremden Wohnungen ([arXiv:2504.16054](https://arxiv.org/abs/2504.16054)). Code und Checkpoints in [openpi](https://github.com/Physical-Intelligence/openpi) (Apache-2.0, zusätzlich liegt eine Gemma-Lizenzdatei bei); Feintuning mit LoRA braucht laut README > 22,5 GB GPU-Speicher.
+
+      *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Klein und für Hobby-Arme: SmolVLA
+
+      **SmolVLA** (Hugging Face, Juni 2025) hat ca. 450 Mio. Parameter, basiert auf SmolVLM2 und wurde auf 487 Community-Datensätzen trainiert – überwiegend vom günstigen SO-100-Arm. Laut Autoren läuft es auf Consumer-GPUs oder sogar CPUs und trainiert auf einer einzelnen GPU ([arXiv:2506.01844](https://arxiv.org/abs/2506.01844), [HF-Blog](https://huggingface.co/blog/smolvla)).
+
+      Neuere Richtung: **π\*0.6** (Nov. 2025) verbessert ein VLA zusätzlich mit Reinforcement Learning aus eigener Erfahrung und menschlichen Korrekturen ([PI-Blog](https://www.pi.website/blog/pistar06)).
+
+      Alle Erfolgsquoten in diesen Papers sind Selbstangaben der Autoren. *Stand: Oktober 2026.*
+  - type: explain
+    question: |
+      Warum hilft das Vortraining auf Bild-Text-Daten aus dem Netz einem Roboter, obwohl dort keine einzige Roboteraktion vorkommt?
+    options:
+      - text: Roboterdaten sind knapp; das VLM bringt Wissen über Objekte, Begriffe und Szenen mit, das die Policy auf neue Objekte und Befehle übertragen kann.
+        correct: true
+        why: Genau – das ist die Kernthese von RT-2 und Nachfolgern. Die Aktionen selbst müssen trotzdem aus Roboter-Demonstrationen gelernt werden.
+      - text: Im Netz-Vortraining lernt das Modell bereits die Gelenkwinkel eines Arms.
+        correct: false
+        why: Bild-Text-Daten enthalten keine Aktionen; Motorik kommt erst durch Roboterdaten.
+      - text: Das Vortraining ersetzt die Roboter-Demonstrationen vollständig.
+        correct: false
+        why: Alle genannten VLAs brauchen Roboterdaten – OpenVLA z. B. 970 000 Demonstrationen.
+      - text: Große Modelle sind immer besser, egal worauf sie trainiert wurden.
+        correct: false
+        why: SmolVLA zeigt laut Autoren, dass auch ein kleines Modell konkurrenzfähig sein kann; Daten und Training zählen.
+  - type: quiz
+    question: |
+      π0 erzeugt Aktionen mit Flow Matching statt als 256er-Tokens wie RT-2. Welcher Vorteil folgt daraus grundsätzlich?
+    options:
+      - text: Aktionen sind kontinuierlich, also ohne Quantisierungsfehler, und das Modell kann eine Verteilung über Aktionen abbilden statt nur einen Wert.
+        correct: true
+        why: Flow Matching ist ein generatives Verfahren für kontinuierliche Größen – keine Bins, und mehrere gute Aktionen bleiben unterscheidbar.
+      - text: Das Modell braucht keine Roboterdaten mehr.
+        correct: false
+        why: Die Ausgabeform ändert nichts am Datenbedarf.
+      - text: Das Sprachmodell wird überflüssig.
+        correct: false
+        why: π0 baut weiterhin auf einem vortrainierten VLM auf.
+cards:
+  - id: m18-c-vla-io
+    concept: vla-modell
+    variants:
+      - type: quiz
+        question: |
+          Was sind Eingabe und Ausgabe eines Vision-Language-Action-Modells?
+        options:
+          - text: Kamerabild + Sprachbefehl → Roboteraktion(en)
+            correct: true
+            why: Das „A“ in VLA steht für die Aktion als Ausgabe.
+          - text: Sprachbefehl → Text-Antwort
+            correct: false
+            why: Das wäre ein Sprachmodell; ein VLA muss handeln.
+          - text: Aktion → nächstes Kamerabild
+            correct: false
+            why: Das wäre ein (Video-)World-Model, keine Policy.
+      - type: quiz
+        question: |
+          Ein VLA steuert einen Arm. Braucht es dafür zur Laufzeit einen Planer wie CEM?
+        options:
+          - text: Nein, ein VLA ist eine Policy und gibt Aktionen direkt aus.
+            correct: true
+            why: VLAs werden durch Imitation trainiert und bilden Beobachtung direkt auf Aktion ab.
+          - text: Ja, ein VLA ist ein World Model, das immer mit CEM kombiniert wird.
+            correct: false
+            why: Das beschreibt V-JEPA 2-AC, nicht ein VLA.
+          - text: Ja, sonst kann es keine Sprache verstehen.
+            correct: false
+            why: Sprachverständnis kommt aus dem VLM-Vortraining, nicht aus einem Planer.
+  - id: m18-c-bins
+    concept: aktions-diskretisierung
+    variants:
+      - type: predict
+        code: |
+          def zu_token(a, low=-1.0, high=1.0, n=256):
+              b = int((a - low) / (high - low) * n)
+              return min(max(b, 0), n - 1)
+          print(zu_token(0.5))
+        options: ["192", "128", "191", "64"]
+        answer: "192"
+        explanation: "(0,5 + 1) / 2 · 256 = 192."
+      - type: predict
+        code: |
+          def zu_token(a, low=0.0, high=1.0, n=10):
+              b = int((a - low) / (high - low) * n)
+              return min(max(b, 0), n - 1)
+          print(zu_token(0.37), zu_token(1.0))
+        options: ["3 9", "3 10", "4 9", "0.37 1.0"]
+        answer: "3 9"
+        explanation: "0,37 · 10 = 3,7 → abgerundet 3. Für 1,0 kommt 10 heraus; der letzte Bin ist 9."
+  - id: m18-c-quant-fehler
+    concept: aktions-diskretisierung
+    variants:
+      - type: quiz
+        question: |
+          Ein Bereich von 0,2 m wird in 100 Bins geteilt; zurückgerechnet wird auf die Bin-Mitte. Wie groß ist der Fehler höchstens?
+        options:
+          - text: 1 mm
+            correct: true
+            why: Bin-Breite 0,2 m / 100 = 2 mm; der größte Abstand zur Mitte ist die Hälfte.
+          - text: 2 mm
+            correct: false
+            why: Das ist die ganze Bin-Breite; mit der Bin-Mitte halbiert sich der Fehler.
+          - text: 0,2 mm
+            correct: false
+            why: Rechne nach – 0,2 m / 100 = 2 mm Breite.
+      - type: quiz
+        question: |
+          Was passiert mit dem größten Quantisierungsfehler, wenn man von 256 auf 512 Bins geht (gleicher Bereich)?
+        options:
+          - text: Er halbiert sich.
+            correct: true
+            why: Der Fehler ist eine halbe Bin-Breite, und die Bin-Breite halbiert sich.
+          - text: Er viertelt sich.
+            correct: false
+            why: Die Abhängigkeit ist linear, nicht quadratisch.
+          - text: Er bleibt gleich.
+            correct: false
+            why: Schmalere Bins bedeuten kleineren Fehler.

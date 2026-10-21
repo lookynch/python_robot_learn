@@ -1,0 +1,441 @@
+id: m03-klassen
+title: Klassen – Daten und Verhalten bündeln
+minutes: 10
+goals:
+  - Eine Klasse mit `__init__`, Attributen und Methoden schreiben
+  - Erklären, wofür `self` steht
+  - Mehrere unabhängige Objekte derselben Klasse erzeugen und benutzen
+concepts: [m03-klasse-objekt, m03-methode-self]
+steps:
+  - type: text
+    body: |
+      ## Ein Bauplan für Motoren
+
+      Ein Motor hat **Daten** (Name, Höchstgeschwindigkeit, aktuelle Geschwindigkeit) und **Verhalten** (Geschwindigkeit setzen, dabei begrenzen). Bisher lägen die Daten in Variablen oder einem Dict und das Verhalten in losen Funktionen.
+
+      Eine **Klasse** (class) bündelt beides. Sie ist ein Bauplan; daraus erzeugst du beliebig viele **Objekte** (objects, auch Instanzen). Jedes Objekt hat seine eigenen Werte – seine **Attribute**. Funktionen innerhalb der Klasse heißen **Methoden** – wie `append` bei Listen.
+
+      In diesem Modul sind Namen im Code englisch (`Motor`, `speed`), so wie in fast jeder Robotik-Bibliothek; die Erklärungen bleiben deutsch. Du wirst im Kurs beides sehen – wichtig ist nur, innerhalb eines Programms einheitlich zu bleiben. Klassennamen beginnen mit einem Großbuchstaben.
+  - type: example
+    code: |
+      class Motor:
+          def __init__(self, name, max_speed):
+              self.name = name
+              self.max_speed = max_speed
+              self.speed = 0.0
+
+          def set_speed(self, v):
+              if v > self.max_speed:
+                  v = self.max_speed
+              self.speed = v
+
+      m1 = Motor("links", 2.0)
+      m2 = Motor("rechts", 1.5)
+      m1.set_speed(3.0)
+      m2.set_speed(1.0)
+      print(m1.name, m1.speed)
+      print(m2.name, m2.speed)
+    subgoals:
+      - lines: 1
+        label: Klasse definieren
+      - lines: [2, 5]
+        label: Beim Erzeugen Attribute anlegen
+      - lines: [7, 10]
+        label: Methode mit Verhalten schreiben
+      - lines: [12, 13]
+        label: Objekte erzeugen
+      - lines: [14, 17]
+        label: Methoden aufrufen, Attribute lesen
+    after: |
+      - `Motor("links", 2.0)` erzeugt ein neues Objekt und ruft dabei automatisch `__init__` auf (zwei Unterstriche vorn und hinten; oft „Konstruktor“ genannt).
+      - `self.name = name` speichert den Parameter als **Attribut** im Objekt.
+      - `m1.set_speed(3.0)` ruft die Methode für `m1` auf – `m1` wird auf 2.0 m/s begrenzt.
+  - type: explain
+    question: |
+      Was ist `self` beim Aufruf `m1.set_speed(3.0)`?
+    options:
+      - text: Das Objekt `m1` selbst – Python übergibt es automatisch als ersten Parameter.
+        correct: true
+        why: "`m1.set_speed(3.0)` entspricht `Motor.set_speed(m1, 3.0)`. Deshalb wirkt `self.speed = v` auf `m1` und nicht auf `m2`."
+      - text: Die Klasse `Motor`.
+        correct: false
+        why: Dann hätten alle Motoren dieselbe Geschwindigkeit. `self` ist das einzelne Objekt, nicht der Bauplan.
+      - text: Ein Schlüsselwort, das Python für Methoden verlangt, ohne eigene Bedeutung.
+        correct: false
+        why: "`self` ist ein ganz normaler Parameter (der Name ist Konvention). Über ihn erreicht die Methode die Attribute ihres Objekts."
+  - type: predict
+    code: |
+      class Counter:
+          def __init__(self):
+              self.n = 0
+
+          def tick(self):
+              self.n = self.n + 1
+
+      a = Counter()
+      b = Counter()
+      a.tick()
+      a.tick()
+      b.tick()
+      print(a.n, b.n)
+    options: ["2 1", "3 3", "1 1", "3 0"]
+    answer: "2 1"
+    explanation: |
+      Jedes Objekt hat sein eigenes Attribut `n`. `a` wurde zweimal hochgezählt, `b` einmal.
+  - type: predict
+    code: |
+      class Sensor:
+          def __init__(self, offset):
+              self.offset = offset
+
+          def read(self, raw):
+              return raw - self.offset
+
+      s = Sensor(0.5)
+      print(s.read(2.0))
+      print(Sensor(1.0).read(2.0))
+      print(s.offset)
+    options:
+      - |
+        1.5
+        1.0
+        0.5
+      - |
+        1.5
+        1.0
+        1.0
+      - |
+        1.5
+        1.5
+        0.5
+      - |
+        2.0
+        2.0
+        0.5
+    answer: |
+      1.5
+      1.0
+      0.5
+    explanation: |
+      Methoden können wie Funktionen Werte zurückgeben. `Sensor(1.0)` ist ein **zweites** Objekt mit eigenem Offset – `s` bleibt bei 0.5.
+  - type: text
+    body: |
+      ## Drei typische Fehler
+
+      1. **`self` in der Parameterliste vergessen:** `def tick():` → beim Aufruf `a.tick()` gibt es einen `TypeError` („takes 0 positional arguments but 1 was given“), weil Python das Objekt trotzdem übergibt.
+      2. **`self.` beim Attribut vergessen:** `n = 0` in `__init__` erzeugt nur eine lokale Variable, die nach `__init__` verschwindet.
+      3. **Klasse statt Objekt benutzen:** `Motor.set_speed(3.0)` – es fehlt das Objekt, dessen Geschwindigkeit gesetzt werden soll.
+  - type: quiz
+    question: |
+      Was passiert in der letzten Zeile?
+    code: |
+      class Gripper:
+          def __init__(self):
+              opened = False
+
+          def open(self):
+              self.opened = True
+
+      g = Gripper()
+      print(g.opened)
+    options:
+      - text: "Ein `AttributeError`, weil `g` noch kein Attribut `opened` hat."
+        correct: true
+        why: "`opened = False` ohne `self.` ist eine lokale Variable in `__init__`. Das Attribut entsteht erst, wenn `open()` aufgerufen wird."
+      - text: "Es wird `False` ausgegeben."
+        correct: false
+        why: Dafür müsste in `__init__` `self.opened = False` stehen.
+      - text: "Es wird `True` ausgegeben."
+        correct: false
+        why: "`open()` wurde nie aufgerufen."
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Akku-Klasse so, dass nach einem Verbrauch von 30 noch `70` ausgegeben wird.
+    code: |
+      class Battery:
+          def __init__(self, capacity):
+              ___.capacity = capacity
+              self.charge = capacity
+
+          def use(self, amount):
+              self.charge = self.charge - amount
+
+      b = ___(100)
+      b.___(30)
+      print(b.charge)
+    blanks:
+      - answer: self
+        options: [self, capacity, b]
+      - answer: Battery
+        options: [Battery, self, use]
+      - answer: use
+        options: [use, charge, Battery]
+    expect_output: "70"
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue eine Klasse `Lamp`, die beim Erzeugen aus ist und mit `toggle()` umschaltet. Ausgabe: `True`.
+    lines:
+      - "class Lamp:"
+      - "    def __init__(self):"
+      - "        self.on = False"
+      - "    def toggle(self):"
+      - "        self.on = not self.on"
+      - "lamp = Lamp()"
+      - "lamp.toggle()"
+      - "print(lamp.on)"
+    expect_output: "True"
+  - type: exercise
+    mode: modify
+    prompt: |
+      `set_speed` begrenzt bisher nur nach oben. Ändere die Methode so, dass die Geschwindigkeit auch nach **unten** auf `-max_speed` begrenzt wird (rückwärts darf der Motor genauso schnell wie vorwärts).
+    starter: |
+      class Motor:
+          def __init__(self, name, max_speed):
+              self.name = name
+              self.max_speed = max_speed
+              self.speed = 0.0
+
+          def set_speed(self, v):
+              if v > self.max_speed:
+                  v = self.max_speed
+              self.speed = v
+    solution: |
+      class Motor:
+          def __init__(self, name, max_speed):
+              self.name = name
+              self.max_speed = max_speed
+              self.speed = 0.0
+
+          def set_speed(self, v):
+              if v > self.max_speed:
+                  v = self.max_speed
+              if v < -self.max_speed:
+                  v = -self.max_speed
+              self.speed = v
+    tests:
+      - name: Nach unten begrenzen
+        code: |
+          m = Motor("m", 2.0)
+          m.set_speed(-5.0)
+          assert m.speed == -2.0, f"set_speed(-5.0) bei max_speed 2.0 sollte -2.0 ergeben, ist {m.speed}"
+      - name: Normale Werte
+        code: |
+          m = Motor("m", 2.0)
+          m.set_speed(-1.0)
+          assert m.speed == -1.0, f"set_speed(-1.0) sollte -1.0 ergeben, ist {m.speed}"
+          m.set_speed(0.5)
+          assert m.speed == 0.5, f"set_speed(0.5) sollte 0.5 ergeben, ist {m.speed}"
+      - name: Nach oben begrenzen
+        code: |
+          m = Motor("m", 1.5)
+          m.set_speed(4.0)
+          assert m.speed == 1.5, f"set_speed(4.0) bei max_speed 1.5 sollte 1.5 ergeben, ist {m.speed}"
+    mutants:
+      - |
+        class Motor:
+            def __init__(self, name, max_speed):
+                self.name = name
+                self.max_speed = max_speed
+                self.speed = 0.0
+
+            def set_speed(self, v):
+                if v > self.max_speed:
+                    v = self.max_speed
+                if v < 0:
+                    v = 0
+                self.speed = v
+      - |
+        class Motor:
+            def __init__(self, name, max_speed):
+                self.name = name
+                self.max_speed = max_speed
+                self.speed = 0.0
+
+            def set_speed(self, v):
+                if v > self.max_speed:
+                    v = self.max_speed
+                if v < -self.max_speed:
+                    v = self.max_speed
+                self.speed = v
+      - |
+        class Motor:
+            def __init__(self, name, max_speed):
+                self.name = name
+                self.max_speed = max_speed
+                self.speed = 0.0
+
+            def set_speed(self, v):
+                if v > self.max_speed:
+                    v = self.max_speed
+                if v < -self.max_speed:
+                    speed = -self.max_speed
+                self.speed = v
+    hints:
+      - "Teilziel: eine zweite Prüfung für die untere Grenze ergänzen."
+      - Die untere Grenze ist `-self.max_speed` – auf die Attribute greifst du immer über `self` zu.
+      - |
+        ```python
+        if v < -self.max_speed:
+            v = -self.max_speed
+        ```
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe eine Klasse `Odometer` (Wegzähler):
+
+      - `__init__(self)` setzt das Attribut `distance` auf `0.0`.
+      - `add(self, speed, dt)` addiert den in der Zeit `dt` (s) zurückgelegten Weg $v \cdot \Delta t$ (m) zu `distance`.
+      - `reset(self)` setzt `distance` wieder auf `0.0`.
+    starter: |
+      class Odometer:
+          def __init__(self):
+              # dein Code
+              pass
+    solution: |
+      class Odometer:
+          def __init__(self):
+              self.distance = 0.0
+
+          def add(self, speed, dt):
+              self.distance = self.distance + speed * dt
+
+          def reset(self):
+              self.distance = 0.0
+    tests:
+      - name: Startwert
+        code: |
+          o = Odometer()
+          assert o.distance == 0.0, f"Ein neuer Odometer sollte distance 0.0 haben, hat {o.distance}"
+      - name: Aufaddieren
+        code: |
+          o = Odometer()
+          o.add(2.0, 0.5)
+          o.add(1.0, 3.0)
+          assert close(o.distance, 4.0), f"Nach add(2.0, 0.5) und add(1.0, 3.0) sollte distance 4.0 sein, ist {o.distance}"
+      - name: Unabhängige Objekte
+        code: |
+          a = Odometer()
+          b = Odometer()
+          a.add(1.0, 1.0)
+          assert b.distance == 0.0, f"b sollte unverändert 0.0 sein, ist {b.distance}"
+      - name: Zurücksetzen
+        code: |
+          o = Odometer()
+          o.add(3.0, 1.0)
+          o.reset()
+          assert o.distance == 0.0, f"Nach reset() sollte distance 0.0 sein, ist {o.distance}"
+          o.add(1.0, 2.0)
+          assert close(o.distance, 2.0), f"Nach reset() und add(1.0, 2.0) sollte distance 2.0 sein, ist {o.distance}"
+    mutants:
+      - |
+        class Odometer:
+            def __init__(self):
+                self.distance = 0.0
+
+            def add(self, speed, dt):
+                self.distance = speed * dt
+
+            def reset(self):
+                self.distance = 0.0
+      - |
+        class Odometer:
+            def __init__(self):
+                self.distance = 0.0
+
+            def add(self, speed, dt):
+                self.distance = self.distance + speed * dt
+
+            def reset(self):
+                distance = 0.0
+      - |
+        class Odometer:
+            def __init__(self):
+                self.distance = 0.0
+
+            def add(self, speed, dt):
+                self.distance = self.distance + speed + dt
+
+            def reset(self):
+                self.distance = 0.0
+    hints:
+      - "Teilziel: Attribut in `__init__` anlegen, in `add` aufaddieren, in `reset` zurücksetzen."
+      - Jede Methode bekommt `self` als ersten Parameter; das Attribut heißt überall `self.distance`.
+      - "In `add`: `self.distance = self.distance + speed * dt`"
+  - type: quiz
+    question: Was ist der Unterschied zwischen einer Klasse und einem Objekt?
+    options:
+      - text: Die Klasse ist der Bauplan, ein Objekt ein konkretes Exemplar mit eigenen Attributwerten.
+        correct: true
+        why: Aus einer Klasse `Motor` kannst du beliebig viele Motor-Objekte erzeugen.
+      - text: Eine Klasse enthält Daten, ein Objekt enthält Methoden.
+        correct: false
+        why: Die Klasse definiert beides; jedes Objekt hat eigene Daten und nutzt die Methoden der Klasse.
+      - text: Es gibt keinen Unterschied, beides sind nur Namen für dasselbe.
+        correct: false
+        why: "`Motor` (Klasse) und `Motor(\"links\", 2.0)` (Objekt) sind verschiedene Dinge – nur das Objekt hat z. B. eine `speed`."
+cards:
+  - id: m03-c-objekte-unabhaengig
+    concept: m03-klasse-objekt
+    variants:
+      - type: predict
+        code: |
+          class Box:
+              def __init__(self, v):
+                  self.v = v
+
+          a = Box(1)
+          b = Box(2)
+          a.v = 5
+          print(a.v, b.v)
+        options: ["5 2", "5 5", "1 2"]
+        answer: "5 2"
+        explanation: Jedes Objekt hat eigene Attribute.
+      - type: predict
+        code: |
+          class Joint:
+              def __init__(self):
+                  self.angle = 0.0
+
+              def move_by(self, d):
+                  self.angle = self.angle + d
+
+          j = Joint()
+          k = Joint()
+          j.move_by(0.5)
+          k.move_by(0.25)
+          j.move_by(0.5)
+          print(j.angle, k.angle)
+        options: ["1.0 0.25", "1.25 1.25", "0.5 0.25"]
+        answer: "1.0 0.25"
+        explanation: "`j` wurde zweimal um 0.5 bewegt, `k` einmal um 0.25."
+  - id: m03-c-self
+    concept: m03-methode-self
+    variants:
+      - type: quiz
+        question: "`m.set_speed(3.0)` entspricht welchem Aufruf?"
+        options:
+          - text: "`Motor.set_speed(m, 3.0)`"
+            correct: true
+            why: Python übergibt das Objekt automatisch als `self`.
+          - text: "`Motor.set_speed(3.0)`"
+            correct: false
+            why: Es fehlt das Objekt – Python wüsste nicht, welcher Motor gemeint ist.
+          - text: "`set_speed(self, 3.0)`"
+            correct: false
+            why: "`self` ist kein globaler Name, sondern der Parameter in der Methode."
+      - type: predict
+        code: |
+          class Wheel:
+              def __init__(self, r):
+                  self.r = r
+
+              def distance(self, turns):
+                  return 2 * 3.14 * self.r * turns
+
+          w = Wheel(0.5)
+          print(w.distance(2))
+        options: ["6.28", "12.56", "3.14"]
+        answer: "6.28"
+        explanation: "`self.r` ist das Attribut dieses Rades (0.5 m): $2 \\cdot 3{,}14 \\cdot 0{,}5 \\cdot 2 = 6{,}28$ m."

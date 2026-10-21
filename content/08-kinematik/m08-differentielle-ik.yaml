@@ -1,0 +1,351 @@
+id: m08-differentielle-ik
+title: Differentielle IK – Schritt für Schritt zum Ziel
+minutes: 10
+goals:
+  - IK iterativ mit der Jacobi-Matrix lösen
+  - Pseudoinverse und Damped Least Squares (DLS) einordnen
+  - Einen Arm per DLS animiert zum Ziel fahren
+concepts: [differentielle-ik]
+steps:
+  - type: text
+    body: |
+      ## IK ohne geschlossene Formel
+
+      Für Arme mit vielen Gelenken oder in 3D gibt es oft keine handliche IK-Formel. Dann iteriert man mit der Linearisierung $\Delta p \approx J\,\Delta q$:
+
+      1. Fehler $e = p_{\text{ziel}} - \mathrm{fk}(q)$
+      2. Löse $J\,\Delta q = e$ nach $\Delta q$
+      3. $q \leftarrow q + \alpha\,\Delta q$ mit Schrittweite $0 < \alpha \le 1$
+      4. Wiederholen, bis $\lVert e \rVert$ klein ist
+
+      Das ist das Newton-Verfahren – verwandt mit dem Gradientenabstieg aus Modul 7.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+
+      target = np.array([-0.6, 1.2])
+      q = np.array([0.3, 0.8])
+      qs = [q]
+      for k in range(30):
+          e = target - fk(q)
+          dq = np.linalg.solve(jacobian(q), e)
+          q = q + 0.3 * dq
+          qs.append(q)
+      print("Restfehler:", f"{np.linalg.norm(target - fk(q)):.1e}", "m")
+      lab.arm(qs, target=tuple(target), title="Newton-Schritte, α = 0.3")
+    subgoals:
+      - lines: [13, 15]
+        label: Startwerte festlegen
+      - lines: [16, 17]
+        label: Fehler im Arbeitsraum berechnen
+      - lines: [18, 20]
+        label: Gelenkschritt lösen und anwenden
+      - lines: [21, 22]
+        label: Ergebnis prüfen und animieren
+    after: |
+      Jeder Frame ist eine Iteration. Die Schritte werden kleiner, weil der Fehler schrumpft. `np.linalg.solve(J, e)` löst das 2×2-System, ohne $J^{-1}$ explizit zu bilden.
+  - type: explain
+    question: |
+      Warum nimmt man nicht einfach **einen** vollen Schritt $\Delta q = J^{-1} e$ und ist fertig?
+    options:
+      - text: $\Delta p \approx J\,\Delta q$ gilt nur für kleine $\Delta q$ – die FK ist nichtlinear, ein großer Schritt landet daneben.
+        correct: true
+        why: Die Linearisierung ist eine Tangente. Deshalb wiederholt man kleine Schritte und rechnet $J$ jedes Mal neu.
+      - text: Weil $J^{-1}$ immer existiert, aber zu teuer ist.
+        correct: false
+        why: $J^{-1}$ existiert gerade **nicht** immer (Singularitäten), und 2×2 ist billig.
+      - text: Weil der Arm sich physikalisch nicht so schnell bewegen kann.
+        correct: false
+        why: Hier wird nur gerechnet, nicht simuliert – es geht um die Genauigkeit der Näherung.
+  - type: text
+    title: Pseudoinverse und Damped Least Squares
+    body: |
+      $J^{-1}$ gibt es nur für quadratische, reguläre $J$. Allgemeiner:
+
+      - **Pseudoinverse** (`np.linalg.pinv(J)`): $\Delta q = J^{+} e$ – kleinstes $\Delta q$, das den Fehler bestmöglich reduziert. Funktioniert auch für Arme mit 3+ Gelenken (J ist dann 2×n).
+      - **Damped Least Squares** (DLS):
+        $$\Delta q = J^T (J J^T + \lambda^2 I)^{-1} e$$
+        Der Dämpfungsterm $\lambda^2 I$ hält $\Delta q$ klein, wenn $J$ fast singulär ist. Mit $\lambda = 0$ ist DLS gleich der Pseudoinversen (bei vollem Rang).
+
+      In Code: `J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)`.
+  - type: predict
+    intro: |
+      Das Ziel $(3, 0)$ liegt **außerhalb** der Reichweite 2. Was macht DLS?
+    code: |
+      import numpy as np
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      target = np.array([3.0, 0.0])
+      q = np.array([0.3, 0.5])
+      for k in range(200):
+          J = jacobian(q)
+          e = target - fk(q)
+          q = q + 0.5 * J.T @ np.linalg.solve(J @ J.T + 0.1**2 * np.eye(2), e)
+      print(f"{np.linalg.norm(fk(q)):.1f}")
+    options: ["2.0", "3.0", "nan", "0.0"]
+    answer: "2.0"
+    explanation: |
+      DLS kann das Ziel nicht erreichen, liefert aber das Bestmögliche: Der Arm streckt sich in Richtung Ziel, Abstand der Spitze zur Basis $\approx 2$. Ohne Dämpfung würde $J^{-1}$ nahe der gestreckten Stellung riesige Schritte liefern – mehr dazu in der nächsten Lektion.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den DLS-Schritt.
+    code: |
+      import numpy as np
+
+      def dls_step(J, e, lam=0.1):
+          return J.T @ np.linalg.solve(___ + ___, e)
+    blanks:
+      - answer: "J @ J.T"
+        options: ["J @ J.T", "J.T @ J", "J"]
+      - answer: "lam**2 * np.eye(2)"
+        options: ["lam**2 * np.eye(2)", "lam**2", "np.eye(2)"]
+    tests:
+      - name: Vergleich mit der Formel
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(2)
+          for _ in range(4):
+              J = rng.normal(size=(2, 2))
+              e = rng.normal(size=2)
+              ref = J.T @ np.linalg.inv(J @ J.T + 0.01 * np.eye(2)) @ e
+              assert close(dls_step(J, e), ref), f"dls_step stimmt nicht: erwartet {np.round(ref, 4)}, bekommen {np.round(dls_step(J, e), 4)}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100)`. Sie startet bei `q0`, macht `iters` DLS-Schritte und gibt die **Liste aller Stellungen** zurück (inklusive `q0`, also `iters + 1` Einträge). Damit animiert der Code den Arm.
+    starter: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+
+      def ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100):
+          q = np.array(q0, dtype=float)
+          qs = [q]
+          # iters DLS-Schritte
+          return qs
+
+      target = np.array([-1.2, -0.9])
+      qs = ik_dls(target, [0.5, 0.5], iters=60)
+      lab.arm(qs, target=tuple(target), title="DLS zum Ziel")
+    solution: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+
+      def ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100):
+          q = np.array(q0, dtype=float)
+          qs = [q]
+          for k in range(iters):
+              J = jacobian(q)
+              e = np.asarray(target) - fk(q)
+              dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+              q = q + alpha * dq
+              qs.append(q)
+          return qs
+
+      target = np.array([-1.2, -0.9])
+      qs = ik_dls(target, [0.5, 0.5], iters=60)
+      lab.arm(qs, target=tuple(target), title="DLS zum Ziel")
+    tests:
+      - name: Länge und Start
+        code: |
+          import numpy as np
+          traj = ik_dls(np.array([1.0, 1.0]), [0.2, 0.3], iters=10)
+          assert len(traj) == 11, f"Bei iters=10 erwartet 11 Stellungen (inkl. Start), bekommen {len(traj)}"
+          assert close(traj[0], [0.2, 0.3]), f"Erste Stellung sollte q0 = [0.2, 0.3] sein, ist {traj[0]}"
+      - name: Erreicht verschiedene Ziele
+        code: |
+          import numpy as np
+          for tgt, q0 in [((1.2, 0.8), (0.3, 0.5)), ((-0.5, 1.5), (0.3, 0.5)), ((0.3, -1.1), (-0.2, 1.0)), ((-1.5, -0.7), (1.0, 1.0))]:
+              q = ik_dls(np.array(tgt), q0)[-1]
+              err = np.linalg.norm(fk(q) - np.array(tgt))
+              assert err < 1e-3, f"Ziel {tgt}: Restfehler {err:.3g} m nach 100 Schritten (Vorzeichen des Fehlers? q aktualisiert?)"
+      - name: Unerreichbares Ziel bleibt stabil
+        code: |
+          import numpy as np
+          traj = np.array(ik_dls(np.array([3.0, 0.0]), [0.3, 0.5], iters=200))
+          assert np.all(np.isfinite(traj)), "Die Stellungen enthalten nan/inf."
+          p = fk(traj[-1])
+          assert np.linalg.norm(p) > 1.9 and p[0] > 1.9, f"Der Arm sollte sich Richtung (3, 0) strecken, Spitze ist bei {np.round(p, 3)}"
+    mutants:
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+        def ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100):
+            q = np.array(q0, dtype=float)
+            qs = [q]
+            for k in range(iters):
+                J = jacobian(q)
+                e = fk(q) - np.asarray(target)
+                q = q + alpha * J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+                qs.append(q)
+            return qs
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+        def ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100):
+            q = np.array(q0, dtype=float)
+            qs = [q]
+            for k in range(iters):
+                J = jacobian(q0)
+                e = np.asarray(target) - fk(q)
+                q = q + alpha * J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+                qs.append(q)
+            return qs
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+        def ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100):
+            q = np.array(q0, dtype=float)
+            qs = [q]
+            for k in range(iters):
+                J = jacobian(q)
+                e = np.asarray(target) - fk(q)
+                qs.append(q + alpha * J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e))
+            return qs
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+        def ik_dls(target, q0, lam=0.1, alpha=0.5, iters=100):
+            q = np.array(q0, dtype=float)
+            qs = [q]
+            for k in range(iters):
+                J = jacobian(q)
+                e = np.asarray(target) - fk(q)
+                q = q + alpha * J @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+                qs.append(q)
+            return qs
+    hints:
+      - "Teilziel: In jeder Iteration Fehler berechnen, Gelenkschritt lösen und anwenden, Stellung merken."
+      - "Fehler = Ziel minus aktuelle Spitze. `J` muss in **jeder** Iteration an der aktuellen Stellung neu berechnet werden."
+      - |
+        ```python
+        for k in range(iters):
+            J = jacobian(q)
+            e = np.asarray(target) - fk(q)
+            ...
+        ```
+      - "`dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)`, dann `q = q + alpha * dq` und `qs.append(q)`."
+    explanation: |
+      `q = q + …` erzeugt jedes Mal ein **neues** Array – deshalb enthält `qs` wirklich verschiedene Stellungen. Mit `q += …` würdest du dasselbe Array verändern, und alle Einträge in `qs` wären am Ende gleich.
+  - type: quiz
+    question: |
+      Was bewirkt ein **größeres** $\lambda$ bei DLS?
+    options:
+      - text: Kleinere, vorsichtigere Schritte – robust nahe Singularitäten, aber langsamere Konvergenz
+        correct: true
+        why: $\lambda^2 I$ vergrößert die zu invertierende Matrix, $\Delta q$ wird kleiner.
+      - text: Größere Schritte, schnellere Konvergenz
+        correct: false
+        why: Umgekehrt – $\lambda$ dämpft.
+      - text: Nichts, solange $J$ regulär ist
+        correct: false
+        why: Auch bei regulärem $J$ verkleinert $\lambda > 0$ die Schritte etwas; mit $\lambda = 0$ wäre es exakt $J^{-1} e$.
+cards:
+  - id: m08-c-fehler-vorzeichen
+    concept: differentielle-ik
+    variants:
+      - type: quiz
+        question: Welcher Fehler gehört in den IK-Schritt $\Delta q = J^{-1} e$, damit die Spitze **zum** Ziel läuft?
+        options:
+          - text: $e = p_{\text{ziel}} - \mathrm{fk}(q)$
+            correct: true
+            why: $e$ zeigt von der Spitze zum Ziel; $J\,\Delta q = e$ bewegt die Spitze genau dorthin.
+          - text: $e = \mathrm{fk}(q) - p_{\text{ziel}}$
+            correct: false
+            why: Dann läuft die Spitze vom Ziel weg.
+          - text: $e = \lVert p_{\text{ziel}} - \mathrm{fk}(q) \rVert$
+            correct: false
+            why: Eine Zahl reicht nicht – $e$ braucht die Richtung.
+      - type: quiz
+        question: Warum muss $J$ in **jeder** Iteration neu berechnet werden?
+        options:
+          - text: J hängt von der aktuellen Stellung q ab
+            correct: true
+            why: Die Linearisierung gilt nur lokal um das aktuelle q.
+          - text: Wegen Rundungsfehlern
+            correct: false
+            why: Es geht um die Nichtlinearität der FK, nicht um Rundung.
+          - text: Muss es nicht – einmal am Start reicht
+            correct: false
+            why: Mit dem Start-J läuft die Iteration in die falsche Richtung, sobald sich der Arm deutlich bewegt hat.
+  - id: m08-c-dls-lambda
+    concept: differentielle-ik
+    variants:
+      - type: quiz
+        question: Was ist DLS mit $\lambda = 0$ (bei regulärem $J$)?
+        options:
+          - text: Dasselbe wie $\Delta q = J^{-1} e$
+            correct: true
+            why: $J^T (J J^T)^{-1} = J^{-1}$ für quadratisches, reguläres $J$.
+          - text: Kein Schritt ($\Delta q = 0$)
+            correct: false
+            why: $\lambda$ dämpft nur, mit 0 gibt es keine Dämpfung.
+          - text: Gradientenabstieg $\Delta q = J^T e$
+            correct: false
+            why: Das wäre der Grenzfall für sehr **großes** $\lambda$ (bis auf den Faktor $1/\lambda^2$).
+      - type: quiz
+        question: Welche Methode funktioniert auch für einen 3-Gelenk-Arm mit 2×3-Jacobi-Matrix?
+        options:
+          - text: Pseudoinverse bzw. DLS
+            correct: true
+            why: Beide brauchen kein quadratisches $J$.
+          - text: "`np.linalg.solve(J, e)`"
+            correct: false
+            why: "`solve` braucht eine quadratische Matrix."
+          - text: "`np.linalg.inv(J)`"
+            correct: false
+            why: Nicht-quadratische Matrizen haben keine Inverse.

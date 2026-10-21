@@ -1,0 +1,57 @@
+id: m13
+number: 13
+title: "RL I: Grundlagen"
+summary: |
+  Bandits, Markov-Entscheidungsprozesse, Return und Diskont, Bellman-Gleichungen sowie Value und Policy Iteration – selbst implementiert auf einer Gitterwelt.
+depth: voll
+lessons:
+  - m13-bandits
+  - m13-mdp
+  - m13-return
+  - m13-bellman
+  - m13-value-iteration
+  - m13-policy-iteration
+  - m13-checkpoint
+concepts:
+  - id: bandit-aktionswert
+    name: Aktionswert im Bandit
+    description: Q(a) schätzt die mittlere Belohnung von Aktion a; inkrementell Q ← Q + (r − Q)/N(a).
+  - id: bandit-epsilon-greedy
+    name: Exploration mit ε-greedy
+    description: Mit Wahrscheinlichkeit ε eine zufällige Aktion, sonst die mit dem größten Q – ohne Exploration bleibt man an einer zufällig guten ersten Wahl hängen.
+  - id: bandit-ucb
+    name: Upper Confidence Bound (UCB)
+    description: Wähle argmax Q(a) + c·√(ln t / N(a)); selten probierte Aktionen bekommen einen Bonus.
+  - id: bandit-regret
+    name: Regret
+    description: Aufsummierte Differenz zwischen der besten mittleren Belohnung und der der gewählten Aktionen – misst, was Lernen kostet.
+  - id: mdp-definition
+    name: Markov-Entscheidungsprozess
+    description: Zustände, Aktionen, Übergangswahrscheinlichkeiten P(s′|s,a), Belohnungen und Endzustände; der nächste Zustand hängt nur vom aktuellen Zustand und der Aktion ab. In lab.envs als env.P[s][a] = [(p, s2, r, done), …].
+  - id: mdp-policy
+    name: Policy
+    description: Eine Policy wählt die Aktion je Zustand – deterministisch als Array pi[s] oder stochastisch als Tabelle pi[s, a] = Wahrscheinlichkeit.
+  - id: mdp-return
+    name: Return und Diskont
+    description: G = r₀ + γ r₁ + γ² r₂ + …; γ < 1 gewichtet spätere Belohnungen schwächer, effektiver Horizont etwa 1/(1 − γ).
+  - id: mdp-return-rekursiv
+    name: Rekursiver Return
+    description: G_t = r_t + γ G_{t+1}; rückwärts über eine Episode berechnet man alle Returns in einem Durchlauf.
+  - id: dp-wertfunktion
+    name: Wertfunktion
+    description: V^π(s) ist der erwartete Return ab Zustand s, wenn man π folgt; Endzustände haben Wert 0.
+  - id: dp-policy-evaluation
+    name: Bellman-Erwartungsgleichung und Policy Evaluation
+    description: V(s) = Σ_a π(a|s) Σ p·[r + γ V(s′)·(nicht done)]; wiederholtes Anwenden (Sweeps) konvergiert gegen V^π.
+  - id: dp-bellman-optimal
+    name: Bellman-Optimalitätsgleichung
+    description: V*(s) = max_a Σ p·[r + γ V*(s′)·(nicht done)] – Maximum statt Mittel über die Aktionen.
+  - id: dp-value-iteration
+    name: Value Iteration
+    description: Bellman-Optimalitäts-Backup wiederholt auf alle Zustände anwenden, bis sich V kaum noch ändert.
+  - id: dp-greedy-policy
+    name: Greedy Policy aus V
+    description: pi[s] = argmax_a Q(s, a) mit Q(s, a) = Σ p·[r + γ V(s′)·(nicht done)] – braucht das Modell P.
+  - id: dp-policy-iteration
+    name: Policy Iteration
+    description: Abwechselnd Policy bewerten und greedy verbessern, bis sich die Policy nicht mehr ändert; endet nach endlich vielen Iterationen.

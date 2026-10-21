@@ -1,0 +1,265 @@
+id: m08-arbeitsraum
+title: Der Arbeitsraum
+minutes: 8
+goals:
+  - Den Arbeitsraum eines Arms durch Sampling sichtbar machen
+  - FK vektorisiert für viele Stellungen auf einmal auswerten
+  - Erreichbarkeit eines Punkts mit dem Ring-Kriterium prüfen
+concepts: [arbeitsraum]
+steps:
+  - type: text
+    body: |
+      ## Wohin kommt die Spitze überhaupt?
+
+      Der **Arbeitsraum** (workspace) ist die Menge aller Punkte, die die Spitze erreichen kann. Statt ihn auszurechnen, kann man ihn **sampeln**: viele zufällige Gelenkwinkel ziehen, FK anwenden, Punkte zeichnen.
+
+      Trick für die Geschwindigkeit: Unsere `fk` greift auf `q[0]` und `q[1]` zu. Gibst du ihr ein Array `Q.T` der Form `(2, N)`, sind `q[0]` und `q[1]` ganze Spalten von Winkeln – NumPy rechnet alle $N$ Stellungen auf einmal (vektorisiert).
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      rng = np.random.default_rng(0)
+      Q = rng.uniform(-np.pi, np.pi, size=(2000, 2))
+      P = fk(Q.T, l1=1.0, l2=0.5)
+      print(Q.shape, P.shape)
+      lab.scatter(P[0], P[1], title="Arbeitsraum l1 = 1, l2 = 0.5", xlabel="x (m)", ylabel="y (m)")
+    subgoals:
+      - lines: [9, 10]
+        label: Zufällige Gelenkwinkel ziehen
+      - lines: 11
+        label: FK für alle Stellungen auf einmal
+      - lines: [12, 13]
+        label: Punktwolke zeichnen
+    after: |
+      Ein **Ring**: außen Radius $l_1 + l_2 = 1.5$ (gestreckt), innen $|l_1 - l_2| = 0.5$ (ganz gefaltet). Punkte im Loch erreicht der Arm nie.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      r = np.linalg.norm(fk([0.3, np.pi], l1=1.0, l2=0.5))
+      print(f"{r:.2f}")
+    options: ["0.50", "1.50", "1.00", "0.30"]
+    answer: "0.50"
+    explanation: |
+      $q_2 = \pi$ faltet den Arm: Abstand zur Basis $l_1 - l_2 = 0.5$ – unabhängig von $q_1$. Das ist der Innenrand des Rings.
+  - type: explain
+    question: |
+      Warum hat der Arbeitsraum für $l_1 = l_2$ **kein** Loch in der Mitte?
+    options:
+      - text: Ganz gefaltet ($q_2 = \pi$) liegt die Spitze dann genau auf der Basis – der Innenradius $|l_1 - l_2|$ ist 0.
+        correct: true
+        why: Der Abstand zur Basis variiert stetig zwischen $|l_1 - l_2|$ und $l_1 + l_2$.
+      - text: Weil $q_1$ eine volle Umdrehung machen kann.
+        correct: false
+        why: Die volle Drehung von $q_1$ macht den Arbeitsraum rotationssymmetrisch, bestimmt aber nicht den Innenradius.
+      - text: Bei gleich langen Gliedern ist der Arbeitsraum ein Quadrat.
+        correct: false
+        why: Abstände zur Basis hängen nur von $q_2$ ab – es entstehen immer Kreise bzw. Ringe.
+  - type: example
+    title: Gelenkgrenzen
+    intro: |
+      Echte Gelenke haben Anschläge (joint limits). Hier: $q_1 \in [-\pi/2, \pi/2]$, $q_2 \in [0, \pi]$ (der Ellbogen knickt nur in eine Richtung).
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      rng = np.random.default_rng(1)
+      Q_frei = rng.uniform(-np.pi, np.pi, size=(1500, 2))
+      Q_grenze = rng.uniform([-np.pi / 2, 0.0], [np.pi / 2, np.pi], size=(1500, 2))
+      fig = lab.Figure(title="Mit und ohne Gelenkgrenzen", xlabel="x (m)", ylabel="y (m)")
+      P = fk(Q_frei.T)
+      fig.scatter(P[0], P[1], label="frei")
+      P = fk(Q_grenze.T)
+      fig.scatter(P[0], P[1], label="mit Grenzen")
+      fig.show()
+    subgoals:
+      - lines: [10, 11]
+        label: Gelenkwinkel mit und ohne Grenzen ziehen
+      - lines: [12, 17]
+        label: Beide Punktwolken in eine Figur
+    after: |
+      `rng.uniform(low, high)` akzeptiert Arrays als Grenzen – je Spalte eine eigene. Mit Grenzen bleibt nur ein Teil der Scheibe übrig. Weil $q_2 \ge 0$ erzwungen ist, gibt es für jeden Punkt höchstens noch **eine** Ellbogenstellung.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `reachable(p, l1=1.0, l2=1.0)`, die `True` liefert, wenn der Punkt `p = (x, y)` im Arbeitsraum eines 2-Gelenk-Arms **ohne** Gelenkgrenzen liegt (Ränder zählen dazu), sonst `False`.
+    starter: |
+      import numpy as np
+
+      def reachable(p, l1=1.0, l2=1.0):
+          r = np.linalg.norm(p)
+          # Ring-Kriterium
+          pass
+    solution: |
+      import numpy as np
+
+      def reachable(p, l1=1.0, l2=1.0):
+          r = np.linalg.norm(p)
+          return bool(abs(l1 - l2) <= r <= l1 + l2)
+    tests:
+      - name: Innen und außen
+        code: |
+          assert reachable((1.0, 0.5)), "(1, 0.5) liegt bei l1 = l2 = 1 im Arbeitsraum."
+          assert not reachable((2.5, 0.0)), "(2.5, 0) ist zu weit weg (max. Reichweite 2)."
+      - name: Loch in der Mitte
+        code: |
+          assert not reachable((0.2, 0.1), 1.0, 0.5), "(0.2, 0.1) liegt bei l1 = 1, l2 = 0.5 im Loch (Innenradius 0.5)."
+          assert not reachable((0.0, 0.3), 0.5, 1.0), "Auch bei l1 = 0.5, l2 = 1 ist der Innenradius 0.5 – denke an den Betrag."
+          assert reachable((0.0, 0.0)), "Bei l1 = l2 ist auch die Basis erreichbar."
+      - name: Ränder zählen dazu
+        code: |
+          assert reachable((2.0, 0.0), 1.5, 0.5), "(2, 0) liegt genau auf dem Außenrand l1 + l2 = 2 – das zählt als erreichbar."
+          assert reachable((-1.0, 0.0), 1.5, 0.5), "(-1, 0) liegt genau auf dem Innenrand |l1 - l2| = 1 – das zählt als erreichbar."
+    mutants:
+      - |
+        import numpy as np
+        def reachable(p, l1=1.0, l2=1.0):
+            r = np.linalg.norm(p)
+            return bool(r <= l1 + l2)
+      - |
+        import numpy as np
+        def reachable(p, l1=1.0, l2=1.0):
+            r = np.linalg.norm(p)
+            return bool(l1 - l2 <= r <= l1 + l2)
+      - |
+        import numpy as np
+        def reachable(p, l1=1.0, l2=1.0):
+            r = np.linalg.norm(p)
+            return bool(abs(l1 - l2) < r < l1 + l2)
+      - |
+        import numpy as np
+        def reachable(p, l1=1.0, l2=1.0):
+            r = p[0] + p[1]
+            return bool(abs(l1 - l2) <= r <= l1 + l2)
+    hints:
+      - "Teilziel: Abstand zur Basis mit den Ring-Radien vergleichen."
+      - Erreichbar heißt $|l_1 - l_2| \le r \le l_1 + l_2$ mit $r = \lVert p \rVert$.
+      - "Python erlaubt Vergleichsketten: `a <= r <= b`."
+      - "`return bool(abs(l1 - l2) <= r <= l1 + l2)`"
+  - type: fill
+    fading: true
+    prompt: |
+      Welcher Anteil eines Quadrats $[-2, 2]^2$ ist für $l_1 = 1$, $l_2 = 0.5$ erreichbar? Schätze ihn mit 10 000 Zufallspunkten (Monte Carlo).
+    code: |
+      import numpy as np
+
+      rng = np.random.default_rng(0)
+      pts = rng.uniform(-2, 2, size=(10000, 2))
+      r = np.linalg.norm(pts, axis=1)
+      l1, l2 = 1.0, 0.5
+      inside = (r >= abs(l1 - l2)) & (___)
+      print(f"{___:.2f}")
+    blanks:
+      - answer: "r <= l1 + l2"
+        options: ["r <= l1 + l2", "r <= l1", "r >= l1 + l2"]
+      - answer: "np.mean(inside)"
+        options: ["np.mean(inside)", "np.sum(inside)", "len(inside)"]
+    expect_output: "0.39"
+    explanation: |
+      Der Mittelwert eines booleschen Arrays ist der Anteil der `True`-Einträge. Exakt: Ringfläche / Quadratfläche $= \pi(1.5^2 - 0.5^2)/16 \approx 0.393$.
+  - type: quiz
+    question: |
+      Ein Arm hat $l_1 = 0.6$ m und $l_2 = 1.0$ m, keine Gelenkgrenzen. Welcher Punkt ist erreichbar?
+    options:
+      - text: $(0.5, 0.5)$, Abstand $\approx 0.71$ m
+        correct: true
+        why: $0.4 \le 0.71 \le 1.6$ – liegt im Ring.
+      - text: $(0.2, 0.2)$, Abstand $\approx 0.28$ m
+        correct: false
+        why: Innenradius ist $|0.6 - 1.0| = 0.4$ m – der Punkt liegt im Loch.
+      - text: $(1.2, 1.2)$, Abstand $\approx 1.70$ m
+        correct: false
+        why: Außenradius ist $0.6 + 1.0 = 1.6$ m.
+cards:
+  - id: m08-c-ring-radien
+    concept: arbeitsraum
+    variants:
+      - type: quiz
+        question: Innen- und Außenradius des Arbeitsraums für $l_1 = 2$, $l_2 = 0.5$?
+        options:
+          - text: 1.5 und 2.5
+            correct: true
+            why: $|l_1 - l_2|$ und $l_1 + l_2$.
+          - text: 0 und 2.5
+            correct: false
+            why: Einen Innenradius 0 gibt es nur bei gleich langen Gliedern.
+          - text: 0.5 und 2
+            correct: false
+            why: Das sind die Gliedlängen, nicht die Ring-Radien.
+      - type: quiz
+        question: Innen- und Außenradius des Arbeitsraums für $l_1 = 0.4$, $l_2 = 1.0$?
+        options:
+          - text: 0.6 und 1.4
+            correct: true
+            why: $|0.4 - 1.0| = 0.6$ und $0.4 + 1.0 = 1.4$.
+          - text: -0.6 und 1.4
+            correct: false
+            why: Radien sind nicht negativ – es zählt der Betrag.
+          - text: 0 und 1.4
+            correct: false
+            why: Nur bei $l_1 = l_2$ ist die Mitte erreichbar.
+  - id: m08-c-abstand-q2
+    concept: arbeitsraum
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          l1, l2 = 1.0, 1.0
+          for q2 in [0.0, np.pi / 2, np.pi]:
+              r = np.sqrt(l1**2 + l2**2 + 2 * l1 * l2 * np.cos(q2))
+              print(f"{r:.2f}")
+        options:
+          - |
+            2.00
+            1.41
+            0.00
+          - |
+            2.00
+            1.00
+            0.00
+          - |
+            0.00
+            1.41
+            2.00
+        answer: |
+          2.00
+          1.41
+          0.00
+        explanation: Der Abstand zur Basis hängt nur von $q_2$ ab (Kosinussatz). Gestreckt 2, rechter Winkel $\sqrt 2$, gefaltet 0.
+      - type: predict
+        code: |
+          import numpy as np
+          l1, l2 = 2.0, 1.0
+          for q2 in [0.0, np.pi]:
+              r = np.sqrt(l1**2 + l2**2 + 2 * l1 * l2 * np.cos(q2))
+              print(f"{r:.2f}")
+        options:
+          - |
+            3.00
+            1.00
+          - |
+            3.00
+            0.00
+          - |
+            1.00
+            3.00
+        answer: |
+          3.00
+          1.00
+        explanation: Gestreckt $l_1 + l_2$, gefaltet $l_1 - l_2$.

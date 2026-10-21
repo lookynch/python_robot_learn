@@ -1,0 +1,282 @@
+id: m01-typen
+title: Datentypen – Zahl ist nicht gleich Text
+minutes: 8
+goals:
+  - Die Typen `int`, `float`, `str` und `bool` unterscheiden
+  - Den Typ eines Werts mit `type()` bestimmen
+  - Werte mit `int()`, `float()` und `str()` umwandeln
+concepts: [datentypen, typumwandlung]
+steps:
+  - type: text
+    body: |
+      ## Jeder Wert hat einen Typ
+
+      | Typ | Bedeutung | Beispiele |
+      |---|---|---|
+      | `int` | ganze Zahl (*integer*) | `3`, `-12`, `0` |
+      | `float` | Kommazahl (*floating point*) | `3.0`, `-0.5`, `1.57` |
+      | `str` | Text (*string*) | `"3"`, `"Motor"` |
+      | `bool` | Wahrheitswert (*boolean*) | `True`, `False` |
+
+      Kommazahlen schreibt man mit **Punkt**, nicht mit Komma. `True` und `False` beginnen mit Großbuchstaben.
+
+      Der Typ entscheidet, was ein Operator tut: Zwei Zahlen werden mit `+` addiert, zwei Texte aneinandergehängt.
+  - type: example
+    code: |
+      print(type(3))
+      print(type(3.0))
+      print(type("3"))
+      print(type(True))
+    subgoals:
+      - lines: [1, 2]
+        label: Zahlen untersuchen
+      - lines: 3
+        label: Text untersuchen
+      - lines: 4
+        label: Wahrheitswert untersuchen
+    after: |
+      `type(wert)` liefert den Typ, `print` zeigt ihn als `<class 'int'>` usw. an. `3`, `3.0` und `"3"` sehen ähnlich aus, sind für Python aber drei verschiedene Dinge.
+  - type: predict
+    code: |
+      print(type(6 / 3))
+    options: ["<class 'int'>", "<class 'float'>", "<class 'str'>"]
+    answer: "<class 'float'>"
+    explanation: |
+      `/` liefert **immer** einen `float` – auch wenn die Division aufgeht. `6 / 3` ist `2.0`. Wer ein `int` will, nimmt `6 // 3`.
+  - type: predict
+    code: |
+      print(3 + 4)
+      print("3" + "4")
+    options:
+      - |
+        7
+        7
+      - |
+        7
+        34
+      - |
+        34
+        34
+    answer: |
+      7
+      34
+    explanation: |
+      Bei zwei `int` rechnet `+`. Bei zwei `str` hängt `+` die Texte aneinander (*Verkettung*): `"3" + "4"` ist der Text `"34"`.
+  - type: explain
+    question: |
+      `print(type("True"))` gibt `<class 'str'>` aus. Warum nicht `<class 'bool'>`?
+    options:
+      - text: Durch die Anführungszeichen ist es ein Text, der zufällig wie ein Wahrheitswert aussieht.
+        correct: true
+        why: Anführungszeichen machen **immer** einen `str` – egal, was drinsteht. Der Wahrheitswert wäre `True` ohne Anführungszeichen.
+      - text: "`type()` erkennt Wahrheitswerte grundsätzlich nicht."
+        correct: false
+        why: "`type(True)` liefert sehr wohl `<class 'bool'>`."
+      - text: "`True` muss kleingeschrieben werden, sonst ist es Text."
+        correct: false
+        why: Umgekehrt – `true` (klein) kennt Python gar nicht, richtig ist `True`.
+  - type: text
+    body: |
+      ## Typen umwandeln
+
+      Mit dem Typnamen als Funktion erzeugst du einen **neuen** Wert des gewünschten Typs:
+
+      | Ausdruck | Ergebnis |
+      |---|---|
+      | `int("42")` | `42` |
+      | `float("2.5")` | `2.5` |
+      | `str(7)` | `"7"` |
+      | `int(3.9)` | `3` |
+      | `float(2)` | `2.0` |
+
+      Achtung: `int()` mit einer Kommazahl **schneidet die Nachkommastellen ab** (Richtung 0), es rundet nicht. Und `int("2.5")` ist ein Fehler (`ValueError`) – der Text muss eine ganze Zahl darstellen.
+  - type: predict
+    code: |
+      print(int(3.9))
+      print(int(-3.9))
+    options:
+      - |
+        3
+        -3
+      - |
+        4
+        -4
+      - |
+        3
+        -4
+      - |
+        3.9
+        -3.9
+    answer: |
+      3
+      -3
+    explanation: |
+      `int()` wirft die Nachkommastellen weg – bei positiven wie negativen Zahlen in Richtung 0. Gerundet wird nicht. (Zum Runden gibt es `round()`.)
+  - type: predict
+    code: |
+      print(int("12") + 1)
+      print(str(12) + "1")
+    options:
+      - |
+        13
+        121
+      - |
+        13
+        13
+      - |
+        121
+        121
+      - |
+        121
+        13
+    answer: |
+      13
+      121
+    explanation: |
+      `int("12")` ist die Zahl 12, also wird gerechnet: 13. `str(12)` ist der Text `"12"`, also wird verkettet: `"121"`.
+  - type: fill
+    fading: true
+    prompt: |
+      Ein Sensor liefert den Wert als Text `"40"`. Ergänze die Lücke, sodass `42` ausgegeben wird.
+    code: |
+      messung = "40"
+      wert = ___(messung)
+      print(wert + 2)
+    blanks:
+      - answer: int
+        options: [int, float, str, type]
+    expect_output: "42"
+    explanation: |
+      `int("40")` ergibt die Zahl 40. Mit `float` käme `42.0` heraus, mit `str` bliebe es Text – und Text plus Zahl ist ein `TypeError`.
+  - type: exercise
+    mode: make
+    prompt: |
+      Eine Gliedlänge kommt als Text `laenge_text = "1.5"` (Meter). Wandle sie in eine Kommazahl `laenge` um, berechne `doppelt` (zweifache Länge) und gib `doppelt` aus.
+
+      Erwartete Ausgabe:
+      ```
+      3.0
+      ```
+    starter: |
+      laenge_text = "1.5"
+      # laenge = ...
+      # doppelt = ...
+    solution: |
+      laenge_text = "1.5"
+      laenge = float(laenge_text)
+      doppelt = laenge * 2
+      print(doppelt)
+    tests:
+      - name: laenge ist eine Kommazahl
+        code: |
+          assert "laenge" in globals(), "Es gibt noch keine Variable laenge."
+          assert type(laenge) == float, f"laenge sollte ein float sein, ist aber {type(laenge)}"
+          assert laenge == 1.5, f"laenge sollte 1.5 sein, ist {laenge}"
+      - name: doppelt stimmt
+        code: |
+          assert "doppelt" in globals(), "Es gibt noch keine Variable doppelt."
+          assert doppelt == 3.0, f"doppelt sollte 3.0 sein, ist {doppelt!r}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["3.0"], f"Erwartete Ausgabe 3.0, bekommen {lines()}"
+    mutants:
+      - |
+        laenge_text = "1.5"
+        laenge = laenge_text
+        doppelt = laenge * 2
+        print(doppelt)
+      - |
+        laenge_text = "1.5"
+        laenge = int(laenge_text)
+        doppelt = laenge * 2
+        print(doppelt)
+      - |
+        laenge_text = "1.5"
+        laenge = float(laenge_text)
+        doppelt = laenge * 2
+        print("doppelt")
+    hints:
+      - "Teilziel: erst den Text in eine Zahl umwandeln, dann rechnen, dann ausgeben."
+      - "Für Kommazahlen ist `float()` zuständig – `int()` akzeptiert nur Texte mit ganzen Zahlen."
+      - "`laenge = float(laenge_text)`"
+      - |
+        ```python
+        laenge = float(laenge_text)
+        doppelt = laenge * 2
+        print(doppelt)
+        ```
+    explanation: |
+      Ohne Umwandlung wäre `"1.5" * 2` der Text `"1.51.5"` – Text mal Zahl wiederholt den Text. Typfehler fallen also nicht immer als Fehlermeldung auf.
+  - type: quiz
+    question: Welche Zeile bricht mit einem Fehler ab?
+    options:
+      - text: "`int(\"2.5\")`"
+        correct: true
+        why: "`int()` akzeptiert nur Texte, die eine ganze Zahl darstellen – das ergibt einen `ValueError`."
+      - text: "`float(\"2.5\")`"
+        correct: false
+        why: Das ist erlaubt und ergibt `2.5`.
+      - text: "`int(2.5)`"
+        correct: false
+        why: Aus der **Zahl** 2.5 macht `int()` problemlos 2 (abgeschnitten).
+      - text: "`str(2.5)`"
+        correct: false
+        why: Jede Zahl lässt sich in Text umwandeln, hier `"2.5"`.
+cards:
+  - id: m01-c-typ-bestimmen
+    concept: datentypen
+    variants:
+      - type: predict
+        code: |
+          print(type(8 / 2))
+        options: ["<class 'int'>", "<class 'float'>", "<class 'str'>"]
+        answer: "<class 'float'>"
+        explanation: "`/` liefert immer einen float, hier `4.0`."
+      - type: predict
+        code: |
+          print(type("8"))
+        options: ["<class 'int'>", "<class 'float'>", "<class 'str'>"]
+        answer: "<class 'str'>"
+        explanation: In Anführungszeichen ist es Text, auch wenn eine Ziffer drinsteht.
+      - type: predict
+        code: |
+          print(type(False))
+        options: ["<class 'bool'>", "<class 'str'>", "<class 'int'>"]
+        answer: "<class 'bool'>"
+        explanation: "`True` und `False` (ohne Anführungszeichen) sind Wahrheitswerte vom Typ `bool`."
+  - id: m01-c-plus-typ
+    concept: datentypen
+    variants:
+      - type: predict
+        code: |
+          print("5" + "5")
+        options: ["10", "55", "5 5"]
+        answer: "55"
+        explanation: Zwei Texte werden mit `+` verkettet, nicht addiert.
+      - type: predict
+        code: |
+          print(2 + 8, "2" + "8")
+        options: ["10 28", "10 10", "28 28"]
+        answer: "10 28"
+        explanation: Zahlen werden addiert, Texte verkettet.
+  - id: m01-c-int-abschneiden
+    concept: typumwandlung
+    variants:
+      - type: predict
+        code: |
+          print(int(7.8))
+        options: ["7", "8", "7.8"]
+        answer: "7"
+        explanation: "`int()` schneidet ab, statt zu runden."
+      - type: predict
+        code: |
+          print(int("7") + int(2.9))
+        options: ["9", "10", "72"]
+        answer: "9"
+        explanation: '`int("7")` ist 7, `int(2.9)` ist 2 (abgeschnitten), zusammen 9.'
+      - type: predict
+        code: |
+          print(str(4) + str(2))
+        options: ["42", "6", "4 2"]
+        answer: "42"
+        explanation: '`str()` macht Texte daraus, `+` verkettet sie zu `"42"`.'

@@ -1,0 +1,204 @@
+id: m01-variablen
+title: Variablen – Werte mit Namen
+minutes: 8
+goals:
+  - Werte mit `=` unter einem Namen speichern
+  - Verstehen, dass rechts vom `=` zuerst ausgewertet wird
+  - Verfolgen, wie sich Variablen Zeile für Zeile ändern
+concepts: [variable-zuweisung, reihenfolge]
+steps:
+  - type: text
+    body: |
+      ## Namen für Werte
+
+      Ein Roboter muss sich Dinge merken: Gelenkwinkel, Geschwindigkeit, Ziel. Dafür gibt es **Variablen**.
+
+      ```python
+      winkel = 30
+      ```
+
+      liest man als „**winkel bekommt den Wert 30**“. Das `=` ist kein mathematisches Gleichheitszeichen, sondern eine **Zuweisung**: Rechts wird ein Wert berechnet, links steht der Name, unter dem er gespeichert wird.
+  - type: example
+    code: |
+      winkel = 30
+      schritt = 5
+      winkel = winkel + schritt
+      print("neuer Winkel:", winkel)
+    subgoals:
+      - lines: [1, 2]
+        label: Startwerte festlegen
+      - lines: 3
+        label: Wert aktualisieren
+      - lines: 4
+        label: Ergebnis ausgeben
+    after: |
+      Zeile 3 ist mathematisch Unsinn ($w = w + 5$), als Zuweisung aber völlig normal: Python rechnet **zuerst rechts** (`30 + 5`) und speichert das Ergebnis dann wieder unter `winkel`.
+  - type: explain
+    question: |
+      Was passiert bei `winkel = winkel + schritt` genau?
+    options:
+      - text: Python berechnet mit den aktuellen Werten `winkel + schritt` und überschreibt danach `winkel` mit dem Ergebnis.
+        correct: true
+        why: Erst die rechte Seite auswerten, dann zuweisen. Der alte Wert von `winkel` ist danach weg.
+      - text: Python prüft, ob `winkel` gleich `winkel + schritt` ist.
+        correct: false
+        why: Vergleichen geht mit `==`. Ein einzelnes `=` weist immer zu.
+      - text: Python verknüpft die beiden Variablen dauerhaft – ändert sich `schritt`, ändert sich auch `winkel`.
+        correct: false
+        why: Gespeichert wird nur der **Wert** zum Zeitpunkt der Zuweisung, keine Formel.
+  - type: trace
+    intro: |
+      Gehe das Programm Schritt für Schritt durch und beobachte die Variablen.
+    code: |
+      a = 2
+      b = a * 3
+      a = 10
+      print(a, b)
+    questions:
+      - line: 3
+        var: b
+        answer: "6"
+        prompt: Zeile 3 setzt `a` auf 10. Welchen Wert hat `b` jetzt?
+    after: |
+      `b` bleibt 6. In Zeile 2 wurde der **Wert** `2 * 3` gespeichert – spätere Änderungen an `a` haben darauf keinen Einfluss.
+  - type: predict
+    code: |
+      x = 4
+      y = x
+      x = x + 1
+      print(x, y)
+    options: ["5 5", "5 4", "4 4", "4 5"]
+    answer: "5 4"
+    explanation: |
+      `y = x` kopiert den damaligen Wert 4. Danach wird nur `x` erhöht.
+  - type: predict
+    code: |
+      geschw = 2
+      geschw = geschw * 3
+      geschw = geschw - 1
+      print(geschw)
+    options: ["5", "6", "2", "1"]
+    answer: "5"
+    explanation: |
+      Zeile für Zeile: 2 → 2·3 = 6 → 6 − 1 = 5.
+  - type: fill
+    fading: true
+    prompt: |
+      Der Arm soll von Position 1 aus zweimal um `schritt` weiterfahren. Ergänze so, dass `9` ausgegeben wird.
+    code: |
+      position = 1
+      schritt = 4
+      position = position + ___
+      position = ___ + schritt
+      print(position)
+    blanks:
+      - answer: schritt
+        options: [schritt, "4 + 4", position]
+      - answer: position
+        options: [position, schritt, "1"]
+    expect_output: "9"
+  - type: parsons
+    fading: true
+    prompt: |
+      Bringe die Zeilen in eine Reihenfolge, sodass `Summe: 7` ausgegeben wird.
+    lines:
+      - "a = 3"
+      - "b = 4"
+      - "summe = a + b"
+      - 'print("Summe:", summe)'
+    expect_output: "Summe: 7"
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Motor dreht sich mit `drehzahl = 120` Umdrehungen pro Minute. Speichere in einer Variablen `pro_sekunde` die Umdrehungen pro Sekunde und gib sie aus.
+
+      Erwartete Ausgabe:
+      ```
+      2.0
+      ```
+    starter: |
+      drehzahl = 120
+      # berechne pro_sekunde und gib es aus
+    solution: |
+      drehzahl = 120
+      pro_sekunde = drehzahl / 60
+      print(pro_sekunde)
+    tests:
+      - name: Variable pro_sekunde existiert
+        code: |
+          assert "pro_sekunde" in globals(), "Es gibt noch keine Variable pro_sekunde."
+      - name: Wert stimmt
+        code: |
+          assert pro_sekunde == 2.0, f"pro_sekunde sollte 2.0 sein, ist aber {pro_sekunde}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["2.0"], f"Erwartete Ausgabe 2.0, bekommen {lines()}"
+    mutants:
+      - |
+        drehzahl = 120
+        pro_sekunde = drehzahl * 60
+        print(pro_sekunde)
+      - |
+        drehzahl = 120
+        pro_sekunde = 2.0
+        print("pro_sekunde")
+    hints:
+      - "Teilziel: Wert berechnen und unter neuem Namen speichern, dann ausgeben."
+      - Eine Minute hat 60 Sekunden – also durch 60 teilen.
+      - "`pro_sekunde = drehzahl / 60`"
+  - type: quiz
+    question: |
+      Nach welchem Programm hat `n` den Wert 3?
+    options:
+      - text: "`n = 1` dann `n = n + 2`"
+        correct: true
+        why: 1 + 2 = 3, das Ergebnis wird wieder in `n` gespeichert.
+      - text: "`n = 1` dann `n + 2`"
+        correct: false
+        why: "`n + 2` berechnet zwar 3, speichert es aber nirgends – `n` bleibt 1."
+      - text: "`n + 2 = 3`"
+        correct: false
+        why: Links vom `=` muss ein Name stehen. Das ist ein `SyntaxError`.
+cards:
+  - id: m01-c-zuweisung-kopie
+    concept: variable-zuweisung
+    variants:
+      - type: predict
+        code: |
+          a = 7
+          b = a
+          a = 1
+          print(b)
+        options: ["7", "1", "a"]
+        answer: "7"
+        explanation: "`b = a` speichert den Wert 7; die spätere Änderung von `a` betrifft `b` nicht."
+      - type: predict
+        code: |
+          p = 2
+          q = p * 5
+          p = 0
+          print(q)
+        options: ["10", "0", "2"]
+        answer: "10"
+        explanation: "`q` bekam den Wert 10; `p = 0` danach ändert ihn nicht."
+  - id: m01-c-reihenfolge
+    concept: reihenfolge
+    variants:
+      - type: predict
+        code: |
+          t = 1
+          t = t + t
+          t = t * 3
+          print(t)
+        options: ["6", "4", "9", "3"]
+        answer: "6"
+        explanation: 1 → 1+1 = 2 → 2·3 = 6.
+      - type: predict
+        code: |
+          k = 5
+          k = k - 2
+          k = k * k
+          print(k)
+        options: ["9", "25", "3", "23"]
+        answer: "9"
+        explanation: 5 → 3 → 3·3 = 9.

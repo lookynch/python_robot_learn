@@ -1,0 +1,315 @@
+id: m11-cem
+title: Cross-Entropy-Method (CEM)
+minutes: 10
+goals:
+  - Den CEM-Algorithmus (sampeln, Elite wählen, Verteilung anpassen) erklären
+  - CEM für beliebige Batch-Kostenfunktionen selbst implementieren
+  - CEM als Planer mit Random Shooting bei gleichem Rechenbudget vergleichen
+concepts: [plan-cem, plan-elite]
+steps:
+  - type: text
+    body: |
+      ## Die Suche verfeinern
+
+      Random Shooting zieht jedes Mal blind neu. Die **Cross-Entropy-Method** (CEM) lernt aus jedem Durchgang, **wo** gute Lösungen liegen:
+
+      1. $N$ Samples aus $N(\mu, \sigma^2)$ ziehen (diagonal, wie in Modul 10).
+      2. Alle bewerten, die $K$ besten behalten (z. B. 10 % der Samples) – die **Elite**.
+      3. $\mu \leftarrow$ Mittelwert der Elite, $\sigma \leftarrow$ Standardabweichung der Elite.
+      4. Wiederholen.
+
+      Die Verteilung wandert zu den guten Samples und zieht sich dort zusammen. Für den Planer ist ein Sample eine ganze Aktionsfolge – $\mu$ und $\sigma$ haben dann die Form `(H,)`.
+  - type: example
+    intro: |
+      Erst an einer 2D-Funktion mit bekanntem Minimum bei $(1, -0.5)$: $f(a) = (a_1 - 1)^2 + 4\,(a_2 + 0.5)^2$. `f` bewertet einen ganzen Batch `A` der Form `(N, 2)` auf einmal.
+    code: |
+      import numpy as np
+      import lab
+
+      def f(A):
+          return (A[:, 0] - 1) ** 2 + 4 * (A[:, 1] + 0.5) ** 2
+
+      rng = np.random.default_rng(0)
+      mu = np.array([-1.5, 1.5])
+      sigma = np.array([2.5, 2.5])
+      fig = lab.Figure(title="CEM: Samples pro Iteration", xlabel="a1", ylabel="a2")
+      for it in range(5):
+          A = mu + sigma * rng.standard_normal((100, 2))
+          c = f(A)
+          elite = A[np.argsort(c)[:10]]
+          mu = elite.mean(axis=0)
+          sigma = elite.std(axis=0)
+          fig.scatter(A[:, 0], A[:, 1], label=f"Iteration {it}")
+          print(it, np.round(mu, 3), np.round(sigma, 3))
+      fig.scatter([1.0], [-0.5], label="Minimum")
+      fig.show()
+    subgoals:
+      - lines: [8, 9]
+        label: Startverteilung festlegen
+      - lines: [12, 13]
+        label: Sampeln und bewerten
+      - lines: 14
+        label: Elite auswählen
+      - lines: [15, 16]
+        label: Verteilung an die Elite anpassen
+    after: |
+      Nach 5 Iterationen à 100 Samples sitzt $\mu$ auf $(1, -0.5)$. Die Punktwolken schrumpfen von Iteration zu Iteration – sichtbar im Plot und an $\sigma$.
+  - type: predict
+    code: |
+      import numpy as np
+      c = np.array([3.0, 1.0, 4.0, 1.5, 9.0])
+      print(np.argsort(c)[:2])
+    options: ["[1 3]", "[1. 1.5]", "[4 2]", "[0 1]"]
+    answer: "[1 3]"
+    explanation: |
+      `np.argsort` liefert die **Indizes** in aufsteigender Reihenfolge der Werte: kleinster Wert (1.0) bei Index 1, dann 1.5 bei Index 3. Die Werte selbst wären `np.sort(c)[:2]`.
+  - type: explain
+    question: |
+      $\sigma$ schrumpft bei CEM von Iteration zu Iteration. Was ist daran gut – und was ist die Gefahr?
+    options:
+      - text: Gut, weil die Suche sich auf den vielversprechenden Bereich konzentriert; gefährlich, weil $\sigma$ zu früh kollabieren kann, bevor das Minimum erreicht ist.
+        correct: true
+        why: Startet man weit weg mit zu wenig Streuung, bleibt CEM irgendwo stehen. Abhilfe in der Praxis – genug Start-$\sigma$, mehr Samples oder eine Untergrenze für $\sigma$.
+      - text: Das ist ein Fehler im Algorithmus; $\sigma$ sollte konstant bleiben.
+        correct: false
+        why: Ohne Anpassung von $\sigma$ würde die Suche nie feiner – das Ergebnis bliebe so grob wie die Startverteilung.
+      - text: Gut, weil dann weniger Samples gezogen werden.
+        correct: false
+        why: Gezogen werden immer $N$ Samples; nur ihre Streuung wird kleiner.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze eine CEM-Iteration: Elite auswählen und den neuen Mittelwert **pro Komponente** berechnen.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      mu, sigma = np.zeros(3), np.ones(3)
+      n_elite = 5
+      A = mu + sigma * rng.standard_normal((50, 3))
+      c = np.sum((A - 2.0) ** 2, axis=1)
+      elite = A[np.argsort(c)[:___]]
+      mu = elite.mean(axis=___)
+    blanks:
+      - answer: "n_elite"
+        options: ["n_elite", "50", "-n_elite", "1"]
+      - answer: "0"
+        options: ["0", "1", "None"]
+    tests:
+      - name: Elite und Mittelwert
+        code: |
+          assert elite.shape == (5, 3), f"Die Elite sollte 5 Samples à 3 Werte haben, Form {elite.shape}"
+          beste = A[np.argsort(c)[:5]]
+          assert close(mu, beste.mean(axis=0)), f"mu sollte der Mittelwert der 5 besten Samples pro Komponente sein, ist {mu}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `cem(f, mu, sigma, N, n_elite, iters, rng)`. `f` bewertet einen Batch `A` (erste Achse = Samples) und liefert ein Kosten-Array der Länge `N`. `mu` und `sigma` haben dieselbe Form (z. B. `(H,)` oder `(H, 2)`).
+
+      In jeder der `iters` Iterationen: `N` Samples ziehen, bewerten, `n_elite` beste wählen, `mu` und `sigma` auf Mittelwert und Standardabweichung der Elite setzen. Rückgabe: `(mu, sigma)`.
+    starter: |
+      import numpy as np
+
+      def cem(f, mu, sigma, N, n_elite, iters, rng):
+          for it in range(iters):
+              A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+              # bewerten, Elite wählen, mu und sigma anpassen
+          return mu, sigma
+
+      ziel = np.array([1.0, -2.0, 0.5])
+      def f(A):
+          return np.sum((A - ziel) ** 2, axis=1)
+
+      mu, sigma = cem(f, np.zeros(3), np.full(3, 2.0), 100, 10, 10, np.random.default_rng(0))
+      print(np.round(mu, 3))
+    solution: |
+      import numpy as np
+
+      def cem(f, mu, sigma, N, n_elite, iters, rng):
+          for it in range(iters):
+              A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+              c = f(A)
+              elite = A[np.argsort(c)[:n_elite]]
+              mu = elite.mean(axis=0)
+              sigma = elite.std(axis=0)
+          return mu, sigma
+
+      ziel = np.array([1.0, -2.0, 0.5])
+      def f(A):
+          return np.sum((A - ziel) ** 2, axis=1)
+
+      mu, sigma = cem(f, np.zeros(3), np.full(3, 2.0), 100, 10, 10, np.random.default_rng(0))
+      print(np.round(mu, 3))
+    tests:
+      - name: Findet das Minimum (3D)
+        code: |
+          ziel_t = np.array([1.0, -2.0, 0.5])
+          def f_t(A):
+              return np.sum((A - ziel_t) ** 2, axis=1)
+          r = cem(f_t, np.zeros(3), np.full(3, 2.0), 100, 10, 10, np.random.default_rng(1))
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          mu_t, sigma_t = r
+          assert close(mu_t, ziel_t, tol=0.05), f"mu sollte gegen das Minimum {ziel_t} konvergieren, ist {np.round(mu_t, 3)}"
+          assert np.all(sigma_t < 0.5), f"sigma sollte geschrumpft sein, ist {np.round(sigma_t, 3)}"
+      - name: Funktioniert für Folgen der Form (H, 2)
+        code: |
+          ziel_t = np.array([[0.5, -0.5], [1.0, 0.0], [0.0, 1.5], [-1.0, 0.2]])
+          def f_t(A):
+              return np.sum((A - ziel_t) ** 2, axis=(1, 2))
+          mu_t, sigma_t = cem(f_t, np.zeros((4, 2)), np.full((4, 2), 2.0), 200, 20, 12, np.random.default_rng(2))
+          assert np.shape(mu_t) == (4, 2), f"mu sollte Form (4, 2) behalten, hat {np.shape(mu_t)}"
+          assert close(mu_t, ziel_t, tol=0.1), f"mu sollte nahe {ziel_t.tolist()} liegen, ist {np.round(mu_t, 2).tolist()}"
+    mutants:
+      - |
+        import numpy as np
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                c = f(A)
+                elite = A[np.argsort(c)[-n_elite:]]
+                mu = elite.mean(axis=0)
+                sigma = elite.std(axis=0)
+            return mu, sigma
+      - |
+        import numpy as np
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                c = f(A)
+                elite = A[np.argsort(c)[:n_elite]]
+                mu = A.mean(axis=0)
+                sigma = A.std(axis=0)
+            return mu, sigma
+      - |
+        import numpy as np
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                c = f(A)
+                elite = A[np.argsort(c)[:n_elite]]
+                mu = elite.mean(axis=0)
+            return mu, sigma
+      - |
+        import numpy as np
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                c = f(A)
+                elite = A[np.argsort(c)[:n_elite]]
+                mu = elite.mean(axis=0)
+                sigma = elite.std(axis=0)
+                return mu, sigma
+    hints:
+      - "Teilziel: bewerten → Elite per Index auswählen → Mittelwert und Streuung der Elite."
+      - "`np.argsort(c)` sortiert aufsteigend – die ersten `n_elite` Indizes gehören zu den kleinsten Kosten. Gemittelt wird über die Samples, also `axis=0`."
+      - "`c = f(A)` und `elite = A[np.argsort(c)[:n_elite]]`"
+      - "`mu = elite.mean(axis=0)` und `sigma = elite.std(axis=0)`"
+  - type: example
+    intro: |
+      Jetzt als Planer: Eine Folge von 40 Drehmomenten für das hängende Pendel. Beide Verfahren bekommen dasselbe Budget von 1000 Rollouts – Random Shooting auf einmal, CEM in 10 Runden à 100.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      env = Pendulum()
+      s0 = env.reset()
+      def f(A):
+          return rollout_costs(env.dynamics, env.cost, s0, A)
+
+      rng = np.random.default_rng(0)
+      rs = np.min(f(rng.uniform(-2, 2, size=(1000, 40))))
+
+      mu, sigma = np.zeros(40), np.full(40, 1.5)
+      verlauf = []
+      for it in range(10):
+          A = mu + sigma * rng.standard_normal((100, 40))
+          elite = A[np.argsort(f(A))[:10]]
+          mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+          verlauf.append(f(mu[None])[0])
+      print("Random Shooting:", round(float(rs), 1), " CEM:", round(float(verlauf[-1]), 1))
+
+      fig = lab.Figure(title="Kosten der CEM-Folge", xlabel="Iteration", ylabel="J")
+      fig.line(verlauf, label="CEM-Mittelwert μ")
+      fig.hline(rs, label="Random Shooting (1000)")
+      fig.show()
+    subgoals:
+      - lines: [14, 16]
+        label: Batch-Kostenfunktion für den Planer
+      - lines: [18, 19]
+        label: Random Shooting als Vergleich
+      - lines: [21, 27]
+        label: CEM-Iterationen
+      - lines: [30, 33]
+        label: Kostenverlauf zeigen
+    after: |
+      Mit gleichem Budget kommt CEM auf deutlich kleinere Kosten (≈ 257 statt ≈ 332). `mu[None]` macht aus der Folge `(40,)` einen Batch `(1, 40)`, damit `f` sie bewerten kann. Ganz hoch kommt das Pendel mit einem einzigen offenen Plan noch nicht – dafür kombinieren wir in Kürze Planer **und** MPC.
+  - type: quiz
+    question: |
+      Was unterscheidet CEM grundsätzlich von Random Shooting?
+    options:
+      - text: CEM passt die Sampling-Verteilung an die besten Samples an und sucht dadurch gezielt weiter.
+        correct: true
+        why: Random Shooting vergisst nach jedem Zug alles; CEM nutzt die Elite als Information für die nächste Runde.
+      - text: CEM braucht kein Modell.
+        correct: false
+        why: Beide bewerten Samples mit Rollouts im Modell.
+      - text: CEM findet immer das globale Minimum.
+        correct: false
+        why: CEM ist eine stochastische, lokale Suche – sie kann in einem Nebenminimum hängen bleiben oder zu früh zusammenfallen.
+cards:
+  - id: m11-c-argsort-elite
+    concept: plan-elite
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          c = np.array([5.0, 0.5, 2.0, 8.0])
+          print(np.argsort(c)[:2])
+        options: ["[1 2]", "[3 0]", "[0.5 2. ]", "[0 1]"]
+        answer: "[1 2]"
+        explanation: Indizes aufsteigend nach Kosten – 0.5 (Index 1), dann 2.0 (Index 2).
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.array([[0.0, 1.0], [2.0, 2.0], [4.0, 0.0]])
+          c = np.array([3.0, 1.0, 2.0])
+          elite = A[np.argsort(c)[:2]]
+          print(elite.mean(axis=0))
+        options: ["[3. 1.]", "[1. 1.5]", "[2. 1.]", "[1.5 2. ]"]
+        answer: "[3. 1.]"
+        explanation: Die zwei billigsten Samples sind Zeile 1 und Zeile 2; ihr Mittelwert pro Spalte ist $(3, 1)$.
+  - id: m11-c-cem-schritte
+    concept: plan-cem
+    variants:
+      - type: quiz
+        question: Was passiert in einer CEM-Iteration **nach** der Auswahl der Elite?
+        options:
+          - text: $\mu$ und $\sigma$ werden auf Mittelwert und Standardabweichung der Elite gesetzt.
+            correct: true
+            why: Die neue Verteilung beschreibt, wo die guten Samples lagen.
+          - text: Die Elite wird ausgeführt.
+            correct: false
+            why: Ausgeführt wird erst am Ende (bei MPC nur die erste Aktion von $\mu$).
+          - text: Alle Samples außer der Elite werden mit $\sigma$ multipliziert.
+            correct: false
+            why: Nicht-Elite-Samples werden einfach verworfen.
+      - type: quiz
+        question: Bei CEM ist $\sigma$ nach zwei Iterationen fast 0, $\mu$ aber noch weit vom Minimum. Was hilft am ehesten?
+        options:
+          - text: Größeres Start-$\sigma$ oder mehr Samples pro Iteration
+            correct: true
+            why: Die Verteilung ist zu früh kollabiert. Mehr Streuung oder mehr Samples erhalten die Suche.
+          - text: Weniger Iterationen
+            correct: false
+            why: Das Problem entsteht früh; weniger Iterationen ändern daran nichts.
+          - text: Die Elite aus den **schlechtesten** Samples bilden
+            correct: false
+            why: Dann läuft die Suche vom Minimum weg.

@@ -1,0 +1,286 @@
+id: m07-gradientenabstieg
+title: Gradientenabstieg
+minutes: 9
+goals:
+  - Den Gradientenabstieg $p \leftarrow p - \eta \nabla f(p)$ implementieren
+  - Kostenverlauf und Pfad eines Optimierers visualisieren
+  - Grenzen erkennen – ein verschwindender Gradient heißt nicht automatisch Minimum
+concepts: [gradientenabstieg, gradient-numerisch]
+steps:
+  - type: text
+    body: |
+      ## Bergab in kleinen Schritten
+
+      Der negative Gradient zeigt bergab. Also: ein kleines Stück in diese Richtung gehen, neu messen, wiederholen.
+
+      $$
+      p_{k+1} = p_k - \eta\, \nabla f(p_k)
+      $$
+
+      $\eta$ (eta) heißt **Lernrate** (learning rate) oder Schrittweite. Kommt dir die Form bekannt vor? Es ist der **explizite Euler** aus Modul 6 für die ODE $\dot p = -\nabla f(p)$ mit $dt = \eta$.
+
+      Gradientenabstieg (gradient descent) ist der Kern fast jedes Lernverfahrens in diesem Kurs: Regression, neuronale Netze, Policy-Gradient-RL, World-Model-Training.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def f(p):
+          return (p[0] - 1)**2 + 2 * (p[1] + 0.5)**2
+
+      def grad(p):
+          return np.array([2 * (p[0] - 1), 4 * (p[1] + 0.5)])
+
+      lr = 0.1
+      p = np.array([-1.0, 1.0])
+      path = [p]
+      for k in range(40):
+          p = p - lr * grad(p)
+          path.append(p)
+      costs = [f(q) for q in path]
+      print(f"nach 40 Schritten: p = ({p[0]:.4f}, {p[1]:.4f}), f = {costs[-1]:.1e}")
+
+      lab.plot(costs, title="Kosten", xlabel="Schritt", ylabel="f(p)", logy=True)
+      s = lab.Scene(title="Pfad in der (x, y)-Ebene", bounds=[-1.5, 2.0, -1.5, 1.5], fps=10)
+      s.line(path, color="muted", static=True)
+      s.circle(1, -0.5, 0.06, color="good", fill="good", static=True)
+      for k, q in enumerate(path):
+          if k > 0:
+              s.next_frame()
+          s.circle(q[0], q[1], 0.05, color="accent", fill="accent")
+          s.caption(f"Schritt {k}: f = {costs[k]:.3f}")
+      s.show()
+    subgoals:
+      - lines: [4, 8]
+        label: Kosten und Gradient definieren
+      - lines: [10, 15]
+        label: Abstiegsschleife
+      - lines: [16, 17]
+        label: Kosten auswerten
+      - lines: [19, 27]
+        label: Verlauf und Pfad zeigen
+    after: |
+      Im logarithmischen Plot fallen die Kosten auf einer Geraden – die Konvergenz ist **linear** (der Fehler schrumpft pro Schritt um einen festen Faktor). Der Pfad ist gekrümmt: Zuerst wird $y$ (steiler) korrigiert, dann $x$. Statt `grad` könntest du auch `num_grad(f, p)` aus der letzten Lektion einsetzen.
+  - type: explain
+    question: |
+      Warum wird der Gradient **abgezogen** und nicht addiert?
+    options:
+      - text: Der Gradient zeigt in die Richtung des steilsten **Anstiegs**; wir wollen $f$ verkleinern.
+        correct: true
+        why: Für kleines $\eta$ gilt $f(p - \eta \nabla f) \approx f(p) - \eta\,\|\nabla f\|^2 < f(p)$.
+      - text: Weil Gradienten immer positiv sind.
+        correct: false
+        why: Die Komponenten können jedes Vorzeichen haben; im Beispiel ist der Gradient am Start $[-4, 6]$.
+      - text: Damit die Lernrate positiv sein darf.
+        correct: false
+        why: Das ist eine Folge, nicht der Grund. Der Grund ist die Richtung des Gradienten.
+  - type: predict
+    code: |
+      def grad(x):
+          return 2 * x       # f(x) = x²
+
+      x = 3.0
+      lr = 0.1
+      x = x - lr * grad(x)
+      print(round(x, 4))
+    options: ["2.4", "3.6", "2.7", "0.6"]
+    answer: "2.4"
+    explanation: |
+      $f'(3) = 6$, Schritt $= 0{,}1 \cdot 6 = 0{,}6$, also $3 - 0{,}6 = 2{,}4$. `3.6` wäre ein Schritt bergauf, `2.7` vergisst den Faktor 2 der Ableitung.
+  - type: trace
+    code: |
+      x = 0.0
+      lr = 0.25
+      for k in range(3):
+          g = 2 * (x - 2)
+          x = x - lr * g
+      print(x)
+    questions:
+      - line: 5
+        hit: 2
+        var: x
+        prompt: Welchen Wert hat `x` nach dem **zweiten** Durchlauf von Zeile 5?
+        answer: "1.5"
+      - line: 4
+        hit: 3
+        var: g
+        prompt: Welchen Wert hat `g` nach dem **dritten** Durchlauf von Zeile 4?
+        answer: "-1.0"
+    after: |
+      $f = (x-2)^2$, Minimum bei 2. Jeder Schritt halbiert den Abstand: 0 → 1 → 1,5 → 1,75. Der Gradient wird kleiner, je näher man kommt – deshalb werden auch die Schritte von selbst kleiner.
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue den Gradientenabstieg für $f = (x-1)^2 + 2(y+0{,}5)^2$ mit Lernrate 0,1 und 100 Schritten. Ausgabe: `1.0 -0.5`.
+    lines:
+      - "import numpy as np"
+      - "def grad(p):"
+      - "    return np.array([2 * (p[0] - 1), 4 * (p[1] + 0.5)])"
+      - "p = np.array([0.0, 0.0])"
+      - "for k in range(100):"
+      - "    p = p - 0.1 * grad(p)"
+      - "print(round(p[0], 3), round(p[1], 3))"
+    distractors:
+      - "    p = p + 0.1 * grad(p)"
+      - "    p = p - 0.1 * grad"
+    expect_output: "1.0 -0.5"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `gradient_descent(grad, x0, lr, n_steps)`. `grad` ist eine Funktion, die den Gradienten liefert. Rückgabe: alle Iterierten als Array der Form `(n_steps + 1, len(x0))`, Zeile 0 ist der Startpunkt.
+    starter: |
+      import numpy as np
+
+      def gradient_descent(grad, x0, lr, n_steps):
+          x = np.array(x0, dtype=float)
+          path = [x]
+          # n_steps Abstiegsschritte
+          return np.array(path)
+    solution: |
+      import numpy as np
+
+      def gradient_descent(grad, x0, lr, n_steps):
+          x = np.array(x0, dtype=float)
+          path = [x]
+          for k in range(n_steps):
+              x = x - lr * grad(x)
+              path.append(x)
+          return np.array(path)
+    tests:
+      - name: Eindimensionale Parabel
+        code: |
+          def g(x):
+              return 2 * (x - 2)
+          path = gradient_descent(g, [0.0], 0.25, 3)
+          assert np.shape(path) == (4, 1), f"Erwartet Form (4, 1), bekommen {np.shape(path)}"
+          assert close(path[:, 0], [0.0, 1.0, 1.5, 1.75]), f"Erwartet 0, 1, 1.5, 1.75, bekommen {path[:, 0]}"
+      - name: Zwei Variablen
+        code: |
+          def g(p):
+              return np.array([2 * (p[0] - 1), 4 * (p[1] + 0.5)])
+          path = gradient_descent(g, [0.0, 0.0], 0.1, 100)
+          assert np.shape(path) == (101, 2), f"Erwartet Form (101, 2), bekommen {np.shape(path)}"
+          assert close(path[-1], [1.0, -0.5], tol=1e-6), f"Erwartet Minimum (1, -0.5), bekommen {path[-1]}"
+      - name: Lernrate wird benutzt
+        code: |
+          def g(x):
+              return 2 * x
+          path = gradient_descent(g, [1.0], 0.1, 1)
+          assert close(path[1, 0], 0.8), f"Mit lr = 0.1 ab x = 1 erwartet 0.8, bekommen {path[1, 0]}"
+    mutants:
+      - |
+        import numpy as np
+
+        def gradient_descent(grad, x0, lr, n_steps):
+            x = np.array(x0, dtype=float)
+            path = [x]
+            for k in range(n_steps):
+                x = x + lr * grad(x)
+                path.append(x)
+            return np.array(path)
+      - |
+        import numpy as np
+
+        def gradient_descent(grad, x0, lr, n_steps):
+            x = np.array(x0, dtype=float)
+            path = []
+            for k in range(n_steps):
+                x = x - lr * grad(x)
+                path.append(x)
+            return np.array(path)
+      - |
+        import numpy as np
+
+        def gradient_descent(grad, x0, lr, n_steps):
+            x = np.array(x0, dtype=float)
+            path = [x]
+            for k in range(n_steps):
+                x = x - grad(x)
+                path.append(x)
+            return np.array(path)
+    hints:
+      - "Teilziel: Abstiegsschleife – in jedem Schritt Gradient am aktuellen Punkt, Schritt bergab, Punkt speichern."
+      - "Ein Schritt ist $x \\leftarrow x - \\eta \\nabla f(x)$."
+      - |
+        ```python
+        for k in range(n_steps):
+            x = ...
+            path.append(x)
+        ```
+      - "`x = x - lr * grad(x)`"
+    explanation: |
+      Vergleiche mit `euler` aus Modul 6: Es ist dieselbe Schleife mit `f(x) = -grad(x)` und `dt = lr`.
+  - type: quiz
+    question: |
+      Der Gradientenabstieg bleibt bei einem Punkt stehen, an dem $\nabla f = 0$ ist. Was weißt du dann sicher?
+    options:
+      - text: Es ist ein stationärer Punkt – vielleicht ein (womöglich nur lokales) Minimum, vielleicht aber auch ein Sattelpunkt.
+        correct: true
+        why: Der Gradient sagt nur „hier ist es flach“. Bei $f = x^2 - y^2$ ist der Ursprung ein Sattelpunkt; startet man genau auf der $x$-Achse, landet man dort.
+      - text: Es ist das globale Minimum.
+        correct: false
+        why: Gradientenabstieg sieht nur die lokale Steigung. Bei mehreren Tälern hängt das Ergebnis vom Startpunkt ab.
+      - text: Die Lernrate war zu groß.
+        correct: false
+        why: Eine zu große Lernrate führt eher zu Oszillation oder Divergenz, nicht zum Stillstand bei $\nabla f = 0$.
+cards:
+  - id: m07-c-gd-schritt
+    concept: gradientenabstieg
+    variants:
+      - type: predict
+        code: |
+          x = 5.0
+          lr = 0.2
+          x = x - lr * 2 * x     # Gradient von x²
+          print(round(x, 4))
+        options: ["3.0", "7.0", "4.0", "2.0"]
+        answer: "3.0"
+        explanation: "$5 - 0{,}2 \\cdot 10 = 3$."
+      - type: predict
+        code: |
+          import numpy as np
+
+          p = np.array([2.0, -1.0])
+          grad = np.array([4.0, -2.0])
+          p = p - 0.5 * grad
+          print(p[0], p[1])
+        options: ["0.0 0.0", "4.0 -2.0", "0.0 -2.0", "2.0 -1.0"]
+        answer: "0.0 0.0"
+        explanation: "$[2, -1] - 0{,}5 \\cdot [4, -2] = [0, 0]$ – für $f = \\|p\\|^2$ mit $\\eta = 0{,}5$ landet man in einem Schritt im Minimum."
+      - type: predict
+        code: |
+          x = -2.0
+          lr = 0.25
+          for k in range(2):
+              x = x - lr * 2 * (x - 2)
+          print(x)
+        options: ["1.0", "0.0", "-3.0", "2.0"]
+        answer: "1.0"
+        explanation: "Minimum bei 2; jeder Schritt halbiert den Abstand: −2 → 0 → 1."
+  - id: m07-c-gd-vorzeichen
+    concept: gradientenabstieg
+    variants:
+      - type: quiz
+        question: Welche Zeile ist ein Gradientenabstiegs-Schritt?
+        options:
+          - text: "`p = p - lr * grad(p)`"
+            correct: true
+            why: Entgegen dem Gradienten, skaliert mit der Lernrate.
+          - text: "`p = p + lr * grad(p)`"
+            correct: false
+            why: Das ist Gradientenaufstieg – $f$ wird größer.
+          - text: "`p = lr * grad(p)`"
+            correct: false
+            why: Der alte Punkt fehlt; das Ergebnis ist nur der Schritt, nicht die neue Position.
+      - type: quiz
+        question: Gradientenabstieg mit Lernrate $\eta$ ist welches Verfahren aus Modul 6?
+        options:
+          - text: expliziter Euler für $\dot p = -\nabla f(p)$ mit $dt = \eta$
+            correct: true
+            why: "$p_{k+1} = p_k + dt \\cdot (-\\nabla f(p_k))$."
+          - text: semi-impliziter Euler
+            correct: false
+            why: Es gibt keine Geschwindigkeit, die zuerst aktualisiert wird; der Zustand ist nur $p$.
+          - text: eine exakte Lösung der ODE
+            correct: false
+            why: Es ist ein Näherungsverfahren mit Schrittweite $\eta$.

@@ -1,0 +1,270 @@
+id: m05-gleichungssysteme
+title: Gleichungssysteme und Ausgleichsgerade
+minutes: 9
+goals:
+  - Quadratische Systeme $Ax = b$ mit `np.linalg.solve` lösen
+  - Überbestimmte Systeme mit `np.linalg.lstsq` im Sinne kleinster Quadrate lösen
+  - Eine Ausgleichsgerade an verrauschte Messdaten anpassen
+concepts: [la-solve, la-lstsq]
+steps:
+  - type: text
+    body: |
+      ## Zwei Fälle
+
+      **Quadratisch und regulär** ($n$ Gleichungen, $n$ Unbekannte, $\det A \ne 0$): genau eine Lösung.
+
+      ```python
+      x = np.linalg.solve(A, b)
+      ```
+
+      **Überbestimmt** (mehr Gleichungen als Unbekannte, z. B. viele verrauschte Messungen): Es gibt meist keine exakte Lösung. Man sucht das $x$, das $\|Ax - b\|^2$ minimiert (kleinste Quadrate):
+
+      ```python
+      x = np.linalg.lstsq(A, b, rcond=None)[0]
+      ```
+
+      `lstsq` liefert vier Rückgabewerte; `[0]` ist die Lösung. `rcond=None` wählt die empfohlene Toleranz.
+  - type: example
+    code: |
+      import numpy as np
+      # 2x +  y = 3
+      #  x + 3y = 5
+      A = np.array([[2.0, 1.0],
+                    [1.0, 3.0]])
+      b = np.array([3.0, 5.0])
+      x = np.linalg.solve(A, b)
+      print(x)
+      print(np.allclose(A @ x, b))
+    subgoals:
+      - lines: [1, 6]
+        label: System als Matrix und Vektor aufschreiben
+      - lines: 7
+        label: Lösen
+      - lines: [8, 9]
+        label: Lösung durch Einsetzen prüfen
+    after: |
+      Jede Zeile von `A` enthält die Koeffizienten einer Gleichung. Die Probe `A @ x ≈ b` gehört dazu – mit `np.allclose`, nicht mit `==`.
+  - type: predict
+    code: |
+      import numpy as np
+      A = np.array([[2.0, 0.0],
+                    [0.0, 4.0]])
+      b = np.array([2.0, 8.0])
+      print(np.linalg.solve(A, b))
+    options: ["[1. 2.]", "[4. 32.]", "[2. 8.]", "[0.5 0.5]"]
+    answer: "[1. 2.]"
+    explanation: |
+      Diagonal: $2x_1 = 2$, $4x_2 = 8$. `[4. 32.]` wäre `A @ b` – das Gegenteil von Lösen.
+  - type: explain
+    question: |
+      Warum schreibt man `np.linalg.solve(A, b)` statt `np.linalg.inv(A) @ b`?
+    options:
+      - text: "`solve` löst das System direkt; die volle Inverse zu berechnen ist aufwendiger und numerisch ungenauer."
+        correct: true
+        why: Mathematisch dasselbe, numerisch besser. Die Inverse braucht man selten explizit.
+      - text: "`inv` gibt es in NumPy nicht."
+        correct: false
+        why: "`np.linalg.inv` existiert – es ist nur meist nicht der beste Weg."
+      - text: "`solve` funktioniert auch, wenn `A` singulär ist."
+        correct: false
+        why: Bei singulärem `A` meldet `solve` einen `LinAlgError` (im Browser kommt teils nur `nan` heraus – prüfe dann `np.linalg.det(A)`). Dann hilft `lstsq`.
+  - type: example
+    intro: |
+      Eine Feder wird um $x$ ausgelenkt, gemessen wird die Kraft $F$ (verrauscht). Modell: $F = k\,x + F_0$. Jede Messung ist eine Gleichung $x_i\,k + 1 \cdot F_0 = F_i$ – zwanzig Gleichungen, zwei Unbekannte.
+    code: |
+      import numpy as np
+      import lab
+      rng = np.random.default_rng(0)
+      x = np.linspace(0, 0.1, 20)                                  # Auslenkung in m
+      F = 250 * x + 1.0 + rng.normal(0.0, 0.5, size=x.shape)       # Kraft in N
+      A = np.column_stack([x, np.ones_like(x)])                    # Form (20, 2)
+      k, F0 = np.linalg.lstsq(A, F, rcond=None)[0]
+      print(f"k = {k:.1f} N/m, F0 = {F0:.2f} N")
+      fig = lab.Figure(title="Ausgleichsgerade", xlabel="x [m]", ylabel="F [N]")
+      fig.scatter(x, F, label="Messung")
+      fig.line(k * x + F0, x=x, label="Fit")
+      fig.show()
+    subgoals:
+      - lines: [1, 5]
+        label: Verrauschte Messdaten erzeugen
+      - lines: 6
+        label: Matrix des Modells aufbauen
+      - lines: [7, 8]
+        label: Kleinste Quadrate lösen
+      - lines: [9, 12]
+        label: Daten und Gerade zeichnen
+    after: |
+      `np.column_stack` setzt 1D-Arrays als **Spalten** nebeneinander; `np.ones_like(x)` ist ein Array voller Einsen in der Form von `x` – die Spalte für $F_0$. Die geschätzten Werte liegen nahe an den wahren 250 N/m und 1 N, aber wegen des Rauschens nicht genau darauf.
+  - type: quiz
+    question: |
+      Du willst $y = a t^2 + b t + c$ an 50 Messpunkte anpassen. Welche Form hat die Matrix `A` für `lstsq`?
+    options:
+      - text: "`(50, 3)` – Spalten $t^2$, $t$, $1$"
+        correct: true
+        why: Eine Zeile pro Messung, eine Spalte pro Unbekannte.
+      - text: "`(3, 50)`"
+        correct: false
+        why: Vertauscht – dann passt `A @ [a, b, c]` nicht zur Form.
+      - text: "`(50, 2)` – Spalten $t$ und $1$"
+        correct: false
+        why: Damit fehlt die Spalte für $a$; das wäre nur eine Gerade.
+      - text: "`(50, 50)`"
+        correct: false
+        why: Es gibt nur 3 Unbekannte; eine quadratische Matrix wäre hier falsch.
+  - type: fill
+    fading: true
+    prompt: |
+      Passe eine Gerade $y = m\,t + c$ an die Daten an. Die Daten liegen exakt auf $y = 2t + 1$, also muss $(2, 1)$ herauskommen.
+    code: |
+      import numpy as np
+      t = np.linspace(0, 1, 5)
+      y = 2 * t + 1
+      A = np.column_stack([___, np.ones_like(t)])
+      p = np.linalg.___(A, y, rcond=None)[0]
+      print(np.round(p, 3))
+    blanks:
+      - answer: t
+        options: [t, y, "t ** 2"]
+      - answer: lstsq
+        options: [lstsq, solve, inv]
+    expect_output: "[2. 1.]"
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Gelenk-Encoder misst nicht ganz genau: `gemessen ≈ a * soll + b`. Schreibe `kalibriere(soll, gemessen)`, die aus Arrays von Soll- und Messwinkeln (in rad) die Parameter `a, b` mit kleinsten Quadraten schätzt und als Tupel zurückgibt.
+    starter: |
+      import numpy as np
+
+      def kalibriere(soll, gemessen):
+          A = ...   # Matrix mit Spalten soll und 1
+          # a, b = ...
+          pass
+    solution: |
+      import numpy as np
+
+      def kalibriere(soll, gemessen):
+          A = np.column_stack([soll, np.ones_like(soll)])
+          a, b = np.linalg.lstsq(A, gemessen, rcond=None)[0]
+          return a, b
+    tests:
+      - name: Exakte Daten
+        code: |
+          import numpy as np
+          soll = np.linspace(-1.0, 1.0, 9)
+          a, b = kalibriere(soll, 1.02 * soll - 0.05)
+          assert close(a, 1.02) and close(b, -0.05), f"Erwartet a = 1.02, b = -0.05, bekommen a = {a}, b = {b}"
+      - name: Verrauschte Daten
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(4)
+          soll = np.linspace(-1.5, 1.5, 200)
+          gemessen = 0.97 * soll + 0.1 + rng.normal(0.0, 0.01, size=soll.shape)
+          a, b = kalibriere(soll, gemessen)
+          assert abs(a - 0.97) < 0.01 and abs(b - 0.1) < 0.01, f"Erwartet etwa a = 0.97, b = 0.1, bekommen a = {a:.3f}, b = {b:.3f}"
+    mutants:
+      - |
+        import numpy as np
+
+        def kalibriere(soll, gemessen):
+            A = np.column_stack([gemessen, np.ones_like(gemessen)])
+            a, b = np.linalg.lstsq(A, soll, rcond=None)[0]
+            return a, b
+      - |
+        import numpy as np
+
+        def kalibriere(soll, gemessen):
+            A = np.column_stack([soll, soll])
+            a, b = np.linalg.lstsq(A, gemessen, rcond=None)[0]
+            return a, b
+      - |
+        import numpy as np
+
+        def kalibriere(soll, gemessen):
+            A = np.column_stack([soll, np.ones_like(soll)])
+            b, a = np.linalg.lstsq(A, gemessen, rcond=None)[0]
+            return a, b
+    hints:
+      - "Teilziel: Modellmatrix aufbauen, kleinste Quadrate lösen, Parameter zurückgeben."
+      - "Unbekannt sind `a` und `b`: Spalte 1 ist `soll` (gehört zu `a`), Spalte 2 sind Einsen (gehören zu `b`). Die rechte Seite ist `gemessen`."
+      - "`A = np.column_stack([soll, np.ones_like(soll)])`"
+      - "`a, b = np.linalg.lstsq(A, gemessen, rcond=None)[0]`"
+cards:
+  - id: m05-c-solve
+    concept: la-solve
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.array([[1.0, 1.0], [0.0, 2.0]])
+          b = np.array([3.0, 4.0])
+          print(np.linalg.solve(A, b))
+        options: ["[1. 2.]", "[7. 8.]", "[3. 2.]", "[2. 1.]"]
+        answer: "[1. 2.]"
+        explanation: "Aus der zweiten Zeile $x_2 = 2$, dann $x_1 = 3 - 2 = 1$."
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.array([[4.0, 0.0], [0.0, 0.5]])
+          b = np.array([2.0, 1.0])
+          print(np.linalg.solve(A, b))
+        options: ["[0.5 2. ]", "[8.  0.5]", "[2. 1.]", "[0.5 0.5]"]
+        answer: "[0.5 2. ]"
+        explanation: "$4x_1 = 2$, $0.5\\,x_2 = 1$."
+  - id: m05-c-lstsq
+    concept: la-lstsq
+    variants:
+      - type: quiz
+        question: |
+          Wann brauchst du `lstsq` statt `solve`?
+        options:
+          - text: Wenn es mehr Gleichungen als Unbekannte gibt, z. B. viele verrauschte Messungen.
+            correct: true
+            why: Dann gibt es meist keine exakte Lösung; `lstsq` minimiert den quadratischen Fehler.
+          - text: Immer, wenn die Matrix Kommazahlen enthält.
+            correct: false
+            why: Der dtype spielt keine Rolle, nur die Struktur des Systems.
+          - text: Wenn das System genau eine Lösung hat.
+            correct: false
+            why: Dann ist `solve` der direkte Weg (`lstsq` fände sie auch, aber umständlicher).
+      - type: quiz
+        question: |
+          Für eine Ausgleichsgerade $y = m x + c$ baust du `A = np.column_stack([x, np.ones_like(x)])`. Wozu die Spalte mit Einsen?
+        options:
+          - text: Sie gehört zum Achsenabschnitt $c$, der in jeder Gleichung mit Faktor 1 vorkommt.
+            correct: true
+            why: Ohne sie würde die Gerade durch den Ursprung gezwungen.
+          - text: Sie verhindert eine Division durch null.
+            correct: false
+            why: Es wird nichts geteilt; die Spalte ist ein Modellterm.
+          - text: "`lstsq` braucht immer mindestens zwei Spalten."
+            correct: false
+            why: Auch eine Spalte geht – dann gibt es nur eine Unbekannte.
+  - id: m05-c-solve-vs-inv
+    concept: la-solve
+    variants:
+      - type: quiz
+        question: |
+          Welche Zeile löst $Ax = b$ für eine quadratische, reguläre Matrix am besten?
+        options:
+          - text: "`x = np.linalg.solve(A, b)`"
+            correct: true
+            why: Direkt, schnell und numerisch stabil.
+          - text: "`x = b / A`"
+            correct: false
+            why: Das teilt elementweise – keine Lösung des Systems.
+          - text: "`x = A @ b`"
+            correct: false
+            why: Das wendet `A` an, statt es umzukehren.
+      - type: quiz
+        question: |
+          `np.linalg.solve(A, b)` meldet `LinAlgError: Singular matrix`. Was bedeutet das?
+        options:
+          - text: "$\\det A = 0$ – das System hat keine oder unendlich viele Lösungen."
+            correct: true
+            why: Singulär heißt nicht invertierbar; die Gleichungen sind linear abhängig.
+          - text: "`b` hat die falsche Länge."
+            correct: false
+            why: Das gäbe eine andere Fehlermeldung zur Form.
+          - text: Die Matrix enthält negative Zahlen.
+            correct: false
+            why: Negative Einträge sind kein Problem.

@@ -1,0 +1,409 @@
+id: m03-debugging
+title: Debugging mit System
+minutes: 10
+goals:
+  - Fehler mit dem Kreislauf Beobachten → Hypothese → Prüfen → Korrigieren eingrenzen
+  - Zwischenwerte gezielt mit `print` sichtbar machen
+  - Typische Logikfehler (Off-by-one, `return` in der Schleife, falscher Startwert) erkennen
+concepts: [m03-debugging]
+steps:
+  - type: text
+    body: |
+      ## Fehler suchen wie ein Experiment
+
+      Ein Programm liefert ein falsches Ergebnis, aber keine Fehlermeldung – ein **Logikfehler**. Wildes Herumprobieren kostet Zeit. Gehe vor wie bei einem Experiment:
+
+      1. **Beobachten:** Was genau ist falsch? Finde die **kleinste** Eingabe, bei der es schiefgeht.
+      2. **Hypothese:** Welche Zeile könnte das verursachen?
+      3. **Prüfen:** Zwischenwerte mit `print` ausgeben oder den Ablauf im Trace verfolgen.
+      4. **Korrigieren** – und den Test erneut laufen lassen.
+
+      Gibt es eine Fehlermeldung, lies den Traceback von unten: Fehlertyp, Meldung, Zeile.
+  - type: example
+    intro: |
+      `average_speed` soll aus Positionen (m), gemessen im Abstand `dt` (s), die mittlere Geschwindigkeit berechnen. Erwartet sind 2.0 m/s – heraus kommt 1.5. Eine Debug-Ausgabe zeigt die Zwischenwerte.
+    code: |
+      def average_speed(positions, dt):
+          total = 0.0
+          for i in range(1, len(positions)):
+              v = (positions[i] - positions[i - 1]) / dt
+              print("DEBUG i =", i, "v =", v)
+              total = total + v
+          return total / len(positions)
+
+      print(average_speed([0.0, 1.0, 2.0, 3.0], 0.5))
+    subgoals:
+      - lines: [3, 4]
+        label: Einzelgeschwindigkeiten berechnen
+      - lines: 5
+        label: Zwischenwerte sichtbar machen
+      - lines: [6, 7]
+        label: Mittelwert bilden
+      - lines: 9
+        label: Kleinsten Fall mit bekannter Antwort ausführen
+    after: |
+      Alle drei Einzelgeschwindigkeiten sind korrekt 2.0 m/s. Der Fehler muss also **danach** passieren.
+  - type: explain
+    question: |
+      Welche Hypothese stützt die Debug-Ausgabe?
+    options:
+      - text: "Die Summe ist richtig (6.0), aber sie wird durch die Anzahl der Positionen (4) statt durch die Anzahl der Differenzen (3) geteilt."
+        correct: true
+        why: Aus 4 Positionen entstehen nur 3 Geschwindigkeiten. $6{,}0 / 4 = 1{,}5$ – genau der falsche Wert.
+      - text: Die Division durch `dt` ist falsch.
+        correct: false
+        why: Die Debug-Ausgabe zeigt korrekte Einzelwerte von 2.0 m/s – die Division durch `dt` stimmt.
+      - text: Die Schleife sollte bei 0 beginnen.
+        correct: false
+        why: Bei `i = 0` wäre `positions[i - 1]` das **letzte** Element – das ergäbe eine unsinnige Differenz.
+  - type: text
+    body: |
+      ## Rubber Ducking
+
+      Erkläre deinen Code Zeile für Zeile laut – einer Gummiente, einer Kollegin oder dir selbst: *„Hier läuft `i` von … bis …, und dann …“*. Beim Formulieren merkst du oft selbst, wo deine Annahme nicht stimmt. Das klingt albern, ist aber eine der wirksamsten Debugging-Techniken.
+
+      Häufige Verdächtige bei Logikfehlern:
+
+      - **Off-by-one:** `range(len(x) - 1)` statt `range(len(x))`
+      - **`return` zu früh**, z. B. innerhalb der Schleife
+      - **falscher Startwert**, z. B. `best = 0` bei negativen Messwerten
+  - type: trace
+    intro: |
+      Diese Suche nach dem größten Wert liefert 4 statt 9. Verfolge die Schleife.
+    code: |
+      values = [4, 1, 9]
+      largest = values[0]
+      for i in range(len(values) - 1):
+          if values[i] > largest:
+              largest = values[i]
+      print(largest)
+    questions:
+      - line: 4
+        hit: 2
+        var: i
+        prompt: Welchen Wert hat `i` im letzten Schleifendurchlauf?
+        answer: "1"
+      - line: 6
+        var: largest
+        prompt: Welchen Wert hat `largest` am Ende?
+        answer: "4"
+    after: |
+      Die Schleife läuft nur für `i = 0` und `i = 1` – der letzte Wert (Index 2) wird nie angeschaut. Ein klassischer **Off-by-one-Fehler**: richtig wäre `range(len(values))`.
+  - type: predict
+    intro: |
+      `all_positive` soll prüfen, ob **alle** Werte positiv sind. Lies genau – auch die Einrückung.
+    code: |
+      def all_positive(values):
+          for v in values:
+              if v > 0:
+                  return True
+              return False
+
+      print(all_positive([1, -2, 3]))
+      print(all_positive([-1, 2]))
+    options:
+      - |
+        True
+        False
+      - |
+        False
+        False
+      - |
+        True
+        True
+      - |
+        False
+        True
+    answer: |
+      True
+      False
+    explanation: |
+      Die Funktion entscheidet schon beim **ersten** Element: Beide `return` stehen in der Schleife. `[1, -2, 3]` liefert deshalb fälschlich `True`. Richtig: in der Schleife bei einem nicht positiven Wert `return False`, **nach** der Schleife `return True`.
+  - type: quiz
+    question: |
+      Dein Programm liefert ohne Fehlermeldung ein falsches Ergebnis. Was ist der beste erste Schritt?
+    options:
+      - text: Den kleinsten Eingabefall suchen, bei dem das Ergebnis falsch ist, und dafür Zwischenwerte ausgeben.
+        correct: true
+        why: Ein kleiner Fall mit bekannter Antwort macht die Abweichung sichtbar und lässt sich schnell nachrechnen.
+      - text: So lange Zeilen ändern, bis das Ergebnis stimmt.
+        correct: false
+        why: Ohne Hypothese verschiebst du den Fehler oft nur – oder baust neue ein.
+      - text: Den Code in `try`/`except` packen.
+        correct: false
+        why: Es gibt gar keine Ausnahme. `except` würde nichts finden – und echte Fehler später verstecken.
+      - text: Alles neu schreiben.
+        correct: false
+        why: Kostet viel Zeit und garantiert nicht, dass derselbe Denkfehler nicht wieder passiert.
+  - type: fill
+    fading: true
+    prompt: |
+      Behebe den Fehler aus dem Beispiel: Geteilt werden muss durch die Anzahl der **Differenzen**. Erwartet: `2.0`, dann `2.0`.
+    code: |
+      def average_speed(positions, dt):
+          total = 0.0
+          for i in range(1, len(positions)):
+              total = total + (positions[i] - positions[i - 1]) / dt
+          return total / ___
+
+      print(average_speed([0.0, 1.0, 2.0, 3.0], 0.5))
+      print(average_speed([0.0, 2.0], 1.0))
+    blanks:
+      - answer: "(len(positions) - 1)"
+        options: ["(len(positions) - 1)", "len(positions)", "len(positions) - 1", "dt"]
+    expect_output: |
+      2.0
+      2.0
+    explanation: |
+      Ohne Klammern rechnet Python `total / len(positions) - 1` – Punkt vor Strich. Das ergibt $6/4 - 1 = 0{,}5$.
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue `all_positive` richtig: Ausgabe `False`, dann `True`.
+    lines:
+      - "def all_positive(values):"
+      - "    for v in values:"
+      - "        if v <= 0:"
+      - "            return False"
+      - "    return True"
+      - "print(all_positive([1, -2, 3]))"
+      - "print(all_positive([1, 2]))"
+    distractors:
+      - "        if v > 0:"
+      - "    for v in range(values):"
+    expect_output: |
+      False
+      True
+  - type: exercise
+    mode: modify
+    prompt: |
+      `peak` soll den größten Messwert liefern. Für `[-3, -1, -2]` kommt aber `0` heraus. Bilde eine Hypothese, woher die 0 stammt, und behebe den Fehler.
+    starter: |
+      def peak(values):
+          best = 0
+          for v in values:
+              if v > best:
+                  best = v
+          return best
+
+      print(peak([-3, -1, -2]))
+    solution: |
+      def peak(values):
+          best = values[0]
+          for v in values:
+              if v > best:
+                  best = v
+          return best
+
+      print(peak([-3, -1, -2]))
+    tests:
+      - name: Nur negative Werte
+        code: |
+          assert peak([-3, -1, -2]) == -1, f"peak([-3, -1, -2]) sollte -1 sein, liefert {peak([-3, -1, -2])}"
+          assert peak([-5000.0, -4000.0]) == -4000.0, f"peak([-5000.0, -4000.0]) sollte -4000.0 sein, liefert {peak([-5000.0, -4000.0])}"
+      - name: Positive Werte
+        code: |
+          assert peak([2, 5, 1]) == 5, f"peak([2, 5, 1]) sollte 5 sein, liefert {peak([2, 5, 1])}"
+      - name: Ein Element
+        code: |
+          assert peak([7]) == 7, f"peak([7]) sollte 7 sein, liefert {peak([7])}"
+    mutants:
+      - |
+        def peak(values):
+            best = -1
+            for v in values:
+                if v > best:
+                    best = v
+            return best
+
+        print(peak([-3, -1, -2]))
+      - |
+        def peak(values):
+            best = -1000
+            for v in values:
+                if v > best:
+                    best = v
+            return best
+
+        print(peak([-3, -1, -2]))
+      - |
+        def peak(values):
+            best = values[0]
+            for v in values:
+                if v < best:
+                    best = v
+            return best
+
+        print(peak([-3, -1, -2]))
+    hints:
+      - "Teilziel: Hypothese – welcher Wert von `best` überlebt, wenn alle Messwerte negativ sind?"
+      - Der Startwert 0 ist größer als jeder negative Wert und wird nie ersetzt. Starte mit einem Wert, der sicher in der Liste vorkommt.
+      - "`best = values[0]`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `wrap(q)`, die einen Winkel (rad) in den Bereich $(-\pi, \pi]$ bringt, indem sie so oft $2\pi$ abzieht oder addiert wie nötig. Beispiel: `wrap(4.0)` ≈ $4 - 2\pi \approx -2{,}283$.
+
+      Prüfe deine Funktion selbst mit ein paar `print`-Aufrufen – auch für negative Winkel und Winkel über $4\pi$.
+    starter: |
+      import math
+
+      def wrap(q):
+          # dein Code
+          return q
+    solution: |
+      import math
+
+      def wrap(q):
+          while q > math.pi:
+              q = q - 2 * math.pi
+          while q <= -math.pi:
+              q = q + 2 * math.pi
+          return q
+    tests:
+      - name: Schon im Bereich
+        code: |
+          assert wrap(0.5) == 0.5, f"wrap(0.5) sollte 0.5 bleiben, liefert {wrap(0.5)}"
+          assert wrap(-1.0) == -1.0, f"wrap(-1.0) sollte -1.0 bleiben, liefert {wrap(-1.0)}"
+      - name: Zu groß
+        code: |
+          assert close(wrap(4.0), 4.0 - 2 * math.pi), f"wrap(4.0) sollte etwa {4.0 - 2 * math.pi:.3f} sein, liefert {wrap(4.0)}"
+          assert close(wrap(10.0), 10.0 - 4 * math.pi), f"wrap(10.0) sollte etwa {10.0 - 4 * math.pi:.3f} sein (zweimal 2π abziehen), liefert {wrap(10.0)}"
+      - name: Zu klein
+        code: |
+          assert close(wrap(-4.0), -4.0 + 2 * math.pi), f"wrap(-4.0) sollte etwa {-4.0 + 2 * math.pi:.3f} sein, liefert {wrap(-4.0)}"
+          assert close(wrap(-10.0), -10.0 + 4 * math.pi), f"wrap(-10.0) sollte etwa {-10.0 + 4 * math.pi:.3f} sein, liefert {wrap(-10.0)}"
+    mutants:
+      - |
+        import math
+
+        def wrap(q):
+            while q > math.pi:
+                q = q - 2 * math.pi
+            while q < -math.pi:
+                q = q + math.pi
+            return q
+      - |
+        import math
+
+        def wrap(q):
+            if q > math.pi:
+                q = q - 2 * math.pi
+            if q < -math.pi:
+                q = q + 2 * math.pi
+            return q
+      - |
+        import math
+
+        def wrap(q):
+            while q > math.pi:
+                q = q - 2 * math.pi
+            return q
+      - |
+        import math
+
+        def wrap(q):
+            while q > math.pi:
+                q = q - math.pi
+            while q < -math.pi:
+                q = q + math.pi
+            return q
+    hints:
+      - "Teilziel: solange der Winkel zu groß ist, $2\\pi$ abziehen; solange er zu klein ist, $2\\pi$ addieren."
+      - "Ein einzelnes `if` reicht nicht für Winkel über $3\\pi$ – du brauchst `while`. Teste mit `print(wrap(10.0))`."
+      - |
+        ```python
+        while q > math.pi:
+            q = q - 2 * math.pi
+        while q <= -math.pi:
+            q = ...
+        ```
+    explanation: |
+      Diese Funktion brauchst du später oft, z. B. für den Winkelfehler eines Reglers: Von $3{,}1$ rad nach $-3{,}1$ rad sind es nicht $6{,}2$ rad, sondern nur etwa $0{,}08$ rad.
+  - type: quiz
+    question: Was ist „Rubber Ducking“?
+    options:
+      - text: Den eigenen Code Zeile für Zeile laut erklären, bis man die falsche Annahme selbst bemerkt.
+        correct: true
+        why: Das Formulieren zwingt dich, jede Annahme ausdrücklich zu machen.
+      - text: Ein Werkzeug, das Fehler automatisch findet.
+        correct: false
+        why: Es ist eine Denktechnik, kein Programm.
+      - text: Fehler mit `try`/`except` abfangen, damit das Programm weiterläuft.
+        correct: false
+        why: Das versteckt Fehler, statt sie zu finden.
+cards:
+  - id: m03-c-debug-strategie
+    concept: m03-debugging
+    variants:
+      - type: quiz
+        question: "`mean([2, 4])` liefert 2.0 statt 3.0. Welche Prüfung grenzt den Fehler am schnellsten ein?"
+        options:
+          - text: Summe und Anzahl als Zwischenwerte ausgeben und mit 6 und 2 vergleichen.
+            correct: true
+            why: So siehst du sofort, ob die Summe oder die Division falsch ist.
+          - text: Mit einer Liste aus 1000 Zufallszahlen testen.
+            correct: false
+            why: Große Eingaben machen das Nachrechnen schwer. Kleine Fälle mit bekannter Antwort sind besser.
+          - text: Den Rückgabewert mit `int()` umwandeln.
+            correct: false
+            why: Das verändert das Ergebnis, ohne den Fehler zu verstehen.
+      - type: quiz
+        question: In welcher Reihenfolge gehst du beim Debuggen vor?
+        options:
+          - text: Beobachten → Hypothese → Prüfen → Korrigieren → erneut testen
+            correct: true
+            why: Wie ein Experiment – jede Änderung beruht auf einer überprüften Vermutung.
+          - text: Korrigieren → Beobachten → Hypothese
+            correct: false
+            why: Ohne Beobachtung und Hypothese ist die Korrektur geraten.
+          - text: Hypothese → Korrigieren, ohne zu prüfen
+            correct: false
+            why: Ungeprüfte Hypothesen führen oft zur falschen Stelle.
+  - id: m03-c-return-in-loop
+    concept: m03-debugging
+    variants:
+      - type: predict
+        code: |
+          def contains_zero(values):
+              for v in values:
+                  if v == 0:
+                      return True
+                  return False
+
+          print(contains_zero([3, 0]))
+        options: ["False", "True", "None"]
+        answer: "False"
+        explanation: "`return False` steht in der Schleife und beendet die Funktion schon beim ersten Element."
+      - type: predict
+        code: |
+          def total(values):
+              s = 0
+              for v in values:
+                  s = s + v
+                  return s
+
+          print(total([1, 2, 3]))
+        options: ["1", "6", "3"]
+        answer: "1"
+        explanation: "`return s` ist zu weit eingerückt und beendet die Funktion nach dem ersten Durchlauf."
+  - id: m03-c-off-by-one
+    concept: m03-debugging
+    variants:
+      - type: predict
+        code: |
+          values = [2, 4, 6]
+          s = 0
+          for i in range(len(values) - 1):
+              s = s + values[i]
+          print(s)
+        options: ["6", "12", "10"]
+        answer: "6"
+        explanation: "`range(2)` liefert nur 0 und 1 – der letzte Wert fehlt."
+      - type: predict
+        code: |
+          values = [5, 7, 9]
+          print(values[len(values) - 1])
+        options: ["9", "7", "IndexError"]
+        answer: "9"
+        explanation: Der letzte Index ist `len - 1`. `values[len(values)]` wäre ein `IndexError`.

@@ -1,0 +1,285 @@
+id: m06-semi-implizit
+title: Energiedrift und semi-impliziter Euler
+minutes: 10
+goals:
+  - Die Energiedrift des expliziten Euler am ungedämpften Oszillator messen
+  - Den semi-impliziten Euler durch Vertauschen zweier Zeilen umsetzen
+  - Die Stabilitätsgrenze der Schrittweite kennen
+concepts: [energiedrift, semi-implizit-euler, diskretisierungsfehler]
+steps:
+  - type: text
+    body: |
+      ## Energie aus dem Nichts
+
+      Ohne Dämpfer ($c = 0$) und mit $\omega^2 = k/m$ bleibt die Energie pro Masse
+
+      $$
+      E = \tfrac12 v^2 + \tfrac12 \omega^2 x^2
+      $$
+
+      exakt konstant. Eine gute Simulation sollte das auch tun.
+
+      Beim expliziten Euler gilt aber für **jeden** Schritt (einfach ausmultiplizieren):
+
+      $$
+      E_{k+1} = (1 + \omega^2\, dt^2)\, E_k
+      $$
+
+      Der Faktor ist immer größer als 1. Die Simulation erzeugt in jedem Schritt ein bisschen Energie – das nennt man **Energiedrift** (energy drift). Über viele Schritte wird daraus exponentielles Wachstum.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      omega = 1.0      # rad/s
+      dt = 0.1         # s
+
+      def energy(x, v):
+          return 0.5 * v**2 + 0.5 * omega**2 * x**2
+
+      x, v = 1.0, 0.0
+      E = [energy(x, v)]
+      for i in range(600):
+          x, v = x + dt * v, v - dt * omega**2 * x
+          E.append(energy(x, v))
+
+      print(f"E nach 60 s / E am Anfang: {E[-1] / E[0]:.1f}")
+      lab.plot(E, x=np.arange(601) * dt, title="Expliziter Euler, ungedämpft",
+               xlabel="t [s]", ylabel="Energie [J/kg]")
+    subgoals:
+      - lines: [7, 8]
+        label: Energie als Kontrollgröße definieren
+      - lines: [10, 14]
+        label: Euler-Schleife
+      - lines: [16, 18]
+        label: Energie auswerten
+    after: |
+      Nach etwa 10 Schwingungen ist die Energie fast **400-mal** so groß – $1{,}01^{600} \approx 392$. Die Amplitude wächst um den Faktor $\sqrt{392} \approx 20$. Das ist kein Rundungsfehler, sondern eine Eigenschaft des Verfahrens.
+  - type: predict
+    code: |
+      omega, dt = 1.0, 0.1
+      x, v = 1.0, 0.0
+      E0 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+      x, v = x + dt * v, v - dt * omega**2 * x
+      E1 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+      print(round(E1 / E0, 4))
+    question: Um welchen Faktor ändert sich die Energie in diesem **einen** Schritt?
+    options: ["1.01", "1.0", "0.99", "1.1"]
+    answer: "1.01"
+    explanation: |
+      $x$ bleibt 1, $v$ wird $-0{,}1$. Die Energie steigt von $0{,}5$ auf $0{,}5 \cdot (1 + 0{,}01) = 0{,}505$, genau der Faktor $1 + \omega^2 dt^2$.
+  - type: text
+    body: |
+      ## Zwei Zeilen tauschen
+
+      Der **semi-implizite Euler** (semi-implicit / symplectic Euler) rechnet erst die neue Geschwindigkeit und benutzt sie **sofort** für die Position:
+
+      ```python
+      v = v + dt * a(x)      # a mit der alten Position
+      x = x + dt * v         # x mit der NEUEN Geschwindigkeit
+      ```
+
+      Gleicher Rechenaufwand, kein Gleichungssystem – nur die Reihenfolge ändert sich. Viele Physik-Engines für Spiele und Robotik rechnen in dieser Reihenfolge.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      omega, dt, n = 1.0, 0.1, 600
+
+      def energy(x, v):
+          return 0.5 * v**2 + 0.5 * omega**2 * x**2
+
+      x, v = 1.0, 0.0
+      E_exp = [energy(x, v)]
+      for i in range(n):
+          x, v = x + dt * v, v - dt * omega**2 * x
+          E_exp.append(energy(x, v))
+
+      x, v = 1.0, 0.0
+      E_semi = [energy(x, v)]
+      for i in range(n):
+          v = v - dt * omega**2 * x
+          x = x + dt * v
+          E_semi.append(energy(x, v))
+
+      print(f"semi-implizit: E/E0 zwischen {min(E_semi)/E_semi[0]:.3f} und {max(E_semi)/E_semi[0]:.3f}")
+      ts = np.arange(n + 1) * dt
+      fig = lab.Figure(title="Energie, ungedämpft", xlabel="t [s]", ylabel="E [J/kg]", logy=True)
+      fig.line(E_exp, x=ts, label="explizit")
+      fig.line(E_semi, x=ts, label="semi-implizit")
+      fig.show()
+    subgoals:
+      - lines: [9, 13]
+        label: Explizit simulieren
+      - lines: [15, 20]
+        label: Semi-implizit simulieren
+      - lines: [22, 27]
+        label: Energien vergleichen
+    after: |
+      Semi-implizit schwankt die Energie nur um etwa ±5 % und kommt immer wieder zurück. Die y-Achse ist logarithmisch (`logy=True`), sonst wäre die semi-implizite Kurve neben der explodierenden kaum zu sehen.
+  - type: explain
+    question: |
+      Warum bleibt die Energie beim semi-impliziten Euler beschränkt?
+    options:
+      - text: Das Verfahren erhält eine leicht veränderte Energie exakt; die echte Energie schwankt deshalb nur um diesen Wert, statt systematisch zu wachsen.
+        correct: true
+        why: Solche Verfahren heißen **symplektisch**. Sie sind nicht genauer pro Schritt, aber sie sammeln keinen Energiefehler an.
+      - text: Er ist exakt, es gibt keinen Fehler mehr.
+        correct: false
+        why: Die Energie schwankt um ±5 %, und auch die Phase weicht ab. Es gibt einen Fehler, er wächst nur nicht.
+      - text: Er löst in jedem Schritt ein Gleichungssystem wie ein implizites Verfahren.
+        correct: false
+        why: Es wird nichts gelöst – beide Zeilen sind direkte Zuweisungen. „Semi“ heißt nur, dass `x` den schon neuen Wert von `v` benutzt.
+      - text: Weil er intern kleinere Schritte macht.
+        correct: false
+        why: "`dt` ist in beiden Varianten gleich."
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue eine semi-implizite Simulation über 3 Schritte. Ausgabe: `0.9405 -0.296`.
+    lines:
+      - "omega, dt = 1.0, 0.1"
+      - "x, v = 1.0, 0.0"
+      - "for i in range(3):"
+      - "    a = -omega**2 * x"
+      - "    v = v + dt * a"
+      - "    x = x + dt * v"
+      - "print(round(x, 4), round(v, 4))"
+    distractors:
+      - "    v = v + a"
+      - "    x, v = x + dt * v, v + dt * a"
+    expect_output: "0.9405 -0.296"
+    explanation: |
+      Die Reihenfolge innerhalb der Schleife entscheidet: erst `a` aus dem alten `x`, dann `v`, dann `x` mit dem neuen `v`. Vertauschst du die letzten beiden Zeilen, erhältst du den expliziten Euler (`0.97 -0.299`).
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `semi_euler(x, v, dt, n_steps, k=1.0, m=1.0)` für den ungedämpften Oszillator $m\ddot x = -kx$. Die Funktion macht `n_steps` semi-implizite Schritte und gibt den Endzustand als Tupel `(x, v)` zurück.
+    starter: |
+      def semi_euler(x, v, dt, n_steps, k=1.0, m=1.0):
+          for i in range(n_steps):
+              # erst v, dann x
+              pass
+          return x, v
+    solution: |
+      def semi_euler(x, v, dt, n_steps, k=1.0, m=1.0):
+          for i in range(n_steps):
+              v = v + dt * (-k / m * x)
+              x = x + dt * v
+          return x, v
+    tests:
+      - name: Drei Schritte
+        code: |
+          x, v = semi_euler(1.0, 0.0, 0.1, 3)
+          assert close([x, v], [0.9405, -0.296], tol=1e-4), f"Erwartet (0.9405, -0.296), bekommen ({x:.4f}, {v:.4f})"
+      - name: Masse und Steifigkeit
+        code: |
+          xr, vr = 0.5, 1.0
+          for i in range(50):
+              vr = vr + 0.05 * (-4.0 / 2.0 * xr)
+              xr = xr + 0.05 * vr
+          x, v = semi_euler(0.5, 1.0, 0.05, 50, k=4.0, m=2.0)
+          assert close([x, v], [xr, vr]), f"Mit k=4, m=2 erwartet ({xr:.4f}, {vr:.4f}), bekommen ({x:.4f}, {v:.4f})"
+      - name: Keine Energiedrift
+        code: |
+          x, v = semi_euler(1.0, 0.0, 0.1, 1000)
+          E = 0.5 * v**2 + 0.5 * x**2
+          assert 0.45 < E < 0.55, f"Nach 1000 Schritten sollte E ≈ 0.5 bleiben, ist {E:.3f} – Reihenfolge v → x prüfen"
+      - name: Null Schritte
+        code: |
+          assert semi_euler(2.0, -1.0, 0.1, 0) == (2.0, -1.0), "Bei n_steps = 0 muss der Startzustand zurückkommen"
+    mutants:
+      - |
+        def semi_euler(x, v, dt, n_steps, k=1.0, m=1.0):
+            for i in range(n_steps):
+                x = x + dt * v
+                v = v + dt * (-k / m * x)
+            return x, v
+      - |
+        def semi_euler(x, v, dt, n_steps, k=1.0, m=1.0):
+            for i in range(n_steps):
+                x, v = x + dt * v, v + dt * (-k / m * x)
+            return x, v
+      - |
+        def semi_euler(x, v, dt, n_steps, k=1.0, m=1.0):
+            for i in range(n_steps):
+                v = v + dt * (-k * x)
+                x = x + dt * v
+            return x, v
+    hints:
+      - "Teilziel: In jedem Schritt erst die Geschwindigkeit, dann die Position aktualisieren."
+      - "Beschleunigung $a = -\\frac{k}{m} x$ mit dem **alten** `x`; danach `x` mit dem **neuen** `v`."
+      - |
+        ```python
+        v = v + dt * (-k / m * x)
+        x = ...
+        ```
+    explanation: |
+      Der Unterschied zum expliziten Euler ist eine einzige vertauschte Zeile – die Energie-Probe im Test erkennt ihn trotzdem sofort. Solche **physikalischen Plausibilitätstests** (Energie, Ruhelage, Symmetrie) sind beim Simulieren oft wertvoller als Einzelwerte.
+  - type: quiz
+    question: |
+      Semi-impliziter Euler, $\omega = 1$ rad/s. Ab welcher Schrittweite explodiert die Simulation?
+    options:
+      - text: ab etwa $dt > 2$ s, also $\omega\, dt > 2$
+        correct: true
+        why: Ein Schritt ist linear, $[x, v]_{k+1} = A\,[x, v]_k$ mit $\det A = 1$. Für $\omega\, dt < 2$ liegen beide Eigenwerte auf dem Einheitskreis (Betrag 1, Modul 5), darüber wird einer betragsmäßig größer als 1. Bei steifen Federn (großes $\omega$) muss `dt` entsprechend klein sein.
+      - text: nie, semi-implizit ist für jedes `dt` stabil
+        correct: false
+        why: Auch symplektische Verfahren haben eine Stabilitätsgrenze; mit `dt = 2.1` wächst $x$ exponentiell.
+      - text: schon ab $dt > 0{,}01$ s
+        correct: false
+        why: Mit `dt = 0.1` hast du oben eine stabile Simulation gesehen.
+cards:
+  - id: m06-c-energiefaktor
+    concept: energiedrift
+    variants:
+      - type: predict
+        code: |
+          omega, dt = 1.0, 0.2
+          x, v = 1.0, 0.0
+          E0 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+          x, v = x + dt * v, v - dt * omega**2 * x
+          E1 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+          print(round(E1 / E0, 4))
+        options: ["1.04", "1.2", "1.0", "0.96"]
+        answer: "1.04"
+        explanation: "Expliziter Euler: Faktor $1 + \\omega^2 dt^2 = 1 + 0{,}04$ pro Schritt."
+      - type: predict
+        code: |
+          omega, dt = 2.0, 0.1
+          x, v = 1.0, 0.0
+          E0 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+          x, v = x + dt * v, v - dt * omega**2 * x
+          E1 = 0.5 * v**2 + 0.5 * omega**2 * x**2
+          print(round(E1 / E0, 4))
+        options: ["1.04", "1.01", "1.2", "1.0"]
+        answer: "1.04"
+        explanation: "$1 + \\omega^2 dt^2 = 1 + 4 \\cdot 0{,}01 = 1{,}04$ – eine steifere Feder driftet schneller."
+  - id: m06-c-semi-reihenfolge
+    concept: semi-implizit-euler
+    variants:
+      - type: quiz
+        question: Welche Schleife ist der **semi-implizite** Euler?
+        options:
+          - text: "`v = v + dt * a(x)` und danach `x = x + dt * v`"
+            correct: true
+            why: Die Position benutzt die schon aktualisierte Geschwindigkeit.
+          - text: "`v = v + a(x)` und danach `x = x + v`"
+            correct: false
+            why: Die Reihenfolge stimmt, aber `dt` fehlt – so wäre jeder Schritt 1 s lang, egal was `dt` ist.
+          - text: "`x, v = x + dt * v, v + dt * a(x)`"
+            correct: false
+            why: Beide rechten Seiten nutzen alte Werte – das ist der explizite Euler.
+      - type: quiz
+        question: Was ändert sich vom expliziten zum semi-impliziten Euler am Rechenaufwand pro Schritt?
+        options:
+          - text: nichts – nur die Reihenfolge der Aktualisierung
+            correct: true
+            why: Beide brauchen eine Auswertung der Beschleunigung pro Schritt.
+          - text: er verdoppelt sich, weil zweimal gerechnet wird
+            correct: false
+            why: Es wird genau einmal $a(x)$ ausgewertet.
+          - text: es muss ein lineares Gleichungssystem gelöst werden
+            correct: false
+            why: Das wäre ein voll impliziter Euler. Semi-implizit sind beide Zeilen direkte Zuweisungen.

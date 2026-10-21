@@ -1,0 +1,288 @@
+id: m10-normalverteilung
+title: Normalverteilung
+minutes: 9
+goals:
+  - Normalverteilte Stichproben mit `rng.normal` und `rng.standard_normal` ziehen
+  - Die Dichte $N(\mu, \sigma^2)$ mit dem Histogramm vergleichen
+  - Mehrdimensionale Stichproben mit Vektor `mu` und `sigma` per Broadcasting erzeugen
+concepts: [wk-normalverteilung, wk-diagonal-gauss]
+steps:
+  - type: text
+    body: |
+      ## Die Glockenkurve
+
+      Rauschen aus vielen kleinen, unabhängigen Ursachen ist näherungsweise **normalverteilt** (zentraler Grenzwertsatz). Dichte:
+
+      $$
+      f(x) = \frac{1}{\sigma\sqrt{2\pi}}\, \exp\!\Big(-\frac{(x-\mu)^2}{2\sigma^2}\Big)
+      $$
+
+      Faustregel: In $\mu \pm \sigma$ liegen etwa **68 %**, in $\mu \pm 2\sigma$ etwa **95 %**, in $\mu \pm 3\sigma$ etwa **99,7 %** der Werte.
+
+      In NumPy: `rng.normal(mu, sigma, size)`. Achtung: Das zweite Argument ist die **Standardabweichung** $\sigma$, nicht die Varianz.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      mu, sigma = 1.0, 0.5
+      x = rng.normal(mu, sigma, size=5000)
+      print(round(np.mean(x), 2), round(np.std(x), 2))
+
+      dichte, kanten = np.histogram(x, bins=30, range=(-1, 3), density=True)
+      mitten = (kanten[:-1] + kanten[1:]) / 2
+      g = np.linspace(-1, 3, 200)
+      f = np.exp(-(g - mu) ** 2 / (2 * sigma ** 2)) / (sigma * np.sqrt(2 * np.pi))
+
+      fig = lab.Figure(title="N(1, 0.5²): Stichprobe und Formel", xlabel="x", ylabel="Dichte")
+      fig.scatter(mitten, dichte, label="Histogramm")
+      fig.line(f, x=g, label="Dichte f(x)")
+      fig.show()
+    subgoals:
+      - lines: [4, 7]
+        label: Stichproben ziehen und prüfen
+      - lines: [9, 10]
+        label: Histogramm berechnen
+      - lines: [11, 12]
+        label: Dichte aus der Formel
+      - lines: [14, 17]
+        label: Beides vergleichen
+    after: |
+      Die Punkte des Histogramms liegen auf der Kurve. Genau so prüfst du später, ob ein Sampler oder ein gelerntes Modell die richtige Verteilung erzeugt.
+  - type: predict
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      z = rng.standard_normal(100000)
+      print(round(np.mean(np.abs(z) < 1), 2))
+      print(round(np.mean(np.abs(z) < 2), 2))
+    options:
+      - |
+        0.68
+        0.95
+      - |
+        0.5
+        1.0
+      - |
+        0.34
+        0.48
+      - |
+        0.95
+        1.0
+    answer: |
+      0.68
+      0.95
+    explanation: |
+      `np.abs(z) < 1` ist ein boolesches Array; sein Mittelwert ist der **Anteil** der `True`-Werte. Bei der Standardnormalverteilung ($\mu = 0$, $\sigma = 1$) sind das die 68 % bzw. 95 % der Faustregel. 0,34 wäre nur eine Seite.
+  - type: explain
+    question: |
+      Statt `rng.normal(mu, sigma, n)` kann man auch `mu + sigma * rng.standard_normal(n)` schreiben. Warum ist das dieselbe Verteilung?
+    options:
+      - text: "Für $Z \\sim N(0, 1)$ gilt $E[\\mu + \\sigma Z] = \\mu$ und $\\operatorname{Var}(\\mu + \\sigma Z) = \\sigma^2$ – und eine lineare Transformation einer Normalverteilung bleibt normalverteilt."
+        correct: true
+        why: Genau die Regeln $E[aX+b]$ und $\operatorname{Var}(aX+b) = a^2\operatorname{Var}(X)$ aus der letzten Lektion. Diese Schreibweise brauchst du gleich für Vektoren.
+      - text: Weil `standard_normal` intern die Varianz `sigma` benutzt.
+        correct: false
+        why: "`standard_normal` kennt kein `sigma`; es liefert immer $N(0, 1)$."
+      - text: Es ist nicht dieselbe Verteilung – man müsste mit `sigma ** 2` multiplizieren.
+        correct: false
+        why: Multipliziert man mit $\sigma^2$, wäre die Standardabweichung $\sigma^2$. Die Varianz wird erst durch das Quadrieren in der Formel zu $\sigma^2$.
+  - type: example
+    intro: |
+      **Mehrdimensional, diagonal:** Sind die Komponenten unabhängig, hat jede ihr eigenes $\mu_j$ und $\sigma_j$. Mit Vektoren `mu`, `sigma` der Länge $d$ und Broadcasting entsteht eine $(N, d)$-Stichprobe in einer Zeile. So sampelt in Modul 11 der Planer ganze Aktionsfolgen.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(2)
+      mu = np.array([1.0, -0.5])
+      sigma = np.array([0.5, 0.1])
+      X = mu + sigma * rng.standard_normal((2000, 2))
+      print(X.shape)
+      print(np.round(X.mean(axis=0), 2), np.round(X.std(axis=0), 2))
+
+      s = lab.Scene(title="2D-Normalverteilung, diagonal", bounds=[-0.7, 2.7, -1.6, 0.6])
+      for x1, x2 in X[:400]:
+          s.circle(x1, x2, 0.015, color="c1", fill="c1")
+      s.circle(mu[0], mu[1], 0.04, color="bad", fill="bad")
+      s.show()
+    subgoals:
+      - lines: [5, 6]
+        label: Parameter als Vektoren
+      - lines: 7
+        label: Per Broadcasting sampeln
+      - lines: [8, 9]
+        label: Pro Achse prüfen
+      - lines: [11, 15]
+        label: Punktwolke zeichnen
+    after: |
+      `sigma * rng.standard_normal((2000, 2))`: Das $(2,)$-Array wird auf jede der 2000 Zeilen angewendet. Die Wolke ist eine achsenparallele Ellipse – in $x_1$ fünfmal breiter als in $x_2$. (Schräge Ellipsen bräuchten eine volle Kovarianzmatrix; die brauchen wir hier nicht.)
+  - type: predict
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      mu = np.zeros(3)
+      sigma = np.ones(3)
+      X = mu + sigma * rng.standard_normal((4, 3))
+      print(X.shape, X.mean(axis=0).shape)
+    options: ["(4, 3) (3,)", "(4, 3) (4,)", "(3, 4) (3,)", "(4, 3) ()"]
+    answer: "(4, 3) (3,)"
+    explanation: |
+      4 Stichproben mit je 3 Komponenten. `mean(axis=0)` mittelt **über die Stichproben** (Achse 0) und lässt eine Zahl pro Komponente übrig.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `sample_diag(mu, sigma, n, rng)`: `mu` und `sigma` sind Arrays der Länge $d$. Gib ein Array der Form `(n, d)` zurück, dessen Spalte $j$ normalverteilt mit Mittelwert `mu[j]` und Standardabweichung `sigma[j]` ist. Nutze den übergebenen Generator `rng`.
+    starter: |
+      import numpy as np
+
+      def sample_diag(mu, sigma, n, rng):
+          # dein Code
+          pass
+
+      rng = np.random.default_rng(0)
+      X = sample_diag(np.array([0.0, 5.0]), np.array([1.0, 0.1]), 1000, rng)
+      print(X.shape)
+    solution: |
+      import numpy as np
+
+      def sample_diag(mu, sigma, n, rng):
+          return mu + sigma * rng.standard_normal((n, len(mu)))
+
+      rng = np.random.default_rng(0)
+      X = sample_diag(np.array([0.0, 5.0]), np.array([1.0, 0.1]), 1000, rng)
+      print(X.shape)
+    tests:
+      - name: Form (n, d)
+        code: |
+          X = sample_diag(np.zeros(3), np.ones(3), 7, np.random.default_rng(0))
+          assert X is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          assert np.shape(X) == (7, 3), f"Erwartet Form (7, 3), bekommen {np.shape(X)}"
+      - name: Mittelwert pro Spalte
+        code: |
+          X = sample_diag(np.array([1.0, -3.0]), np.array([2.0, 0.5]), 20000, np.random.default_rng(1))
+          m = X.mean(axis=0)
+          assert close(m, [1.0, -3.0], tol=0.05), f"Spaltenmittelwerte sollten etwa [1, -3] sein, sind {np.round(m, 3)}"
+      - name: Standardabweichung pro Spalte
+        code: |
+          X = sample_diag(np.array([1.0, -3.0]), np.array([2.0, 0.5]), 20000, np.random.default_rng(1))
+          s = X.std(axis=0)
+          assert close(s, [2.0, 0.5], tol=0.05), f"Spalten-Standardabweichungen sollten etwa [2, 0.5] sein, sind {np.round(s, 3)}"
+      - name: Nutzt den übergebenen Generator
+        code: |
+          a = sample_diag(np.zeros(2), np.ones(2), 5, np.random.default_rng(3))
+          b = sample_diag(np.zeros(2), np.ones(2), 5, np.random.default_rng(3))
+          assert close(a, b), "Gleicher Seed muss gleiche Stichprobe liefern – benutze rng, nicht einen neuen Generator."
+    mutants:
+      - |
+        import numpy as np
+        def sample_diag(mu, sigma, n, rng):
+            return mu + sigma ** 2 * rng.standard_normal((n, len(mu)))
+      - |
+        import numpy as np
+        def sample_diag(mu, sigma, n, rng):
+            return sigma * rng.standard_normal((n, len(mu)))
+      - |
+        import numpy as np
+        def sample_diag(mu, sigma, n, rng):
+            return mu + sigma * rng.standard_normal(len(mu))
+      - |
+        import numpy as np
+        def sample_diag(mu, sigma, n, rng):
+            return mu + sigma * np.random.default_rng().standard_normal((n, len(mu)))
+    hints:
+      - "Teilziel: Standardnormal-Stichprobe der richtigen Form erzeugen, dann skalieren und verschieben."
+      - "Form `(n, d)` mit `d = len(mu)`; Broadcasting wendet `mu` und `sigma` auf jede Zeile an."
+      - "`Z = rng.standard_normal((n, len(mu)))`"
+      - "`return mu + sigma * Z`"
+  - type: quiz
+    question: |
+      Ein Sensor soll Rauschen mit **Varianz** $0.04\ \text{rad}^2$ bekommen. Welcher Aufruf ist richtig?
+    options:
+      - text: "`rng.normal(0, 0.2)`"
+        correct: true
+        why: $\sigma = \sqrt{0.04} = 0.2$ rad – und `normal` erwartet $\sigma$.
+      - text: "`rng.normal(0, 0.04)`"
+        correct: false
+        why: Damit wäre $\sigma = 0.04$, die Varianz also $0.0016\ \text{rad}^2$.
+      - text: "`rng.normal(0.04, 1)`"
+        correct: false
+        why: Das erste Argument ist der Mittelwert. Das Rauschen wäre um 0,04 verschoben und viel zu breit.
+cards:
+  - id: m10-c-normal-scale
+    concept: wk-normalverteilung
+    variants:
+      - type: quiz
+        question: Was ist `scale` in `rng.normal(loc=0, scale=3)`?
+        options:
+          - text: Die Standardabweichung $\sigma = 3$
+            correct: true
+            why: "`scale` ist $\\sigma$; die Varianz ist dann 9."
+          - text: Die Varianz $\sigma^2 = 3$
+            correct: false
+            why: NumPy parametrisiert mit der Standardabweichung, nicht mit der Varianz.
+          - text: Die Breite des Intervalls, aus dem gezogen wird
+            correct: false
+            why: Normalverteilte Werte sind unbeschränkt; ein festes Intervall gibt es bei `uniform`.
+      - type: quiz
+        question: Du willst Werte mit $\mu = 2$ und Varianz $9$. Welcher Code ist richtig?
+        options:
+          - text: "`2 + 3 * rng.standard_normal(n)`"
+            correct: true
+            why: $\sigma = 3$, verschoben um $\mu = 2$.
+          - text: "`2 + 9 * rng.standard_normal(n)`"
+            correct: false
+            why: Das ergäbe $\sigma = 9$, also Varianz 81.
+          - text: "`3 + 2 * rng.standard_normal(n)`"
+            correct: false
+            why: Mittelwert und Standardabweichung vertauscht.
+  - id: m10-c-diag-shape
+    concept: wk-diagonal-gauss
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          mu = np.array([0.0, 1.0])
+          X = mu + 0.1 * rng.standard_normal((50, 2))
+          print(X.shape, X.std(axis=0).shape)
+        options: ["(50, 2) (2,)", "(50, 2) (50,)", "(2, 50) (2,)", "(50, 2) ()"]
+        answer: "(50, 2) (2,)"
+        explanation: 50 Stichproben mit 2 Komponenten; `axis=0` fasst über die Stichproben zusammen.
+      - type: predict
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          A = np.zeros((10, 2)) + np.ones((10, 2)) * rng.standard_normal((30, 10, 2))
+          print(A.shape, A.mean(axis=0).shape)
+        options: ["(30, 10, 2) (10, 2)", "(30, 10, 2) (30, 2)", "(10, 2) (2,)", "(30, 20) (20,)"]
+        answer: "(30, 10, 2) (10, 2)"
+        explanation: 30 Stichproben, jede eine $(10, 2)$-Matrix. Gemittelt über Achse 0 bleibt eine $(10, 2)$-Matrix – so sieht in Modul 11 der Mittelwert einer Aktionsfolge aus.
+  - id: m10-c-68-95
+    concept: wk-normalverteilung
+    variants:
+      - type: quiz
+        question: Ein Abstandssensor misst mit $\sigma = 2$ mm. In welchem Bereich um den wahren Wert liegen etwa 95 % der Messungen?
+        options:
+          - text: ± 4 mm
+            correct: true
+            why: 95 % liegen in $\mu \pm 2\sigma$.
+          - text: ± 2 mm
+            correct: false
+            why: In $\mu \pm \sigma$ liegen nur etwa 68 %.
+          - text: ± 6 mm
+            correct: false
+            why: $\pm 3\sigma$ umfasst etwa 99,7 %.
+      - type: quiz
+        question: Wie viel Prozent einer Normalverteilung liegen **oberhalb** von $\mu + \sigma$?
+        options:
+          - text: etwa 16 %
+            correct: true
+            why: 68 % liegen in $\mu \pm \sigma$, die übrigen 32 % verteilen sich symmetrisch auf beide Seiten.
+          - text: etwa 32 %
+            correct: false
+            why: Das ist der Anteil außerhalb auf **beiden** Seiten zusammen.
+          - text: etwa 34 %
+            correct: false
+            why: 34 % liegen zwischen $\mu$ und $\mu + \sigma$.

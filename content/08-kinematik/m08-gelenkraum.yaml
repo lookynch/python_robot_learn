@@ -1,0 +1,203 @@
+id: m08-gelenkraum
+title: Gelenkraum und Arbeitsraum
+minutes: 7
+goals:
+  - Gelenkwinkel (Gelenkraum) und Spitzenposition (kartesisch) unterscheiden
+  - Die Konvention relativer Gelenkwinkel anwenden
+  - Einen Arm mit `lab.arm` zeichnen und animieren
+concepts: [gelenkraum-arbeitsraum]
+steps:
+  - type: text
+    body: |
+      ## Zwei Arten, denselben Arm zu beschreiben
+
+      Ein planarer 2-Gelenk-Arm hat zwei Motoren. Was die Motoren einstellen, sind **Gelenkwinkel** $q = (q_1, q_2)$ – das ist der **Gelenkraum** (joint space). Was dich meistens interessiert, ist die Position der **Spitze** (Endeffektor, end effector) in $(x, y)$ – der **kartesische Raum** bzw. Arbeitsraum (task space).
+
+      Konvention in diesem Kurs:
+      - Basis im Ursprung, Winkel in Radiant.
+      - $q_1$ wird von der x-Achse gegen den Uhrzeigersinn gemessen.
+      - $q_2$ ist **relativ** zum ersten Glied: $q_2 = 0$ heißt „gestreckt“.
+
+      Das zweite Glied zeigt also in die absolute Richtung $q_1 + q_2$.
+  - type: example
+    intro: |
+      `lab.arm_points(q, links)` liefert die Gelenkpositionen, `lab.arm(q)` zeichnet den Arm.
+    code: |
+      import numpy as np
+      import lab
+
+      q = [np.pi / 4, np.pi / 2]          # 45° und 90° (relativ)
+      pts = lab.arm_points(q, links=(1.0, 1.0))
+      for x, y in pts:
+          print(round(x, 3), round(y, 3))
+      lab.arm(q, title="q1 = π/4, q2 = π/2")
+    subgoals:
+      - lines: 4
+        label: Gelenkwinkel festlegen
+      - lines: [5, 7]
+        label: Gelenkpositionen berechnen und ausgeben
+      - lines: 8
+        label: Arm zeichnen
+    after: |
+      Drei Punkte: Basis $(0, 0)$, Ellbogen $(0.707, 0.707)$, Spitze $(0, 1.414)$. Das zweite Glied zeigt in Richtung $\pi/4 + \pi/2 = 3\pi/4$, also nach links oben – nicht in Richtung $\pi/2$.
+  - type: explain
+    question: |
+      Bei $q = (\pi/2, 0)$: In welche Richtung zeigt das **zweite** Glied?
+    options:
+      - text: Senkrecht nach oben, wie das erste Glied – $q_2 = 0$ heißt „in Verlängerung“.
+        correct: true
+        why: Relative Winkel – absolute Richtung $q_1 + q_2 = \pi/2$.
+      - text: Waagerecht nach rechts, weil $q_2 = 0$ die x-Achse ist.
+        correct: false
+        why: Das wäre ein **absoluter** Winkel. Hier wird $q_2$ vom ersten Glied aus gemessen.
+      - text: Das lässt sich ohne die Gliedlängen nicht sagen.
+        correct: false
+        why: Die Längen bestimmen, wie weit die Spitze kommt, nicht die Richtung der Glieder.
+  - type: predict
+    code: |
+      import numpy as np
+      import lab
+
+      pts = lab.arm_points([0.0, np.pi / 2], links=(1.0, 1.0))
+      x, y = pts[-1]
+      print(round(x, 2), round(y, 2))
+    options: ["1.0 1.0", "0.0 2.0", "2.0 0.0", "1.0 -1.0"]
+    answer: "1.0 1.0"
+    explanation: |
+      Glied 1 liegt auf der x-Achse bis $(1, 0)$, Glied 2 knickt um $+\pi/2$ (gegen den Uhrzeigersinn) nach oben: Spitze $(1, 1)$. `1.0 -1.0` wäre ein Knick im Uhrzeigersinn.
+  - type: example
+    title: Gerade im Gelenkraum ist keine Gerade in x/y
+    intro: |
+      Wir fahren beide Gelenke **gleichmäßig** von $(0, 0)$ nach $(\pi/2, \pi/2)$. Achte auf die gestrichelte Spur der Spitze.
+    code: |
+      import numpy as np
+      import lab
+
+      q_start = np.array([0.0, 0.0])
+      q_end = np.array([np.pi / 2, np.pi / 2])
+      qs = [q_start + s * (q_end - q_start) for s in np.linspace(0, 1, 60)]
+      lab.arm(qs, target=(-1.0, 1.0), title="Lineare Bewegung im Gelenkraum")
+    subgoals:
+      - lines: [4, 5]
+        label: Start- und Endstellung festlegen
+      - lines: 6
+        label: Zwischenstellungen interpolieren
+      - lines: 7
+        label: Bewegung animieren
+    after: |
+      Die Spitze fährt einen **Bogen** von $(2, 0)$ nach $(-1, 1)$. Gleichmäßig im Gelenkraum heißt nicht geradlinig im Arbeitsraum – deshalb brauchen wir später die inverse Kinematik.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Der Code bewegt nur das **erste** Gelenk. Ändere ihn so, dass `qs` 50 Stellungen enthält, in denen $q_1 = \pi/4$ **fest** bleibt und $q_2$ gleichmäßig von $0$ bis $-\pi/2$ läuft (Ellbogen knickt im Uhrzeigersinn).
+    starter: |
+      import numpy as np
+      import lab
+
+      qs = [[a, 0.0] for a in np.linspace(0, np.pi / 2, 50)]
+      lab.arm(qs, title="Mein Arm")
+    solution: |
+      import numpy as np
+      import lab
+
+      qs = [[np.pi / 4, b] for b in np.linspace(0, -np.pi / 2, 50)]
+      lab.arm(qs, title="Mein Arm")
+    tests:
+      - name: 50 Stellungen
+        code: |
+          assert len(qs) == 50, f"Erwartet 50 Stellungen, bekommen {len(qs)}"
+      - name: q1 bleibt bei π/4
+        code: |
+          import numpy as np
+          Q = np.array(qs, dtype=float)
+          assert close(Q[:, 0], np.pi / 4), f"q1 sollte überall π/4 ≈ 0.785 sein, gefunden z. B. {Q[0, 0]:.3f} … {Q[-1, 0]:.3f}"
+      - name: q2 läuft von 0 bis -π/2
+        code: |
+          import numpy as np
+          Q = np.array(qs, dtype=float)
+          assert close(Q[0, 1], 0.0), f"q2 sollte bei 0 starten, startet bei {Q[0, 1]:.3f}"
+          assert close(Q[-1, 1], -np.pi / 2), f"q2 sollte bei -π/2 ≈ -1.571 enden, endet bei {Q[-1, 1]:.3f} (Grad statt Radiant? Vorzeichen?)"
+          assert np.all(np.diff(Q[:, 1]) < 0), "q2 sollte gleichmäßig abnehmen."
+    mutants:
+      - |
+        import numpy as np
+        qs = [[np.pi / 4, b] for b in np.linspace(0, np.pi / 2, 50)]
+      - |
+        import numpy as np
+        qs = [[np.pi / 4, b] for b in np.linspace(0, -90, 50)]
+      - |
+        import numpy as np
+        qs = [[a, -a] for a in np.linspace(0, np.pi / 2, 50)]
+      - |
+        import numpy as np
+        qs = [[np.pi / 4, b] for b in np.linspace(0, -np.pi / 2, 51)]
+    hints:
+      - "Teilziel: Zwischenstellungen interpolieren – diesmal nur für $q_2$."
+      - Der erste Eintrag jeder Stellung ist konstant, der zweite kommt aus `np.linspace(start, stop, 50)`.
+      - "`qs = [[np.pi / 4, b] for b in np.linspace(...)]`"
+      - "`np.linspace(0, -np.pi / 2, 50)` – Radiant, negatives Vorzeichen = im Uhrzeigersinn."
+  - type: quiz
+    question: |
+      Welche Größe stellt ein Gelenkmotor **direkt** ein?
+    options:
+      - text: Den Gelenkwinkel $q_i$
+        correct: true
+        why: Motoren drehen Gelenke. Die Spitzenposition ergibt sich erst daraus.
+      - text: Die x-Koordinate der Spitze
+        correct: false
+        why: x hängt von **beiden** Winkeln ab – kein einzelner Motor stellt sie allein ein.
+      - text: Den absoluten Winkel des zweiten Glieds gegenüber der x-Achse
+        correct: false
+        why: Der Motor im Ellbogen stellt den **relativen** Winkel $q_2$ ein; die absolute Richtung $q_1 + q_2$ ändert sich auch, wenn sich $q_1$ dreht.
+cards:
+  - id: m08-c-relativer-winkel
+    concept: gelenkraum-arbeitsraum
+    variants:
+      - type: quiz
+        question: |
+          Arm mit $q = (\pi/3, \pi/6)$. Welchen **absoluten** Winkel (zur x-Achse) hat das zweite Glied?
+        options:
+          - text: $\pi/2$
+            correct: true
+            why: Absolut = $q_1 + q_2 = \pi/3 + \pi/6$.
+          - text: $\pi/6$
+            correct: false
+            why: Das ist nur der relative Winkel $q_2$.
+          - text: $\pi/3$
+            correct: false
+            why: Das ist die Richtung des ersten Glieds.
+      - type: quiz
+        question: |
+          Arm mit $q = (\pi/2, -\pi/2)$. Wohin zeigt das zweite Glied?
+        options:
+          - text: Waagerecht nach rechts (absolut $0$)
+            correct: true
+            why: $\pi/2 + (-\pi/2) = 0$.
+          - text: Senkrecht nach unten
+            correct: false
+            why: Das wäre absolut $-\pi/2$ – du hast $q_2$ als absoluten Winkel gelesen.
+          - text: Senkrecht nach oben
+            correct: false
+            why: Dafür müsste $q_2 = 0$ sein.
+  - id: m08-c-spitze-einfach
+    concept: gelenkraum-arbeitsraum
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          import lab
+          x, y = lab.arm_points([np.pi / 2, 0.0], links=(1.0, 1.0))[-1]
+          print(round(x, 2), round(y, 2))
+        options: ["0.0 2.0", "1.0 1.0", "2.0 0.0", "0.0 1.0"]
+        answer: "0.0 2.0"
+        explanation: Beide Glieder zeigen senkrecht nach oben ($q_2 = 0$ = gestreckt).
+      - type: predict
+        code: |
+          import numpy as np
+          import lab
+          x, y = lab.arm_points([0.0, np.pi], links=(2.0, 1.0))[-1]
+          print(round(x, 2), round(y, 2))
+        options: ["1.0 0.0", "3.0 0.0", "-1.0 0.0", "2.0 1.0"]
+        answer: "1.0 0.0"
+        explanation: |
+          Glied 2 ist ganz zurückgefaltet ($q_2 = \pi$), also $2 - 1 = 1$.

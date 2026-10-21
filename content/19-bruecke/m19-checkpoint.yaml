@@ -1,0 +1,270 @@
+id: m19-checkpoint
+title: "Checkpoint: Brücke nach draußen"
+kind: checkpoint
+minutes: 15
+goals:
+  - PyTorch-Trainingsschleife, Gymnasium-API, LeRobot-Workflow und ROS-2-Grundbegriffe sicher anwenden
+  - Realistisch einschätzen, welcher Ansatz für welches Projekt passt
+concepts: [pytorch-autograd, pytorch-trainingsschleife, pytorch-nn-module, gymnasium-api, terminated-truncated, lerobot-workflow, hobby-arm-einordnung, ros2-middleware]
+steps:
+  - type: quiz
+    question: |
+      In dieser PyTorch-Schleife wird der Verlust nach einigen Schritten riesig. Was fehlt?
+    code: |
+      for epoch in range(500):
+          loss = loss_fn(model(X), y)
+          loss.backward()
+          opt.step()
+    options:
+      - text: "`opt.zero_grad()` vor `loss.backward()`"
+        correct: true
+        why: Ohne Zurücksetzen summieren sich die Gradienten aller Schritte; die Updates werden immer größer.
+      - text: "`torch.no_grad()` um die ganze Schleife"
+        correct: false
+        why: Dann würde gar kein Gradient berechnet – Training wäre unmöglich.
+      - text: Ein zweites `opt.step()`
+        correct: false
+        why: Das würde die falschen, aufsummierten Gradienten nur doppelt anwenden.
+  - type: predict
+    code: |
+      grad = 0.0
+      for schritt in range(5):
+          if schritt % 2 == 0:
+              grad = 0.0         # zero_grad() nur bei geraden Schritten
+          grad = grad + 1.0      # backward()
+      print(grad)
+    options: ["1.0", "5.0", "2.0", "3.0"]
+    answer: "1.0"
+    explanation: "Im letzten Schritt (schritt = 4, gerade) wird zurückgesetzt, danach kommt 1,0 dazu."
+  - type: quiz
+    question: |
+      Welche Form hat `nn.Linear(6, 64).weight`?
+    options:
+      - text: (64, 6)
+        correct: true
+        why: PyTorch speichert (Ausgänge, Eingänge) und rechnet $x W^T + b$.
+      - text: (6, 64)
+        correct: false
+        why: Das wäre die NumPy-Gewohnheit $x W$ – PyTorch speichert transponiert.
+      - text: (64,)
+        correct: false
+        why: Das ist die Form des Bias.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `run_episode(env, policy)` für eine Gymnasium-artige Umgebung: `env.reset(seed=0)` liefert `(obs, info)`, `env.step(a)` liefert `(obs, reward, terminated, truncated, info)`. Rufe in jedem Schritt `policy(obs)` auf, summiere die Belohnungen und höre auf, sobald `terminated` **oder** `truncated` wahr ist. Gib `(gesamt, schritte)` zurück.
+    starter: |
+      def run_episode(env, policy):
+          obs, info = env.reset(seed=0)
+          gesamt = 0.0
+          schritte = 0
+          # Schleife bis terminated oder truncated
+          return gesamt, schritte
+    solution: |
+      def run_episode(env, policy):
+          obs, info = env.reset(seed=0)
+          gesamt = 0.0
+          schritte = 0
+          episode_over = False
+          while not episode_over:
+              obs, reward, terminated, truncated, info = env.step(policy(obs))
+              gesamt += reward
+              schritte += 1
+              episode_over = terminated or truncated
+          return gesamt, schritte
+    tests:
+      - name: Echtes Ende (terminated)
+        code: |
+          class TestEnv:
+              def __init__(self, ende, limit):
+                  self.ende, self.limit = ende, limit
+              def reset(self, seed=None):
+                  self.t = 0
+                  return 0, {}
+              def step(self, action):
+                  self.t += 1
+                  return self.t, float(action), self.t >= self.ende, self.t >= self.limit, {}
+          r = run_episode(TestEnv(ende=3, limit=10), lambda obs: 2.0)
+          assert r == (6.0, 3), f"Bei Ende nach 3 Schritten und Aktion 2.0 erwartet (6.0, 3), bekommen {r}"
+      - name: Zeitlimit (truncated)
+        code: |
+          class TestEnv:
+              def __init__(self, ende, limit):
+                  self.ende, self.limit = ende, limit
+              def reset(self, seed=None):
+                  self.t = 0
+                  return 0, {}
+              def step(self, action):
+                  self.t += 1
+                  return self.t, float(action), self.t >= self.ende, self.t >= self.limit, {}
+          r = run_episode(TestEnv(ende=100, limit=4), lambda obs: 1.0)
+          assert r == (4.0, 4), f"Bei Zeitlimit 4 erwartet (4.0, 4), bekommen {r} – wird truncated beachtet?"
+      - name: Policy bekommt die Beobachtung
+        code: |
+          class TestEnv:
+              def __init__(self, ende, limit):
+                  self.ende, self.limit = ende, limit
+              def reset(self, seed=None):
+                  self.t = 0
+                  return 0, {}
+              def step(self, action):
+                  self.t += 1
+                  return self.t, float(action), self.t >= self.ende, self.t >= self.limit, {}
+          r = run_episode(TestEnv(ende=3, limit=10), lambda obs: obs + 1)
+          assert r == (6.0, 3), f"Aktionen 1, 2, 3 (obs + 1) ergeben (6.0, 3), bekommen {r}"
+    mutants:
+      - |
+        def run_episode(env, policy):
+            obs, info = env.reset(seed=0)
+            gesamt = 0.0
+            schritte = 0
+            terminated = False
+            while not terminated:
+                obs, reward, terminated, truncated, info = env.step(policy(obs))
+                gesamt += reward
+                schritte += 1
+            return gesamt, schritte
+      - |
+        def run_episode(env, policy):
+            obs, info = env.reset(seed=0)
+            gesamt = 0.0
+            schritte = 0
+            episode_over = False
+            while not episode_over:
+                obs, reward, terminated, truncated, info = env.step(policy(obs))
+                gesamt = reward
+                schritte += 1
+                episode_over = terminated or truncated
+            return gesamt, schritte
+      - |
+        def run_episode(env, policy):
+            obs, info = env.reset(seed=0)
+            gesamt = 0.0
+            schritte = 0
+            episode_over = False
+            while not episode_over:
+                obs, reward, terminated, truncated, info = env.step(policy(0))
+                gesamt += reward
+                schritte += 1
+                episode_over = terminated or truncated
+            return gesamt, schritte
+      - |
+        def run_episode(env, policy):
+            obs, info = env.reset(seed=0)
+            gesamt = 0.0
+            schritte = 0
+            episode_over = False
+            while not episode_over:
+                schritte += 1
+                obs, reward, terminated, truncated, info = env.step(policy(obs))
+                gesamt += reward
+                episode_over = terminated and truncated
+            return gesamt, schritte
+    hints:
+      - "Teilziel: Schleife → Aktion aus der Policy → Schritt → aufsummieren → Ende prüfen."
+      - "Eine Episode endet bei `terminated or truncated`. Die Policy bekommt die **aktuelle** Beobachtung."
+      - |
+        ```python
+        while not episode_over:
+            obs, reward, terminated, truncated, info = env.step(policy(obs))
+            ...
+        ```
+  - type: quiz
+    question: |
+      Ein Zeitlimit bricht eine Episode ab, obwohl der Arm noch unterwegs ist. Welches Flag ist gesetzt, und welches TD-Ziel gilt?
+    options:
+      - text: truncated; Ziel $r + \gamma V(s')$
+        correct: true
+        why: Die Welt ginge weiter, also wird gebootstrappt.
+      - text: terminated; Ziel $r$
+        correct: false
+        why: Ein Zeitlimit ist kein echtes Ende der Aufgabe.
+      - text: truncated; Ziel $r$
+        correct: false
+        why: Das Flag stimmt, aber bei truncated existiert ein Folgewert.
+  - type: quiz
+    question: |
+      Welche Reihenfolge entspricht dem LeRobot-Workflow?
+    options:
+      - text: Kalibrieren → teleoperieren und aufnehmen → `lerobot-train` → `lerobot-rollout`
+        correct: true
+        why: Erst konsistente Messwerte, dann Daten, dann Training, dann Ausführung.
+      - text: "`lerobot-train` → aufnehmen → kalibrieren"
+        correct: false
+        why: Ohne Daten kein Training.
+      - text: "`lerobot-rollout` → `lerobot-train` → aufnehmen"
+        correct: false
+        why: Ausführen kann man nur eine bereits trainierte Policy.
+  - type: quiz
+    question: |
+      Deine ACT-Policy greift daneben, wenn der Würfel hinter dem Greifer verschwindet. Was hilft am ehesten?
+    options:
+      - text: Eine zweite Kamera (z. B. am Handgelenk) und neue Demos, in denen der Würfel sichtbar bleibt
+        correct: true
+        why: Die Policy kann nur lernen, was in den Beobachtungen steckt.
+      - text: Mehr Trainingsschritte mit denselben Daten
+        correct: false
+        why: Fehlende Information lässt sich nicht wegtrainieren.
+      - text: Ein größeres Netz
+        correct: false
+        why: Auch ein größeres Netz sieht den verdeckten Würfel nicht.
+  - type: quiz
+    question: |
+      Welche Aussage über Hobby-Arme ist (Stand: Oktober 2026) realistisch?
+    options:
+      - text: Sie werden meist mit Imitation Learning (ACT) oder feinjustierten kleinen VLAs gesteuert; Planen mit gelernten World Models ist dort Forschung.
+        correct: true
+        why: Das ist der dokumentierte LeRobot-Weg; V-JEPA 2-AC lief auf Franka-Forschungsarmen.
+      - text: Sie werden standardmäßig mit V-JEPA 2-AC gesteuert.
+        correct: false
+        why: V-JEPA 2-AC wurde auf Franka-Armen gezeigt; für Hobby-Arme ist das nicht der Standard.
+      - text: Sie lernen meist mit modellfreiem RL direkt am Arm.
+        correct: false
+        why: Zu viele Versuche, keine automatische Belohnung, ständiges Zurücksetzen.
+  - type: quiz
+    question: |
+      In welchem Projekt ist ROS 2 am wenigsten nötig?
+    options:
+      - text: Ein einzelner SO-101, gesteuert mit LeRobot über USB
+        correct: true
+        why: LeRobot spricht die Servos direkt an; ROS bringt hier keinen Vorteil.
+      - text: Ein mobiler Roboter mit Lidar, Navigation und Arm auf zwei Rechnern
+        correct: false
+        why: Viele Komponenten über mehrere Rechner – genau dafür ist ROS 2 gemacht.
+      - text: Ein Industriearm, dessen Hersteller nur einen ROS-2-Treiber anbietet
+        correct: false
+        why: Dann ist ROS 2 der einfachste Weg zur Hardware.
+  - type: predict
+    code: |
+      abonnenten = {}
+      def subscribe(topic, callback):
+          abonnenten.setdefault(topic, []).append(callback)
+      def publish(topic, nachricht):
+          for callback in abonnenten.get(topic, []):
+              callback(nachricht)
+      subscribe("/goal", lambda m: print("Planer:", m))
+      publish("/goal", "A")
+      subscribe("/goal", lambda m: print("Logger:", m))
+      publish("/goal", "B")
+    options:
+      - |
+        Planer: A
+        Planer: B
+        Logger: B
+      - |
+        Planer: A
+        Logger: A
+        Planer: B
+        Logger: B
+      - |
+        Planer: B
+        Logger: B
+      - |
+        Planer: A
+        Planer: B
+    answer: |
+      Planer: A
+      Planer: B
+      Logger: B
+    explanation: |
+      Der Logger abonniert erst nach der ersten Nachricht und verpasst „A“. Bei Topics bekommt man nur, was nach dem Abonnieren gesendet wird (in ROS 2 lässt sich das über QoS-Einstellungen beeinflussen).

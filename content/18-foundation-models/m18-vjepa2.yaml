@@ -1,0 +1,288 @@
+id: m18-vjepa2
+title: V-JEPA 2-AC – Planen im latenten Raum
+minutes: 10
+goals:
+  - Beschreiben, wie V-JEPA 2-AC aus Videos ein aktionsbedingtes World Model macht
+  - Planen als CEM-Optimierung des latenten Abstands zu einem Zielbild verstehen
+  - Grenzen des Ansatzes realistisch einordnen
+concepts: [latentes-zielplanen, jepa-latente-vorhersage]
+steps:
+  - type: text
+    body: |
+      ## V-JEPA 2: JEPA für Videos
+
+      Meta hat im Juni 2025 **V-JEPA 2** veröffentlicht: ein Video-Encoder mit etwa 1,2 Mrd. Parametern, selbstüberwacht vortrainiert auf mehr als 1 Mio. Stunden Video und 1 Mio. Bildern – ohne Labels, nur mit der JEPA-Aufgabe „verdeckte Teile im latenten Raum vorhersagen“ ([Meta-Blog](https://ai.meta.com/blog/v-jepa-2-world-model-benchmarks/), [arXiv:2506.09985](https://arxiv.org/abs/2506.09985)). Code steht überwiegend unter MIT-Lizenz; im März 2026 folgte V-JEPA 2.1 ([GitHub](https://github.com/facebookresearch/vjepa2)).
+
+      Spannend für dich ist der zweite Teil des Papers: **V-JEPA 2-AC** (action-conditioned).
+
+      *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Vom Video-Encoder zum World Model
+
+      - Der vortrainierte Encoder wird **eingefroren**.
+      - Darauf wird ein Prädiktor (ca. 300 Mio. Parameter) trainiert, der aus aktueller Repräsentation **und Aktion** die nächste Repräsentation vorhersagt – also $z_{t+1} = P(z_t, a_t)$ wie in Modul 17, nur viel größer.
+      - Aktion: 7D-Änderung des Endeffektors (Position 3, Orientierung 3, Greifer 1).
+      - Daten: weniger als 62 Stunden **unbeschriftete** Roboter-Videos aus dem DROID-Datensatz.
+
+      Eingesetzt wurde das Modell ohne neue Daten auf **Franka-Emika-Panda-Armen** in zwei Laboren, die nicht in DROID vorkommen ([arXiv:2506.09985](https://arxiv.org/abs/2506.09985); Stand: Oktober 2026).
+  - type: text
+    body: |
+      ## Planen = Abstand zum Zielbild minimieren
+
+      Die Aufgabe wird als **Zielbild** gegeben. Encoder: aktuelles Bild → $z_k$, Zielbild → $z_g$. Für eine Kandidaten-Aktionsfolge $a_{1:T}$ rollt der Prädiktor aus und misst die **Energie**
+
+      $$
+      E(a_{1:T}) = \lVert P(a_{1:T}; z_k) - z_g \rVert_1
+      $$
+
+      Minimiert wird $E$ mit der **Cross-Entropy-Method** (CEM) aus Modul 11. Ausgeführt wird nur die erste Aktion, dann kommt ein neues Kamerabild und es wird neu geplant – **MPC** wie in Modul 16, nur im latenten Raum.
+  - type: explain
+    question: |
+      Warum braucht V-JEPA 2-AC für eine neue Aufgabe keine eigens geschriebene Belohnungsfunktion?
+    options:
+      - text: Das Ziel kommt als Bild; der latente Abstand zur Zielrepräsentation dient direkt als Kostenfunktion.
+        correct: true
+        why: Genau. „Sieht die vorhergesagte Zukunft aus wie das Zielbild?“ ersetzt eine handgeschriebene Belohnung.
+      - text: Das Modell wurde mit Reinforcement Learning auf jeder Aufgabe trainiert.
+        correct: false
+        why: Weder Belohnungen noch aufgabenspezifisches Training – der Prädiktor lernt nur aus unbeschrifteten Videos plus Aktionen.
+      - text: Der Encoder erkennt die Aufgabe automatisch aus dem aktuellen Bild.
+        correct: false
+        why: Aus dem aktuellen Bild allein ist nicht klar, was passieren soll – dafür gibt es das Zielbild.
+      - text: Die Energie misst den Abstand in Pixeln, das ist eine universelle Belohnung.
+        correct: false
+        why: Gemessen wird im latenten Raum (L1-Abstand der Repräsentationen), nicht in Pixeln.
+  - type: example
+    intro: |
+      Spielversion: Latenter Zustand $z \in \mathbb{R}^2$, ein „gelernter“ linearer Prädiktor $z' = z + B a$, Aktionen pro Komponente auf ±0,2 begrenzt (V-JEPA 2-AC beschränkt die Aktion in einer L1-Kugel). Die „echte Welt“ weicht leicht vom Modell ab.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+      def praediktor(z, a):
+          return z + a @ B.T
+      def energie(z, z_ziel):
+          return np.sum(np.abs(z - z_ziel), axis=-1)
+
+      def plane_cem(z, z_ziel, H=3, n=200, n_elite=20, iters=5, a_max=0.2):
+          mu, sigma = np.zeros((H, 2)), np.full((H, 2), a_max)
+          for _ in range(iters):
+              A = np.clip(mu + sigma * rng.normal(size=(n, H, 2)), -a_max, a_max)
+              zz = np.repeat(z[None], n, axis=0)
+              for t in range(H):
+                  zz = praediktor(zz, A[:, t])
+              elite = A[np.argsort(energie(zz, z_ziel))[:n_elite]]
+              mu, sigma = elite.mean(axis=0), elite.std(axis=0) + 1e-6
+          return mu[0]
+
+      z, z_ziel = np.array([0.0, 0.0]), np.array([1.0, -0.5])
+      for schritt in range(10):
+          a = plane_cem(z, z_ziel)
+          z = praediktor(z, a) + rng.normal(scale=0.01, size=2)
+          print(schritt, "Aktion:", a.round(2), "Energie:", round(float(energie(z, z_ziel)), 3))
+    subgoals:
+      - lines: [3, 7]
+        label: Prädiktor und Energie definieren
+      - lines: [10, 15]
+        label: Aktionsfolgen samplen und latent ausrollen
+      - lines: [16, 18]
+        label: Elite wählen und Verteilung anpassen
+      - lines: [20, 24]
+        label: Erste Aktion ausführen und neu planen
+    after: |
+      Die Energie sinkt Schritt für Schritt. Bei V-JEPA 2-AC ist $z$ die hochdimensionale Repräsentation eines **Kamerabilds** statt eines 2D-Vektors, und der Prädiktor ein Transformer – das Prinzip ist dasselbe.
+  - type: exercise
+    mode: make
+    prompt: |
+      Horizont 1: Schreibe `waehle_aktion(z, z_ziel, kandidaten)`. `kandidaten` ist ein Array der Form `(n, 2)`. Sage für **jeden** Kandidaten mit `praediktor` den nächsten latenten Zustand vorher, berechne die L1-Energie zum Ziel und gib den **Kandidaten** (die Aktion, nicht den Index) mit der kleinsten Energie zurück.
+    starter: |
+      import numpy as np
+      B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+
+      def praediktor(z, a):
+          return z + a @ B.T
+
+      def waehle_aktion(z, z_ziel, kandidaten):
+          # 1. alle Kandidaten vorhersagen
+          # 2. L1-Energie je Kandidat
+          # 3. besten Kandidaten zurückgeben
+          pass
+    solution: |
+      import numpy as np
+      B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+
+      def praediktor(z, a):
+          return z + a @ B.T
+
+      def waehle_aktion(z, z_ziel, kandidaten):
+          z_neu = praediktor(z, kandidaten)
+          e = np.sum(np.abs(z_neu - z_ziel), axis=1)
+          return kandidaten[np.argmin(e)]
+    tests:
+      - name: Rückgabe ist eine Aktion
+        code: |
+          k = np.array([[0.1, 0.0], [0.0, 0.1], [-0.1, 0.0]])
+          a = waehle_aktion(np.zeros(2), np.array([0.1, -0.01]), k)
+          assert a is not None, "Die Funktion gibt nichts zurück."
+          assert np.shape(a) == (2,), f"Erwartet eine Aktion der Form (2,), bekommen {a!r}"
+      - name: Vorhersage berücksichtigt den Startzustand
+        code: |
+          k = np.array([[0.2, 0.0], [-0.2, 0.0], [0.0, 0.2], [0.0, -0.2]])
+          z = np.array([2.0, 1.0])
+          a = waehle_aktion(z, np.array([1.8, 0.98]), k)
+          assert close(a, [-0.2, 0.0]), f"Von z = [2, 1] zum Ziel [1.8, 0.98] ist [-0.2, 0.0] am besten, bekommen {a}"
+      - name: Prädiktor statt Rohvergleich
+        code: |
+          k = np.array([[0.2, 0.0], [0.0, 0.2], [0.1, 0.1]])
+          z_ziel = praediktor(np.zeros(2), np.array([0.0, 0.2]))
+          a = waehle_aktion(np.zeros(2), z_ziel, k)
+          assert close(a, [0.0, 0.2]), f"Erwartet [0.0, 0.2], bekommen {a} – wird der Prädiktor benutzt?"
+      - name: Minimum, nicht Maximum
+        code: |
+          k = np.array([[0.2, 0.2], [-0.2, -0.2], [0.0, 0.0]])
+          a = waehle_aktion(np.zeros(2), np.zeros(2), k)
+          assert close(a, [0.0, 0.0]), f"Wenn man schon am Ziel ist, ist [0, 0] am besten, bekommen {a}"
+    mutants:
+      - |
+        import numpy as np
+        B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+        def praediktor(z, a):
+            return z + a @ B.T
+        def waehle_aktion(z, z_ziel, kandidaten):
+            e = np.sum(np.abs(praediktor(z, kandidaten) - z_ziel), axis=1)
+            return kandidaten[np.argmax(e)]
+      - |
+        import numpy as np
+        B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+        def praediktor(z, a):
+            return z + a @ B.T
+        def waehle_aktion(z, z_ziel, kandidaten):
+            e = np.sum(np.abs(kandidaten - z_ziel), axis=1)
+            return kandidaten[np.argmin(e)]
+      - |
+        import numpy as np
+        B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+        def praediktor(z, a):
+            return z + a @ B.T
+        def waehle_aktion(z, z_ziel, kandidaten):
+            e = np.sum(np.abs(praediktor(z, kandidaten) - z_ziel), axis=1)
+            return np.argmin(e)
+      - |
+        import numpy as np
+        B = np.array([[1.0, 0.2], [-0.1, 0.8]])
+        def praediktor(z, a):
+            return z + a @ B.T
+        def waehle_aktion(z, z_ziel, kandidaten):
+            e = np.sum(praediktor(z, kandidaten) - z_ziel, axis=1)
+            return kandidaten[np.argmin(e)]
+    hints:
+      - "Teilziel: vorhersagen → Energie je Kandidat → besten auswählen."
+      - "`praediktor(z, kandidaten)` funktioniert für alle Kandidaten auf einmal (Form `(n, 2)`). Die L1-Energie ist die Summe der Beträge entlang `axis=1`."
+      - "`e = np.sum(np.abs(z_neu - z_ziel), axis=1)`, dann `np.argmin(e)` als Index verwenden."
+      - "`return kandidaten[np.argmin(e)]`"
+  - type: text
+    body: |
+      ## Ergebnisse und Grenzen
+
+      Laut Paper ([arXiv:2506.09985](https://arxiv.org/abs/2506.09985)):
+
+      - Greifen-und-Ablegen mit Zwischenziel-Bildern: 65–80 % Erfolg; die Behavior-Cloning-Baseline Octo erreichte 10–15 %.
+      - Planungszeit pro Aktion auf einer RTX 4090: ca. 16 s – mit einem generativen Cosmos-Modell als Vergleich ca. 4 min.
+      - **Grenzen**, von den Autoren selbst genannt: empfindlich gegenüber der Kameraposition, Ziele nur als Bilder (keine Sprache), längere Aufgaben brauchen Zwischenziel-Bilder.
+
+      Das ist ein Forschungsergebnis auf teuren Industriearmen – kein fertiges Werkzeug für deinen Hobby-Arm (mehr dazu in Modul 19). *Stand: Oktober 2026.*
+  - type: quiz
+    question: |
+      Warum führt der Planer nur die **erste** Aktion der optimierten Folge aus und plant danach neu?
+    options:
+      - text: Der Prädiktor ist ungenau; nach jedem Schritt liefert ein neues Kamerabild den wahren Zustand, und Fehler werden korrigiert.
+        correct: true
+        why: Das ist Receding-Horizon-Regelung (MPC). Vorhersagefehler summieren sich über mehrere Schritte – Neuplanen verhindert, dass sie sich aufschaukeln.
+      - text: Weil der Roboter technisch nur eine Aktion pro Sekunde annehmen kann.
+        correct: false
+        why: Mit der Hardware hat das nichts zu tun; die Idee stammt aus der Regelungstechnik.
+      - text: Weil die restlichen Aktionen der Folge immer null sind.
+        correct: false
+        why: CEM optimiert die ganze Folge; sie wird nur bewusst nicht vollständig ausgeführt.
+cards:
+  - id: m18-c-latent-energie
+    concept: latentes-zielplanen
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          z_vorhergesagt = np.array([0.5, -1.0, 2.0])
+          z_ziel = np.array([1.0, -1.0, 1.0])
+          print(np.sum(np.abs(z_vorhergesagt - z_ziel)))
+        options: ["1.5", "-0.5", "1.118", "0.5"]
+        answer: "1.5"
+        explanation: "L1-Energie: |−0,5| + |0| + |1| = 1,5. Ohne Betrag würden sich Abweichungen gegenseitig aufheben."
+      - type: predict
+        code: |
+          import numpy as np
+          kandidaten = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]])
+          z_ziel = np.array([1.0, 0.5])
+          e = np.sum(np.abs(kandidaten - z_ziel), axis=1)
+          print(np.argmin(e))
+        options: ["1", "0", "2", "[1.  0.5]"]
+        answer: "1"
+        explanation: "Energien 1,5 / 0,5 / 1,5 – Kandidat 1 ist dem Ziel am nächsten. `argmin` liefert den Index."
+  - id: m18-c-zielbild
+    concept: latentes-zielplanen
+    variants:
+      - type: quiz
+        question: |
+          Wie wird bei V-JEPA 2-AC festgelegt, was der Roboter tun soll?
+        options:
+          - text: Durch ein Zielbild, dessen Repräsentation der Planer möglichst genau erreichen soll
+            correct: true
+            why: Die Energie ist der latente Abstand zum Zielbild.
+          - text: Durch einen Sprachbefehl
+            correct: false
+            why: Sprachziele nennen die Autoren ausdrücklich als offene Grenze.
+          - text: Durch eine handgeschriebene Belohnungsfunktion
+            correct: false
+            why: Gerade die braucht der Ansatz nicht.
+      - type: quiz
+        question: |
+          Eine Aufgabe lautet „räume den Tisch auf“ und dauert mehrere Minuten. Was ist bei V-JEPA 2-AC laut den Autoren nötig?
+        options:
+          - text: Eine Folge von Zwischenziel-Bildern
+            correct: true
+            why: Längere Aufgaben brauchen Zwischenziele; ohne sie reicht der kurze Vorhersagehorizont nicht.
+          - text: Nichts – ein Zielbild reicht für beliebig lange Aufgaben.
+            correct: false
+            why: Die Vorhersage wird über lange Horizonte ungenau; deshalb Zwischenziele.
+          - text: Ein neues Vortraining auf diesem Tisch
+            correct: false
+            why: Der Ansatz lief ohne neue Daten in fremden Laboren; nötig sind Zwischenziele, kein neues Training.
+  - id: m18-c-mpc-latent
+    concept: latentes-zielplanen
+    variants:
+      - type: quiz
+        question: |
+          Ein latentes World Model sagt 5 Schritte voraus. Nach Schritt 1 weicht die Realität etwas ab. Was tut ein MPC-Planer?
+        options:
+          - text: Neues Bild encodieren und ab dem echten Zustand neu planen
+            correct: true
+            why: Receding Horizon – Fehler aus Schritt 1 fließen nicht in die weitere Planung ein.
+          - text: Die restlichen 4 geplanten Aktionen unverändert ausführen
+            correct: false
+            why: Dann würde sich der Fehler fortpflanzen; genau das vermeidet MPC.
+          - text: Das Modell neu trainieren
+            correct: false
+            why: Neuplanen ist billig; Neutrainieren nach jeder Abweichung wäre weder nötig noch praktikabel.
+      - type: quiz
+        question: |
+          Was optimiert CEM beim latenten Planen?
+        options:
+          - text: Die Verteilung (Mittelwert, Streuung) über Aktionsfolgen, sodass die Energie der Elite-Folgen sinkt
+            correct: true
+            why: CEM samplet, wählt die besten Folgen (Elite) und passt μ und σ an.
+          - text: Die Gewichte des Prädiktors
+            correct: false
+            why: Beim Planen bleibt das Modell fest; optimiert werden nur die Aktionen.
+          - text: Die Repräsentation des Zielbilds
+            correct: false
+            why: Das Ziel ist vorgegeben und bleibt fest.

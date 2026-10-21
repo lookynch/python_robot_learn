@@ -1,0 +1,366 @@
+id: m01-for
+title: Zählschleifen mit for und range
+minutes: 10
+goals:
+  - Mit `for i in range(…)` eine bekannte Anzahl von Durchläufen programmieren
+  - "`range(start, stop, step)` lesen – `stop` gehört nicht dazu"
+  - Summen und Produkte mit dem Akkumulator-Muster berechnen
+concepts: [for-range, akkumulator]
+steps:
+  - type: text
+    body: |
+      ## Zählen ohne Zähler-Verwaltung
+
+      Wenn feststeht, wie oft etwas passieren soll, ist `for` einfacher als `while`:
+
+      ```python
+      for i in range(3):
+          print(i)        # 0, 1, 2
+      ```
+
+      Die **Schleifenvariable** `i` nimmt nacheinander jeden Wert an, den `range` liefert. Startwert, Bedingung und Erhöhen erledigt `range` für dich.
+
+      | Aufruf | Werte |
+      |---|---|
+      | `range(4)` | 0, 1, 2, 3 |
+      | `range(2, 6)` | 2, 3, 4, 5 |
+      | `range(0, 10, 3)` | 0, 3, 6, 9 |
+      | `range(5, 0, -1)` | 5, 4, 3, 2, 1 |
+
+      Der `stop`-Wert ist **nie** dabei: `range(start, stop, step)` hört vorher auf.
+  - type: example
+    code: |
+      for i in range(3):
+          print("Gelenk", i, "bereit")
+      print("Alle Gelenke bereit")
+    subgoals:
+      - lines: 1
+        label: Schleife über alle Gelenke
+      - lines: 2
+        label: Pro Gelenk arbeiten
+      - lines: 3
+        label: Nach der Schleife weiter
+    after: |
+      Drei Durchläufe mit `i = 0, 1, 2`. Bei drei Gelenken passt das genau zu Indizes, die ab 0 zählen.
+  - type: predict
+    code: |
+      for i in range(2, 6):
+          print(i)
+    options:
+      - |
+        2
+        3
+        4
+        5
+      - |
+        2
+        3
+        4
+        5
+        6
+      - |
+        3
+        4
+        5
+        6
+      - |
+        2
+        6
+    answer: |
+      2
+      3
+      4
+      5
+    explanation: |
+      Start 2 ist dabei, Stopp 6 nicht. Die Anzahl der Werte ist `stop - start` = 4.
+  - type: text
+    body: |
+      ## Das Akkumulator-Muster
+
+      Um viele Werte zu einem Ergebnis zusammenzufassen (Summe, Produkt, Zählung), gibt es ein festes Muster:
+
+      1. **Vor** der Schleife: Startwert festlegen (`summe = 0`).
+      2. **In** der Schleife: Ergebnis mit dem aktuellen Wert aktualisieren (`summe = summe + i`).
+      3. **Nach** der Schleife: Ergebnis verwenden (`print(summe)`).
+
+      So berechnest du z. B. $\sum_{k=1}^{4} k$:
+  - type: trace
+    code: |
+      summe = 0
+      for k in range(1, 5):
+          summe = summe + k
+      print(summe)
+    questions:
+      - line: 3
+        hit: 3
+        var: summe
+        answer: "6"
+        prompt: Zeile 3 lief zum 3. Mal (mit `k = 3`). Welchen Wert hat `summe`?
+    after: |
+      0 → 1 → 3 → 6 → 10. `summe` „sammelt“ alle Werte von `k` ein.
+  - type: explain
+    question: |
+      Warum steht `summe = 0` **vor** der Schleife und nicht darin?
+    options:
+      - text: Sonst würde `summe` in jedem Durchlauf wieder auf 0 gesetzt, und am Ende stünde nur der letzte Wert darin.
+        correct: true
+        why: Der Startwert darf nur einmal gesetzt werden – sonst geht alles Gesammelte verloren.
+      - text: Weil in einer Schleife keine Zuweisungen erlaubt sind.
+        correct: false
+        why: Im Block sind beliebige Anweisungen erlaubt – `summe = summe + k` ist ja auch eine Zuweisung.
+      - text: Das ist egal, das Ergebnis ist dasselbe.
+        correct: false
+        why: Nein – in der Schleife würde `summe` bei jedem Durchlauf gelöscht. Der nächste Schritt zeigt es.
+  - type: predict
+    code: |
+      for k in range(1, 4):
+          summe = 0
+          summe = summe + k
+      print(summe)
+    options: ["6", "3", "0", "1"]
+    answer: "3"
+    explanation: |
+      In jedem Durchlauf wird `summe` erst auf 0 gesetzt und dann um `k` erhöht. Nach dem letzten Durchlauf (`k = 3`) ist `summe` also 0 + 3 = 3.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne $5! = 1 \cdot 2 \cdot 3 \cdot 4 \cdot 5 = 120$ mit dem Akkumulator-Muster.
+    code: |
+      produkt = ___
+      for k in range(1, ___):
+          produkt = produkt * k
+      print(produkt)
+    blanks:
+      - answer: "1"
+        options: ["1", "0", "k"]
+      - answer: "6"
+        options: ["6", "5", "7"]
+    expect_output: "120"
+    explanation: |
+      Für ein Produkt startet man mit 1 (mit 0 bliebe alles 0). Damit die 5 noch dabei ist, muss `stop` 6 sein.
+  - type: parsons
+    fading: true
+    prompt: |
+      Berechne $1^2 + 2^2 + 3^2 = 14$. Bringe die Zeilen in Reihenfolge und Einrückung.
+    lines:
+      - "summe = 0"
+      - "for i in range(1, 4):"
+      - "    summe = summe + i ** 2"
+      - "print(summe)"
+    distractors:
+      - "for i in range(1, 4)"
+      - "summe = summe + i * 2"
+    expect_output: "14"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ändere nur den `range`-Aufruf, sodass das Programm in Zweierschritten rückwärts zählt:
+
+      ```
+      10
+      8
+      6
+      4
+      2
+      ```
+    starter: |
+      for i in range(5):
+          print(i)
+    solution: |
+      for i in range(10, 0, -2):
+          print(i)
+    tests:
+      - name: Countdown in Zweierschritten
+        code: |
+          assert lines() == ["10", "8", "6", "4", "2"], f"Erwartet 10, 8, 6, 4, 2 – bekommen {lines()}"
+    mutants:
+      - |
+        for i in range(10, 0, 2):
+            print(i)
+      - |
+        for i in range(10, 2, -2):
+            print(i)
+      - |
+        for i in range(10, -1, -2):
+            print(i)
+      - |
+        for i in range(2, 11, 2):
+            print(i)
+    hints:
+      - "Teilziel: Start, Stopp und Schrittweite festlegen."
+      - Rückwärts zählen heißt negative Schrittweite. Der Stopp-Wert ist nicht dabei – er muss also hinter der 2 liegen.
+      - "`range(10, ..., -2)`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Berechne die Summe aller **geraden** Zahlen von 2 bis **einschließlich** 20 mit einer `for`-Schleife und `range` mit Schrittweite. Speichere sie in `summe` und gib sie aus.
+    starter: |
+      summe = 0
+      # for ...
+      print(summe)
+    solution: |
+      summe = 0
+      for zahl in range(2, 21, 2):
+          summe = summe + zahl
+      print(summe)
+    tests:
+      - name: Summe stimmt
+        code: |
+          assert summe == 110, f"2 + 4 + … + 20 = 110, summe ist aber {summe}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["110"], f"Erwartete Ausgabe 110, bekommen {lines()}"
+    mutants:
+      - |
+        summe = 0
+        for zahl in range(2, 20, 2):
+            summe = summe + zahl
+        print(summe)
+      - |
+        summe = 0
+        for zahl in range(2, 21):
+            summe = summe + zahl
+        print(summe)
+      - |
+        summe = 0
+        for zahl in range(2, 21, 2):
+            summe = zahl
+        print(summe)
+      - |
+        summe = 0
+        for zahl in range(2, 21, 2):
+            summe = 0
+            summe = summe + zahl
+        print(summe)
+    hints:
+      - "Teilziel: Schleife über alle geraden Zahlen → aufsummieren → ausgeben."
+      - "Gerade Zahlen ab 2 bekommst du mit Schrittweite 2. Damit die 20 dabei ist, muss `stop` größer als 20 sein."
+      - "`for zahl in range(2, 21, 2):`"
+      - |
+        ```python
+        for zahl in range(2, 21, 2):
+            summe = summe + zahl
+        ```
+  - type: quiz
+    question: Wie oft läuft der Block von `for i in range(1, 10, 3):`?
+    options:
+      - text: 3-mal
+        correct: true
+        why: "`i` = 1, 4, 7. Der nächste Wert 10 ist der Stopp-Wert und nicht dabei."
+      - text: 4-mal
+        correct: false
+        why: Das wäre so, wenn 10 noch dabei wäre – `stop` gehört aber nie dazu.
+      - text: 9-mal
+        correct: false
+        why: Das wäre `range(1, 10)` ohne Schrittweite.
+      - text: 10-mal
+        correct: false
+        why: Weder fängt `range` hier bei 0 an, noch ist der Stopp-Wert dabei.
+cards:
+  - id: m01-c-range-werte
+    concept: for-range
+    variants:
+      - type: predict
+        code: |
+          for i in range(0, 10, 3):
+              print(i)
+        options:
+          - |
+            0
+            3
+            6
+            9
+          - |
+            0
+            3
+            6
+          - |
+            3
+            6
+            9
+        answer: |
+          0
+          3
+          6
+          9
+        explanation: Start 0, dann in Dreierschritten, solange der Wert unter 10 bleibt.
+      - type: predict
+        code: |
+          for i in range(3, 0, -1):
+              print(i)
+        options:
+          - |
+            3
+            2
+            1
+          - |
+            3
+            2
+            1
+            0
+          - |
+            2
+            1
+            0
+        answer: |
+          3
+          2
+          1
+        explanation: Rückwärts mit Schrittweite −1; der Stopp-Wert 0 ist nicht dabei.
+      - type: predict
+        code: |
+          for i in range(4):
+              print(i)
+        options:
+          - |
+            0
+            1
+            2
+            3
+          - |
+            1
+            2
+            3
+            4
+          - |
+            0
+            1
+            2
+            3
+            4
+        answer: |
+          0
+          1
+          2
+          3
+        explanation: "`range(4)` startet bei 0 und liefert 4 Werte bis vor 4."
+  - id: m01-c-akkumulator
+    concept: akkumulator
+    variants:
+      - type: predict
+        code: |
+          s = 0
+          for k in range(1, 4):
+              s = s + k
+          print(s)
+        options: ["6", "3", "10", "0"]
+        answer: "6"
+        explanation: 1 + 2 + 3 = 6. Der Stopp-Wert 4 ist nicht dabei.
+      - type: predict
+        code: |
+          p = 1
+          for k in range(1, 5):
+              p = p * 2
+          print(p)
+        options: ["16", "8", "32", "2"]
+        answer: "16"
+        explanation: Vier Durchläufe, jedes Mal verdoppeln – $2^4 = 16$.
+      - type: predict
+        code: |
+          for k in range(1, 6):
+              s = 0
+              s = s + k
+          print(s)
+        options: ["5", "15", "0"]
+        answer: "5"
+        explanation: "`s = 0` steht in der Schleife und löscht das Gesammelte – übrig bleibt nur der letzte Wert."

@@ -1,0 +1,279 @@
+id: m07-numerische-ableitung
+title: Numerische Ableitung
+minutes: 10
+goals:
+  - Ableitungen mit Vorwärts- und zentraler Differenz berechnen
+  - Den Fehler in Abhängigkeit von `h` messen und erklären
+  - Rundungsfehler bei zu kleinem `h` erkennen
+concepts: [vorwaertsdifferenz, zentraldifferenz, rundungsfehler-h]
+steps:
+  - type: text
+    body: |
+      ## Ableiten ohne Formel
+
+      Für Regelung, Planen und Lernen brauchst du ständig Ableitungen: Wie ändern sich Kosten, wenn ich die Aktion ein wenig ändere? Oft gibt es keine Formel – etwa wenn eine Simulation über 100 Schritte dazwischen liegt.
+
+      Der Computer kann $h \to 0$ nicht ausführen, aber ein kleines $h$ einsetzen:
+
+      $$
+      f'(x) \approx \frac{f(x+h) - f(x)}{h}
+      $$
+
+      Das ist die **Vorwärtsdifferenz** (forward difference). Nach Taylor ist $f(x+h) = f(x) + h f'(x) + \tfrac{h^2}{2} f''(x) + \dots$, der Fehler also etwa $\tfrac{h}{2} f''(x)$ – proportional zu $h$.
+
+      Die **zentrale Differenz** (central difference) schaut symmetrisch nach beiden Seiten:
+
+      $$
+      f'(x) \approx \frac{f(x+h) - f(x-h)}{2h}
+      $$
+  - type: example
+    code: |
+      import math
+
+      x = 1.0
+      exact = math.cos(x)          # Ableitung von sin
+      for h in [0.1, 0.01, 0.001]:
+          fwd = (math.sin(x + h) - math.sin(x)) / h
+          cen = (math.sin(x + h) - math.sin(x - h)) / (2 * h)
+          print(f"h = {h}: Fehler vorwärts {abs(fwd - exact):.1e}, zentral {abs(cen - exact):.1e}")
+    subgoals:
+      - lines: [3, 4]
+        label: Stelle und exakten Wert festlegen
+      - lines: [5, 7]
+        label: Beide Differenzen berechnen
+      - lines: 8
+        label: Fehler vergleichen
+    after: |
+      Vorwärts: $h$ durch 10 → Fehler durch 10 (1. Ordnung). Zentral: $h$ durch 10 → Fehler durch **100** (2. Ordnung). Bei gleichem Aufwand von zwei Funktionsauswertungen ist die zentrale Differenz fast immer die bessere Wahl. (`:.1e` zeigt eine Zahl in Exponentialschreibweise, z. B. `4.2e-02` = 0,042.)
+  - type: explain
+    question: |
+      Warum ist die zentrale Differenz so viel genauer?
+    options:
+      - text: In $f(x+h) - f(x-h)$ heben sich die Taylor-Terme mit $h^2 f''$ auf; übrig bleibt ein Fehler mit $h^2 f'''$.
+        correct: true
+        why: Die geraden Terme sind für $+h$ und $-h$ gleich und fallen beim Subtrahieren weg. Der führende Fehler ist $\tfrac{h^2}{6} f'''(x)$.
+      - text: Weil sie durch $2h$ teilt, also mit einem doppelt so kleinen Fehler.
+        correct: false
+        why: Dann wäre sie nur doppelt so genau. Beobachtet wird Faktor 100 bei $h/10$ – das ist eine andere Ordnung.
+      - text: Weil sie dreimal so viele Funktionsauswertungen braucht.
+        correct: false
+        why: Sie braucht zwei, genau wie die Vorwärtsdifferenz ($f(x+h)$ und $f(x)$).
+  - type: predict
+    code: |
+      def f(x):
+          return x**2
+
+      h = 0.1
+      fwd = (f(3 + h) - f(3)) / h
+      cen = (f(3 + h) - f(3 - h)) / (2 * h)
+      print(round(fwd, 4), round(cen, 4))
+    options: ["6.1 6.0", "6.0 6.0", "6.1 6.1", "6.01 6.0"]
+    answer: "6.1 6.0"
+    explanation: |
+      Vorwärts: $((3{,}1)^2 - 9)/0{,}1 = 6 + h = 6{,}1$. Zentral: $(9{,}61 - 8{,}41)/0{,}2 = 6$ – für Parabeln ist die zentrale Differenz **exakt**, weil $f''' = 0$. Das `round` entfernt hier Float-Reste wie `6.099999999999994`.
+  - type: example
+    intro: |
+      Warum dann nicht einfach $h = 10^{-15}$? Ein Float hat nur etwa 16 gültige Stellen (Maschinengenauigkeit $\varepsilon \approx 2{,}2 \cdot 10^{-16}$). Bei winzigem $h$ sind $f(x+h)$ und $f(x)$ fast gleich, ihre Differenz besteht fast nur noch aus Rundungsrauschen (**Auslöschung**, cancellation). Dieser Fehler wächst wie $\varepsilon / h$.
+    code: |
+      import numpy as np
+      import lab
+
+      k = np.arange(1, 16)
+      h = 10.0 ** (-k)
+      x = 1.0
+      fwd = (np.sin(x + h) - np.sin(x)) / h
+      cen = (np.sin(x + h) - np.sin(x - h)) / (2 * h)
+      err_fwd = np.abs(fwd - np.cos(x))
+      err_cen = np.abs(cen - np.cos(x))
+
+      print(f"bestes h vorwärts: 1e-{k[np.argmin(err_fwd)]}, zentral: 1e-{k[np.argmin(err_cen)]}")
+      fig = lab.Figure(title="Fehler der Ableitung von sin bei x = 1",
+                       xlabel="k  (h = 10^-k)", ylabel="Fehler", logy=True)
+      fig.line(err_fwd, x=k, label="vorwärts")
+      fig.line(err_cen, x=k, label="zentral")
+      fig.show()
+    subgoals:
+      - lines: [4, 6]
+        label: Viele h auf einmal (vektorisiert)
+      - lines: [7, 10]
+        label: Fehler beider Verfahren berechnen
+      - lines: [12, 17]
+        label: Optimum ablesen und plotten
+    after: |
+      Die Kurven sind V-förmig: links dominiert der Verfahrensfehler ($\sim h$ bzw. $h^2$), rechts der Rundungsfehler ($\sim \varepsilon/h$). Das Minimum liegt bei etwa $h \approx \sqrt{\varepsilon} \approx 10^{-8}$ (vorwärts) und $h \approx \varepsilon^{1/3} \approx 10^{-5}$ (zentral). Unter $10^{-8}$ wird die zentrale Differenz nicht besser, sondern schlechter.
+  - type: predict
+    code: |
+      import math
+
+      x = 1.0
+      errs = {}
+      for h in [1e-1, 1e-4, 1e-8, 1e-12]:
+          fwd = (math.sin(x + h) - math.sin(x)) / h
+          errs[h] = abs(fwd - math.cos(x))
+      print(min(errs, key=errs.get))
+    question: Bei welchem `h` ist der Fehler der **Vorwärtsdifferenz** am kleinsten?
+    options: ["1e-08", "1e-12", "0.0001", "0.1"]
+    answer: "1e-08"
+    explanation: |
+      `1e-12` ist zu klein: Der Rundungsfehler $\varepsilon/h \approx 2 \cdot 10^{-4}$ übertrifft dort schon den Verfahrensfehler. Bei `1e-8` sind beide Fehler etwa gleich groß und zusammen am kleinsten. (`min(errs, key=errs.get)` liefert den Schlüssel mit dem kleinsten Wert.)
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die zentrale Differenz. Die Ableitung von $\sin$ bei $0$ ist $\cos 0 = 1$.
+    code: |
+      import math
+
+      def central(f, x, h):
+          return (f(x + ___) - f(x - h)) / (___ * h)
+
+      print(round(central(math.sin, 0.0, 1e-4), 6))
+    blanks:
+      - answer: h
+        options: [h, "2 * h", "0"]
+      - answer: "2"
+        options: ["2", "1", h]
+    expect_output: "1.0"
+    explanation: |
+      Der Abstand zwischen $x-h$ und $x+h$ ist $2h$ – durch diesen Abstand wird geteilt.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `derivative(f, x, h=1e-5)`, die $f'(x)$ mit der **zentralen** Differenz berechnet. `f` ist eine beliebige Funktion einer Zahl.
+    starter: |
+      def derivative(f, x, h=1e-5):
+          # zentrale Differenz
+          return 0.0
+    solution: |
+      def derivative(f, x, h=1e-5):
+          return (f(x + h) - f(x - h)) / (2 * h)
+    tests:
+      - name: Kubisch
+        code: |
+          def cube(x):
+              return x**3
+          d = derivative(cube, 2.0)
+          assert close(d, 12.0, tol=1e-6), f"Ableitung von x³ bei 2 ist 12, bekommen {d}"
+      - name: Sinus
+        code: |
+          import math
+          d = derivative(math.sin, 0.5)
+          assert close(d, math.cos(0.5), tol=1e-8), f"Erwartet cos(0.5) = {math.cos(0.5):.8f}, bekommen {d:.8f}"
+      - name: Exponentialfunktion, negative Stelle
+        code: |
+          import math
+          d = derivative(math.exp, -1.0)
+          assert close(d, math.exp(-1.0), tol=1e-8), f"Erwartet {math.exp(-1.0):.8f}, bekommen {d:.8f}"
+      - name: Parameter h wird benutzt
+        code: |
+          def cube(x):
+              return x**3
+          d = derivative(cube, 1.0, h=0.1)
+          assert close(d, 3.01, tol=1e-9), f"Mit h = 0.1 liefert die zentrale Differenz für x³ bei 1 genau 3 + h² = 3.01, bekommen {d}"
+    mutants:
+      - |
+        def derivative(f, x, h=1e-5):
+            return (f(x + h) - f(x)) / h
+      - |
+        def derivative(f, x, h=1e-5):
+            return (f(x + h) - f(x - h)) / h
+      - |
+        def derivative(f, x, h=1e-5):
+            return (f(x + 1e-5) - f(x - 1e-5)) / (2 * 1e-5)
+      - |
+        def derivative(f, x, h=1e-5):
+            return (f(x - h) - f(x + h)) / (2 * h)
+    hints:
+      - "Teilziel: Funktion links und rechts von `x` auswerten und den Unterschied durch den Abstand teilen."
+      - "Der Abstand zwischen `x - h` und `x + h` ist `2 * h`."
+      - "`return (f(x + h) - f(x - h)) / (2 * h)`"
+    explanation: |
+      Der letzte Test nutzt aus, dass der Fehler für $x^3$ genau $h^2$ ist ($\tfrac{h^2}{6} f''' = \tfrac{h^2}{6} \cdot 6$). So prüft er, dass dein `h` wirklich verwendet wird.
+  - type: quiz
+    question: |
+      Du berechnest eine Ableitung mit der zentralen Differenz in `float64`. Welches `h` ist eine gute Wahl, wenn $x$ und $f$ in der Größenordnung 1 liegen?
+    options:
+      - text: "`h = 1e-5`"
+        correct: true
+        why: Dort sind Verfahrensfehler ($\sim h^2$) und Rundungsfehler ($\sim \varepsilon/h$) beide klein, etwa $10^{-10}$ bis $10^{-11}$.
+      - text: "`h = 1e-15`"
+        correct: false
+        why: "Fast alle Stellen löschen sich aus – der Fehler ist dann größer als bei `h = 0.1`."
+      - text: "`h = 0.5`"
+        correct: false
+        why: Der Verfahrensfehler $\sim h^2$ ist hier groß (Größenordnung $10^{-2}$).
+      - text: so klein wie möglich, je kleiner desto genauer
+        correct: false
+        why: Das gilt nur in der Mathematik. Mit endlicher Genauigkeit gibt es ein optimales $h$.
+cards:
+  - id: m07-c-vorwaerts
+    concept: vorwaertsdifferenz
+    variants:
+      - type: predict
+        code: |
+          def f(x):
+              return x**2
+
+          print((f(1.5) - f(1.0)) / 0.5)
+        options: ["2.5", "2.0", "3.0", "1.25"]
+        answer: "2.5"
+        explanation: "$(2{,}25 - 1)/0{,}5 = 2{,}5$; exakt wäre $2$, der Fehler ist $h = 0{,}5$."
+      - type: predict
+        code: |
+          def f(x):
+              return x**3
+
+          h = 0.1
+          print(round((f(1 + h) - f(1)) / h, 4))
+        options: ["3.31", "3.0", "3.01", "3.3"]
+        answer: "3.31"
+        explanation: "$(1{,}331 - 1)/0{,}1 = 3{,}31$; exakt $3$, Fehler etwa $\\tfrac h2 f''(1) = 0{,}3$ plus $h^2$."
+  - id: m07-c-zentral-exakt
+    concept: zentraldifferenz
+    variants:
+      - type: predict
+        code: |
+          def f(x):
+              return x**2
+
+          h = 0.5
+          print((f(2 + h) - f(2 - h)) / (2 * h))
+        options: ["4.0", "4.5", "4.25", "3.5"]
+        answer: "4.0"
+        explanation: "$(6{,}25 - 2{,}25)/1 = 4$ – für Parabeln ist die zentrale Differenz exakt, selbst mit großem $h$."
+      - type: predict
+        code: |
+          def f(x):
+              return 3 * x**2 + x
+
+          h = 0.25
+          print((f(1 + h) - f(1 - h)) / (2 * h))
+        options: ["7.0", "7.75", "6.0", "7.1875"]
+        answer: "7.0"
+        explanation: "$f'(x) = 6x + 1 = 7$. Für Polynome bis Grad 2 hat die zentrale Differenz keinen Verfahrensfehler."
+  - id: m07-c-h-zu-klein
+    concept: rundungsfehler-h
+    variants:
+      - type: quiz
+        question: Warum wird die Vorwärtsdifferenz mit `h = 1e-14` **ungenauer** als mit `h = 1e-8`?
+        options:
+          - text: "`f(x + h)` und `f(x)` stimmen in fast allen Stellen überein, die Differenz ist überwiegend Rundungsrauschen."
+            correct: true
+            why: Auslöschung – der relative Rundungsfehler von etwa $10^{-16}$ wird durch $h$ geteilt und damit riesig.
+          - text: Weil der Taylor-Fehler bei kleinem $h$ wächst.
+            correct: false
+            why: Der Verfahrensfehler $\sim h$ wird kleiner. Es ist der Rundungsfehler, der wächst.
+          - text: Weil Python Zahlen unter `1e-10` als 0 speichert.
+            correct: false
+            why: Floats reichen bis etwa $10^{-308}$. Das Problem ist die **Differenz** zweier fast gleicher Zahlen.
+      - type: quiz
+        question: Welcher Fehler dominiert bei der zentralen Differenz mit `h = 1e-12`?
+        options:
+          - text: der Rundungsfehler, etwa $\varepsilon / h \approx 10^{-4}$
+            correct: true
+            why: Mit $\varepsilon \approx 2 \cdot 10^{-16}$ ist $\varepsilon/h$ viel größer als der Verfahrensfehler $h^2 \approx 10^{-24}$.
+          - text: der Verfahrensfehler, etwa $h^2$
+            correct: false
+            why: "$h^2 = 10^{-24}$ ist vernachlässigbar."
+          - text: keiner, das Ergebnis ist exakt
+            correct: false
+            why: Mit endlicher Genauigkeit gibt es immer Rundungsfehler, hier sind sie groß.

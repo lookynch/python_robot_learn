@@ -1,0 +1,368 @@
+id: m13-bandits
+title: "Bandits: Ausprobieren oder ausnutzen?"
+minutes: 11
+goals:
+  - Aktionswerte als inkrementellen Mittelwert schätzen
+  - ε-greedy und UCB implementieren
+  - Strategien über den kumulativen Regret vergleichen
+concepts: [bandit-aktionswert, bandit-epsilon-greedy, bandit-ucb, bandit-regret]
+steps:
+  - type: text
+    body: |
+      ## Fünf Greifstrategien, keine Anleitung
+
+      Ein Roboter kann ein Teil auf 5 Arten greifen. Jede Art $a$ gelingt mit einer unbekannten Quote $\mu_a$. Jeder Versuch liefert eine **Belohnung** (reward) $r = 1$ (Erfolg) oder $0$. Das ist ein **mehrarmiger Bandit** (multi-armed bandit) – Reinforcement Learning mit nur einem Zustand.
+
+      Der Agent schätzt für jede Aktion den **Aktionswert** $Q(a)$ als Mittel der bisherigen Belohnungen, inkrementell:
+
+      $$Q \leftarrow Q + \frac{1}{N(a)}\,(r - Q)$$
+
+      Das Dilemma: die bisher beste Aktion **ausnutzen** (exploitation) oder andere **ausprobieren** (exploration), die vielleicht besser sind?
+  - type: trace
+    intro: |
+      Der inkrementelle Mittelwert braucht keine Liste aller Belohnungen – nur `Q` und die Anzahl `n`.
+    code: |
+      Q, n = 0.0, 0
+      for r in [1, 0, 1, 1]:
+          n = n + 1
+          Q = Q + (r - Q) / n
+      print(Q)
+    questions:
+      - line: 4
+        hit: 2
+        var: Q
+        answer: "0.5"
+        prompt: Welchen Wert hat `Q` nach der zweiten Belohnung?
+      - line: 4
+        hit: 4
+        var: Q
+        answer: "0.75"
+    after: |
+      Nach jeder Belohnung ist `Q` exakt der Mittelwert aller bisherigen: $(1 + 0)/2$, dann $2/3$, dann $3/4$. Die Korrektur $(r - Q)$ heißt **Fehler** – dieses Muster „Schätzung += Schrittweite · Fehler“ kommt im RL ständig vor.
+  - type: example
+    intro: |
+      **ε-greedy:** Mit Wahrscheinlichkeit $\varepsilon$ eine zufällige Aktion, sonst die mit dem größten $Q$.
+    code: |
+      import numpy as np
+      import lab
+
+      p_true = np.array([0.2, 0.5, 0.75, 0.4, 0.6])   # dem Agenten unbekannt
+      rng = np.random.default_rng(0)
+      Q, N = np.zeros(5), np.zeros(5)
+      eps, regret = 0.1, []
+      for t in range(500):
+          if rng.random() < eps:
+              a = int(rng.integers(5))                # ausprobieren
+          else:
+              a = int(np.argmax(Q))                   # ausnutzen
+          r = float(rng.random() < p_true[a])         # Erfolg mit Quote p_true[a]
+          N[a] += 1
+          Q[a] += (r - Q[a]) / N[a]
+          regret.append(p_true.max() - p_true[a])
+
+      print("Versuche pro Arm:", N.astype(int))
+      print("Schätzungen Q:   ", np.round(Q, 2))
+      lab.plot(np.cumsum(regret), title="Kumulativer Regret", xlabel="Versuch", ylabel="Regret")
+    subgoals:
+      - lines: [4, 7]
+        label: Bandit und Schätzungen anlegen
+      - lines: [9, 12]
+        label: Aktion wählen
+      - lines: [13, 15]
+        label: Belohnung beobachten und Q aktualisieren
+      - lines: [16, 16]
+        label: Regret mitschreiben
+    after: |
+      Der **Regret** summiert, wie viel erwartete Belohnung gegenüber der besten Aktion verloren ging: $\sum_t (\mu^* - \mu_{a_t})$. Ihn kann nur messen, wer $\mu$ kennt – also wir als Versuchsleiter, nicht der Agent.
+  - type: explain
+    question: |
+      Warum braucht man überhaupt $\varepsilon > 0$? Rein greedy ($\varepsilon = 0$) nutzt doch immer die beste Schätzung.
+    options:
+      - text: Die Schätzungen beruhen auf wenigen, verrauschten Versuchen. Wer nie ausprobiert, korrigiert eine zu niedrige Schätzung für eine gute Aktion nie.
+        correct: true
+        why: Mit $\varepsilon = 0$ und $Q = 0$ am Start wählt `argmax` Arm 0; dessen $Q$ fällt nie unter 0, also kommt kein anderer Arm je dran – egal, wie gut er wäre.
+      - text: Damit der Agent schneller rechnet.
+        correct: false
+        why: Exploration hat mit Rechenzeit nichts zu tun.
+      - text: Weil `np.argmax` bei gleichen Werten einen Fehler wirft.
+        correct: false
+        why: "`np.argmax` liefert bei Gleichstand den ersten Index – das verstärkt das Problem eher."
+      - text: Exploration erhöht den Regret nie.
+        correct: false
+        why: Jede zufällige Wahl einer schlechten Aktion kostet Regret; Exploration ist eine Investition.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `epsilon_greedy(Q, eps, rng)`: Mit Wahrscheinlichkeit `eps` eine zufällige Aktion aus `0 … len(Q) − 1`, sonst `argmax`. Gib einen `int` zurück. Nutze für Zufall nur das übergebene `rng`.
+    starter: |
+      import numpy as np
+
+      def epsilon_greedy(Q, eps, rng):
+          # dein Code
+          pass
+    solution: |
+      import numpy as np
+
+      def epsilon_greedy(Q, eps, rng):
+          if rng.random() < eps:
+              return int(rng.integers(len(Q)))
+          return int(np.argmax(Q))
+    tests:
+      - name: eps = 0 wählt immer argmax
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          for Q in [np.array([0.1, 0.9, 0.3]), np.array([2.0, -1.0]), np.array([0.0, 0.0, 0.5, 0.4])]:
+              for _ in range(20):
+                  a = epsilon_greedy(Q, 0.0, rng)
+                  assert a == int(np.argmax(Q)), f"Bei eps=0 und Q={Q} erwartet {int(np.argmax(Q))}, bekommen {a}"
+      - name: eps = 1 wählt gleichverteilt
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(0)
+          Q = np.array([0.0, 5.0, 1.0, 2.0])
+          counts = np.bincount([epsilon_greedy(Q, 1.0, rng) for _ in range(4000)], minlength=4) / 4000
+          assert np.all(np.abs(counts - 0.25) < 0.04), f"Bei eps=1 sollte jede Aktion ≈ 25 % bekommen, Anteile {counts.round(3)}"
+      - name: eps = 0.2 – Anteil der besten Aktion
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(1)
+          Q = np.array([0.0, 5.0, 1.0, 2.0])
+          share = np.mean([epsilon_greedy(Q, 0.2, rng) == 1 for _ in range(4000)])
+          assert abs(share - 0.85) < 0.03, f"Erwartet ≈ 0.85 (0.8 greedy + 0.2/4 zufällig), bekommen {share:.3f}"
+    mutants:
+      - |
+        import numpy as np
+        def epsilon_greedy(Q, eps, rng):
+            if rng.random() > eps:
+                return int(rng.integers(len(Q)))
+            return int(np.argmax(Q))
+      - |
+        import numpy as np
+        def epsilon_greedy(Q, eps, rng):
+            if rng.random() < eps:
+                return int(rng.integers(len(Q) - 1))
+            return int(np.argmax(Q))
+      - |
+        import numpy as np
+        def epsilon_greedy(Q, eps, rng):
+            if rng.random() < eps:
+                return int(rng.integers(len(Q)))
+            return int(np.argmin(Q))
+      - |
+        import numpy as np
+        def epsilon_greedy(Q, eps, rng):
+            return int(np.argmax(Q))
+    hints:
+      - "Teilziel: erst entscheiden „ausprobieren oder ausnutzen“, dann die Aktion bestimmen."
+      - "`rng.random()` liefert eine Zahl in $[0, 1)$; sie ist mit Wahrscheinlichkeit `eps` kleiner als `eps`."
+      - "`rng.integers(n)` liefert eine ganze Zahl aus `0 … n − 1`."
+      - |
+        ```python
+        if rng.random() < eps:
+            return int(rng.integers(len(Q)))
+        return int(np.argmax(Q))
+        ```
+  - type: fill
+    fading: true
+    prompt: |
+      **UCB** (Upper Confidence Bound) erkundet gezielt: Jede Aktion bekommt einen Bonus, der mit der Zeit $t$ langsam wächst und mit der Zahl der Versuche $N(a)$ schrumpft:
+
+      $$a_t = \arg\max_a \Big[\, Q(a) + c\sqrt{\tfrac{\ln t}{N(a)}}\,\Big]$$
+
+      Ergänze die Bewertungsfunktion (Aktionen mit $N = 0$ sind schon abgefangen).
+    code: |
+      import numpy as np
+
+      def ucb_scores(Q, N, t, c=1.0):
+          if np.any(N == 0):
+              return np.where(N == 0, np.inf, Q)    # erst jede Aktion einmal
+          return Q + c * np.sqrt(np.log(___) / ___)
+    blanks:
+      - answer: t
+        options: [t, N, t + N]
+      - answer: N
+        options: [N, t, N ** 2]
+    tests:
+      - name: Bonus-Werte
+        code: |
+          import numpy as np
+          Q, N = np.array([0.5, 0.6, 0.2]), np.array([10.0, 40.0, 2.0])
+          got = ucb_scores(Q, N, 52, c=1.0)
+          ref = Q + np.sqrt(np.log(52) / N)
+          assert close(got, ref), f"Erwartet {ref.round(3)}, bekommen {np.round(got, 3)}"
+          got2 = ucb_scores(Q, N, 52, c=2.0)
+          assert close(got2, Q + 2 * np.sqrt(np.log(52) / N)), f"Mit c=2 stimmen die Werte nicht: {np.round(got2, 3)}"
+    explanation: |
+      Selten probierte Aktionen (kleines $N$) bekommen einen großen Bonus – „optimistisch angesichts der Unsicherheit“. Weil $\ln t$ wächst, wird jede Aktion irgendwann wieder geprüft, aber immer seltener.
+  - type: example
+    intro: |
+      Vergleich über 100 Läufe gleichzeitig: `Q` und `N` haben eine Zeile pro Lauf, `rows` wählt in jeder Zeile die gewählte Aktion aus.
+    code: |
+      import numpy as np
+      import lab
+
+      p_true = np.array([0.2, 0.5, 0.75, 0.4, 0.6])
+      K, T, R = 5, 1000, 100                       # Arme, Schritte, Läufe
+      rows = np.arange(R)
+
+      def run(method):
+          rng = np.random.default_rng(0)
+          Q, N = np.zeros((R, K)), np.zeros((R, K))
+          regret = np.zeros(T)
+          for t in range(1, T + 1):
+              if method == "greedy":
+                  a = np.argmax(Q, axis=1)
+              elif method == "eps = 0.1":
+                  explore = rng.random(R) < 0.1
+                  a = np.where(explore, rng.integers(K, size=R), np.argmax(Q, axis=1))
+              else:
+                  bonus = np.where(N > 0, np.sqrt(np.log(t) / np.maximum(N, 1)), np.inf)
+                  a = np.argmax(Q + bonus, axis=1)
+              r = (rng.random(R) < p_true[a]).astype(float)
+              N[rows, a] += 1
+              Q[rows, a] += (r - Q[rows, a]) / N[rows, a]
+              regret[t - 1] = np.mean(p_true.max() - p_true[a])
+          return np.cumsum(regret)
+
+      fig = lab.Figure(title="Kumulativer Regret (Mittel über 100 Läufe)", xlabel="Schritt", ylabel="Regret")
+      for method in ["greedy", "eps = 0.1", "UCB, c = 1"]:
+          curve = run(method)
+          print(f"{method:10s}: Regret nach {T} Schritten {curve[-1]:.1f}")
+          fig.line(curve, label=method)
+      fig.show()
+    subgoals:
+      - lines: [9, 11]
+        label: Schätzungen für alle Läufe anlegen
+      - lines: [13, 20]
+        label: Aktion je nach Strategie wählen
+      - lines: [21, 24]
+        label: Belohnung, Update, Regret
+      - lines: [27, 32]
+        label: Strategien vergleichen
+    after: |
+      Greedy wächst linear: Mit $Q = 0$ am Start wählt `argmax` bei Gleichstand Arm 0, und dessen $Q$ fällt nie unter die 0 der anderen – greedy probiert hier nie einen anderen Arm (Regret $0{,}55$ pro Schritt). ε-greedy wächst auf Dauer auch linear, weil es *für immer* zu 10 % zufällig wählt. UCB wächst nur noch etwa logarithmisch. Das Ergebnis hängt von $c$ bzw. $\varepsilon$ ab – beide sind Hyperparameter.
+  - type: quiz
+    question: |
+      Bei UCB wurde Aktion 3 noch nie gewählt ($N = 0$). Was passiert?
+    options:
+      - text: Sie wird gewählt, bevor irgendeine Aktion ein zweites Mal drankommt.
+        correct: true
+        why: Ihr Bonus ist unendlich – unbekannte Aktionen werden zuerst probiert.
+      - text: Sie wird nie gewählt, weil $Q = 0$ ist.
+        correct: false
+        why: Der Bonus dominiert, nicht der Schätzwert.
+      - text: Das Programm bricht mit Division durch null ab.
+        correct: false
+        why: Deshalb fängt man $N = 0$ vorher ab.
+cards:
+  - id: m13-c-inkrementell
+    concept: bandit-aktionswert
+    variants:
+      - type: predict
+        code: |
+          Q, n = 0.0, 0
+          for r in [4.0, 2.0]:
+              n += 1
+              Q += (r - Q) / n
+          print(Q)
+        options: ["3.0", "2.0", "6.0", "1.0"]
+        answer: "3.0"
+        explanation: Nach zwei Belohnungen ist Q ihr Mittelwert.
+      - type: predict
+        code: |
+          Q, n = 0.0, 0
+          for r in [0.0, 0.0, 3.0]:
+              n += 1
+              Q += (r - Q) / n
+          print(Q)
+        options: ["1.0", "3.0", "0.0", "1.5"]
+        answer: "1.0"
+        explanation: Mittel von 0, 0, 3.
+  - id: m13-c-eps
+    concept: bandit-epsilon-greedy
+    variants:
+      - type: quiz
+        question: |
+          ε-greedy mit $\varepsilon = 0{,}1$ und 5 Aktionen. Wie oft wird die (geschätzt) beste Aktion gewählt?
+        options:
+          - text: In 92 % der Fälle.
+            correct: true
+            why: 90 % greedy plus 10 % · 1/5 zufällig.
+          - text: In 90 % der Fälle.
+            correct: false
+            why: Auch bei zufälliger Wahl kann die beste Aktion herauskommen.
+          - text: In 10 % der Fälle.
+            correct: false
+            why: "$\\varepsilon$ ist der Anteil der zufälligen Wahlen."
+      - type: quiz
+        question: |
+          Was passiert mit rein greedy ($\varepsilon = 0$), wenn alle $Q$ bei 0 starten und Belohnungen 0 oder 1 sind?
+        options:
+          - text: Er bleibt bei einem einzigen Arm hängen; die anderen werden nie (wieder) probiert.
+            correct: true
+            why: Bei Gleichstand nimmt `argmax` immer denselben Index, und ein Q aus Belohnungen 0/1 fällt nie unter die 0 der unprobierten Arme.
+          - text: Es findet nach einiger Zeit sicher den besten Arm.
+            correct: false
+            why: Ohne Exploration werden andere Arme nie wieder geprüft.
+          - text: Es wählt abwechselnd alle Arme.
+            correct: false
+            why: "`argmax` wählt immer denselben Index, solange sich Q nicht ändert."
+  - id: m13-c-ucb
+    concept: bandit-ucb
+    variants:
+      - type: quiz
+        question: |
+          Wie verändert sich der UCB-Bonus $c\sqrt{\ln t / N(a)}$, wenn Aktion $a$ oft gewählt wird?
+        options:
+          - text: Er schrumpft, weil $N(a)$ im Nenner steht.
+            correct: true
+            why: Viel Erfahrung = wenig Unsicherheit = kleiner Bonus.
+          - text: Er wächst, weil $t$ wächst.
+            correct: false
+            why: "$\\ln t$ wächst viel langsamer als $N(a)$, wenn $a$ oft gewählt wird."
+          - text: Er bleibt konstant gleich $c$.
+            correct: false
+            why: Er hängt von $t$ und $N(a)$ ab.
+      - type: quiz
+        question: |
+          UCB mit $c = 1$, $t = 100$: $Q = (0{,}6;\ 0{,}5)$, $N = (90;\ 10)$. Welche Aktion wird gewählt?
+        options:
+          - text: Aktion 1 – ihr Bonus $\sqrt{\ln 100/10} \approx 0{,}68$ überwiegt den kleineren Schätzwert.
+            correct: true
+            why: "Aktion 0: $0{,}6 + 0{,}23 = 0{,}83$; Aktion 1: $0{,}5 + 0{,}68 = 1{,}18$."
+          - text: Aktion 0 – sie hat den größeren Schätzwert.
+            correct: false
+            why: Das wäre greedy; UCB addiert den Unsicherheitsbonus.
+          - text: Eine zufällige Aktion.
+            correct: false
+            why: UCB ist deterministisch, der Zufall steckt nur in den Belohnungen.
+  - id: m13-c-regret
+    concept: bandit-regret
+    variants:
+      - type: quiz
+        question: |
+          Arm-Quoten $\mu = (0{,}3;\ 0{,}8)$. Ein Agent wählt 10-mal Arm 0 und 10-mal Arm 1. Wie groß ist der (erwartete) Regret?
+        options:
+          - text: "5"
+            correct: true
+            why: 10 · (0,8 − 0,3) = 5; die Wahlen von Arm 1 kosten nichts.
+          - text: "10"
+            correct: false
+            why: Regret zählt nur die Differenz zur besten Quote, nicht die Anzahl der Fehlwahlen.
+          - text: "0"
+            correct: false
+            why: Jede Wahl des schlechteren Arms kostet $\mu^* - \mu_0 = 0{,}5$.
+      - type: quiz
+        question: |
+          Zwei Strategien: Regret nach 1000 Schritten 40 bzw. 300. Was bedeutet das?
+        options:
+          - text: Die erste hat im Erwartungswert 260 Erfolge mehr als die zweite gesammelt.
+            correct: true
+            why: Regret ist die verlorene erwartete Belohnung gegenüber dem besten Arm; die Differenz der Regrets ist die Differenz der erwarteten Belohnung.
+          - text: Die erste hat 40-mal den falschen Arm gewählt.
+            correct: false
+            why: Regret gewichtet jede Fehlwahl mit dem Abstand zur besten Quote; er zählt keine Fehlwahlen.
+          - text: Die zweite hat mehr exploriert und ist deshalb besser.
+            correct: false
+            why: Kleinerer Regret ist besser – Exploration ist nur Mittel zum Zweck.

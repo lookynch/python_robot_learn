@@ -1,0 +1,277 @@
+id: m18-imitation
+title: Imitation Learning – Behavior Cloning, ACT, Diffusion Policy
+minutes: 11
+goals:
+  - Behavior Cloning als lineare Regression auf Demonstrationen implementieren
+  - Verteilungsverschiebung und das Mittelwert-Problem bei mehrdeutigen Demonstrationen erklären
+  - ACT, Diffusion Policy und Sim-to-Real einordnen
+concepts: [behavior-cloning, bc-verteilungsshift, multimodale-demos, sim-to-real]
+steps:
+  - type: text
+    body: |
+      ## Behavior Cloning: Regression auf Expertenaktionen
+
+      Statt eine Belohnung zu definieren, **zeigst** du dem Roboter die Aufgabe – meist per Teleoperation. Es entsteht ein Datensatz aus Paaren (Beobachtung $o_i$, Expertenaktion $a_i$). **Behavior Cloning** (BC) lernt daraus eine Policy durch ganz normales überwachtes Lernen:
+
+      $$
+      \min_\theta \sum_i \lVert \pi_\theta(o_i) - a_i \rVert^2
+      $$
+
+      Das ist die Regression aus Modul 12 – nur heißen die Ziele jetzt „Aktionen“. Kein RL, keine Belohnung, kein World Model. Genau deshalb ist BC heute das Arbeitspferd für echte Roboter.
+  - type: example
+    intro: |
+      Ein „Experte“ fährt einen Punkt im Raum mit $a = 0{,}5\,(g - x)$ zum Ziel $g$. Die Policy sieht nur $x$ und lernt per `lstsq` eine lineare Abbildung mit Bias.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      ziel = np.array([1.0, 0.5])
+      X = rng.uniform(-1, 2, size=(200, 2))
+      A = 0.5 * (ziel - X) + rng.normal(scale=0.01, size=(200, 2))
+
+      Xb = np.hstack([X, np.ones((len(X), 1))])
+      W, *_ = np.linalg.lstsq(Xb, A, rcond=None)
+      print("W =")
+      print(W.round(2))
+
+      x = np.array([-1.0, -1.0])
+      for t in range(5):
+          x = x + np.append(x, 1.0) @ W
+          print(t, "Abstand zum Ziel:", round(float(np.linalg.norm(ziel - x)), 3))
+    subgoals:
+      - lines: [3, 5]
+        label: Demonstrationen sammeln
+      - lines: [7, 10]
+        label: Policy per Regression anpassen
+      - lines: [12, 15]
+        label: Gelernte Policy ausführen
+    after: |
+      Die letzte Zeile von `W` ist der Bias $0{,}5\,g = (0{,}5;\ 0{,}25)$ – die Policy hat das Ziel „mitgelernt“, ohne es je als Eingabe zu sehen. Echte BC-Policies sind Netze mit Kamerabildern als Eingabe; das Prinzip ist identisch.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `fit_bc(X, A)`: Hänge an die Beobachtungen `X` (Form `(n, d)`) eine Spalte aus Einsen an und bestimme `W` (Form `(d+1, k)`) mit `np.linalg.lstsq`, sodass `[x, 1] @ W` die Aktion vorhersagt.
+    starter: |
+      import numpy as np
+
+      def fit_bc(X, A):
+          # Bias-Spalte anhängen
+          # W mit np.linalg.lstsq bestimmen
+          pass
+    solution: |
+      import numpy as np
+
+      def fit_bc(X, A):
+          Xb = np.hstack([X, np.ones((len(X), 1))])
+          W, *_ = np.linalg.lstsq(Xb, A, rcond=None)
+          return W
+    tests:
+      - name: Form von W
+        code: |
+          rng = np.random.default_rng(3)
+          X = rng.normal(size=(50, 2))
+          W = fit_bc(X, X @ np.array([[1.0, 0.0], [0.0, 1.0]]))
+          assert W is not None, "fit_bc gibt nichts zurück."
+          assert np.shape(W) == (3, 2), f"W sollte die Form (3, 2) haben (2 Eingaben + Bias, 2 Aktionen), hat {np.shape(W)}"
+      - name: Experte mit Ziel wird nachgeahmt
+        code: |
+          rng = np.random.default_rng(0)
+          ziel = np.array([1.0, 0.5])
+          X = rng.uniform(-1, 2, size=(200, 2))
+          W = fit_bc(X, 0.5 * (ziel - X))
+          a = np.append([0.0, 0.0], 1.0) @ W
+          assert close(a, [0.5, 0.25], tol=1e-6), f"Im Ursprung sollte die Aktion [0.5, 0.25] sein, bekommen {a}"
+      - name: Beliebige lineare Abbildung mit Bias
+        code: |
+          rng = np.random.default_rng(7)
+          X = rng.normal(size=(80, 2))
+          W_wahr = np.array([[2.0, 0.0], [1.0, -1.0], [0.3, -0.2]])
+          A = np.hstack([X, np.ones((80, 1))]) @ W_wahr
+          W = fit_bc(X, A)
+          assert close(W, W_wahr, tol=1e-6), f"Erwartet {W_wahr.tolist()}, bekommen {np.round(W, 3).tolist()}"
+    mutants:
+      - |
+        import numpy as np
+        def fit_bc(X, A):
+            W, *_ = np.linalg.lstsq(X, A, rcond=None)
+            return W
+      - |
+        import numpy as np
+        def fit_bc(X, A):
+            Xb = np.hstack([X, np.zeros((len(X), 1))])
+            W, *_ = np.linalg.lstsq(Xb, A, rcond=None)
+            return W
+      - |
+        import numpy as np
+        def fit_bc(X, A):
+            Xb = np.hstack([X, np.ones((len(X), 1))])
+            return Xb.T @ A
+      - |
+        import numpy as np
+        def fit_bc(X, A):
+            Xb = np.hstack([X, np.ones((len(X), 1))])
+            W, *_ = np.linalg.lstsq(Xb, A, rcond=None)
+    hints:
+      - "Teilziel: Bias-Spalte anhängen → Ausgleichsrechnung → `W` zurückgeben."
+      - "`np.ones((len(X), 1))` ist die Einsen-Spalte; `np.hstack` klebt sie rechts an. `lstsq` gibt mehrere Werte zurück, nur der erste ist `W`."
+      - "`W, *_ = np.linalg.lstsq(Xb, A, rcond=None)`"
+  - type: text
+    body: |
+      ## Das Grundproblem: Verteilungsverschiebung
+
+      Die Policy macht einen kleinen Fehler und landet in einem Zustand, der **in keiner Demonstration vorkam**. Dort ist sie ungenauer, der nächste Fehler ist größer – die Fehler pflanzen sich fort (compounding errors). Beim ACT-Paper steht genau das als Kernproblem: „errors in the policy can compound over time“ ([arXiv:2304.13705](https://arxiv.org/abs/2304.13705)).
+
+      Klassisches Gegenmittel ist **DAgger** ([Ross et al. 2011, arXiv:1011.0686](https://arxiv.org/abs/1011.0686)): Die Policy fährt selbst, ein Mensch korrigiert, die Korrekturen kommen in den Datensatz. LeRobot hat dafür einen eigenen Ausführungsmodus `dagger` ([Doku](https://huggingface.co/docs/lerobot/il_robots); Stand: Oktober 2026).
+  - type: predict
+    intro: |
+      Vor einem Hindernis weicht die Hälfte der Demonstrationen links aus (Lenkaktion −1), die andere Hälfte rechts (+1). Eine BC-Policy mit quadratischem Fehler lernt für diese Situation den Wert, der den Fehler minimiert:
+    code: |
+      import numpy as np
+      aktionen = np.array([-1.0, 1.0, -1.0, 1.0, -1.0, 1.0])
+      print(np.mean(aktionen))
+    options: ["0.0", "1.0", "-1.0", "0.5"]
+    answer: "0.0"
+    explanation: |
+      Der Mittelwert 0 heißt: **geradeaus – direkt ins Hindernis**. Beide Experten-Lösungen waren gut, ihr Durchschnitt ist schlecht. Das ist das Problem **multimodaler Demonstrationen**.
+  - type: text
+    body: |
+      ## ACT und Diffusion Policy
+
+      - **ACT** (Action Chunking with Transformers, Zhao et al. 2023): sagt **Folgen** von Aktionen statt Einzelaktionen vorher und lernt ein generatives Modell über Aktionsfolgen. Mit nur 10 Minuten Demonstrationen 80–90 % Erfolg bei 6 feinen Zweiarm-Aufgaben auf günstiger Hardware ([arXiv:2304.13705](https://arxiv.org/abs/2304.13705)).
+      - **Diffusion Policy** (Chi et al. 2023): erzeugt Aktionen durch schrittweises Entrauschen (Diffusion) – kann so mehrere gute Lösungen abbilden, statt sie zu mitteln; Selbstangabe: im Mittel 46,9 % besser als frühere Verfahren auf 12 Aufgaben ([arXiv:2303.04137](https://arxiv.org/abs/2303.04137)).
+
+      Beide sind in LeRobot verfügbar (Modul 19). *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Sim-to-Real
+
+      Demonstrationen am echten Roboter sind teuer. In der Simulation sind Daten billig – aber eine dort gelernte Policy scheitert oft an der **Realitätslücke** (reality gap): andere Reibung, Massen, Latenzen, Licht und Kamerabilder.
+
+      **Domain Randomization**: Man variiert die Simulation absichtlich stark (Texturen, Licht, Massen, Reibung), damit die Realität für die Policy nur eine weitere Variante ist. Tobin et al. trainierten einen Objektdetektor nur auf zufällig texturierten Simulationsbildern; er fand reale Objekte auf ca. 1,5 cm genau ([arXiv:1703.06907](https://arxiv.org/abs/1703.06907)).
+  - type: explain
+    question: |
+      Warum hilft es gegen die Realitätslücke, die Simulation **unrealistisch** stark zu variieren, statt sie möglichst exakt zu machen?
+    options:
+      - text: Eine exakte Simulation gibt es nie; wer über viele Varianten robust ist, behandelt die echte Welt als eine weitere davon.
+        correct: true
+        why: Genau. Die Policy lernt, sich auf Merkmale zu verlassen, die über alle Varianten gleich bleiben.
+      - text: Zufällige Texturen machen die Simulation schneller.
+        correct: false
+        why: Die Rechenzeit ist nicht der Punkt; es geht um Robustheit.
+      - text: Damit braucht man überhaupt keine Tests am echten Roboter mehr.
+        correct: false
+        why: Getestet werden muss immer am echten System; Randomization verkleinert nur die Lücke.
+      - text: Weil echte Kameras ohnehin nur Rauschen liefern.
+        correct: false
+        why: Echte Bilder sind informativ – sie sehen nur anders aus als Simulationsbilder.
+cards:
+  - id: m18-c-bc-regression
+    concept: behavior-cloning
+    variants:
+      - type: quiz
+        question: |
+          Welche Art von Lernproblem ist Behavior Cloning?
+        options:
+          - text: Überwachtes Lernen – Regression von Beobachtung auf Expertenaktion
+            correct: true
+            why: Die Expertenaktionen sind die Labels.
+          - text: Reinforcement Learning mit Belohnung
+            correct: false
+            why: BC braucht keine Belohnung; es imitiert.
+          - text: Unüberwachtes Clustering
+            correct: false
+            why: Es gibt Zielwerte (Aktionen), also ist es überwacht.
+      - type: quiz
+        question: |
+          Was brauchst du mindestens, um eine BC-Policy zu trainieren?
+        options:
+          - text: Paare aus Beobachtung und Expertenaktion
+            correct: true
+            why: Mehr braucht die Regression nicht.
+          - text: Eine Belohnungsfunktion und eine Simulation
+            correct: false
+            why: Das bräuchte RL; BC kommt ohne beides aus.
+          - text: Ein gelerntes World Model
+            correct: false
+            why: BC lernt die Policy direkt, ohne Modell der Dynamik.
+  - id: m18-c-verteilungsshift
+    concept: bc-verteilungsshift
+    variants:
+      - type: quiz
+        question: |
+          Eine BC-Policy fährt anfangs gut, driftet aber nach einigen Sekunden immer weiter von der Demonstration weg. Was ist die wahrscheinlichste Ursache?
+        options:
+          - text: Kleine Fehler führen in Zustände ohne Demonstrationen; dort wird die Policy schlechter, und die Fehler wachsen.
+            correct: true
+            why: Verteilungsverschiebung – die Trainingsdaten decken nur die Zustände des Experten ab.
+          - text: Der Arm ist zu schnell.
+            correct: false
+            why: Das erklärt nicht, warum es anfangs funktioniert und dann wegdriftet.
+          - text: Die Demonstrationen waren zu genau.
+            correct: false
+            why: Zu genaue Demos sind nicht das Problem; eher fehlen Beispiele für Korrekturen.
+      - type: quiz
+        question: |
+          Was macht DAgger anders als reines Behavior Cloning?
+        options:
+          - text: Die Policy fährt selbst, ein Experte beschriftet die besuchten Zustände, und diese Daten kommen dazu.
+            correct: true
+            why: So lernt die Policy gerade in den Zuständen, in die sie selbst gerät.
+          - text: Es nutzt eine größere Lernrate.
+            correct: false
+            why: Mit Optimierungsparametern hat DAgger nichts zu tun.
+          - text: Es ersetzt den Experten durch eine Belohnungsfunktion.
+            correct: false
+            why: DAgger bleibt Imitation – der Experte liefert weiterhin Aktionen.
+  - id: m18-c-mittelwert
+    concept: multimodale-demos
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          greif_winkel = np.array([0.8, -0.8, 0.8, -0.8])   # zwei gute Griffe, rad
+          print(np.mean(greif_winkel))
+        options: ["0.0", "0.8", "-0.8", "0.4"]
+        answer: "0.0"
+        explanation: Der Mittelwert zweier guter Griffe ist ein dritter, den kein Experte gezeigt hat – und der womöglich nicht funktioniert.
+      - type: quiz
+        question: |
+          Warum kann Diffusion Policy mit mehrdeutigen Demonstrationen besser umgehen als eine MSE-Regression?
+        options:
+          - text: Sie modelliert eine Verteilung über Aktionen und erzeugt eine der guten Lösungen statt ihres Mittelwerts.
+            correct: true
+            why: Ein generatives Modell kann mehrere Moden darstellen.
+          - text: Sie benutzt mehr Trainingsdaten.
+            correct: false
+            why: Es geht um die Form der Ausgabe, nicht um die Datenmenge.
+          - text: Sie ignoriert die Hälfte der Demonstrationen.
+            correct: false
+            why: Sie nutzt alle Daten, mittelt sie aber nicht zu einem Wert.
+  - id: m18-c-domain-rand
+    concept: sim-to-real
+    variants:
+      - type: quiz
+        question: |
+          Eine in MuJoCo gelernte Greif-Policy scheitert am echten Arm. Welche Maßnahme adressiert die Realitätslücke direkt?
+        options:
+          - text: In der Simulation Reibung, Massen, Licht und Texturen zufällig variieren und neu trainieren
+            correct: true
+            why: Domain Randomization macht die Policy robust gegen Abweichungen.
+          - text: Die Simulation mit größerem Zeitschritt laufen lassen
+            correct: false
+            why: Ein größerer Zeitschritt macht die Simulation eher ungenauer.
+          - text: Die Policy länger auf derselben Simulation trainieren
+            correct: false
+            why: Mehr Training auf derselben Welt passt die Policy nur noch stärker an deren Eigenheiten an.
+      - type: quiz
+        question: |
+          Was bezeichnet „Realitätslücke“ (reality gap)?
+        options:
+          - text: Die Unterschiede zwischen Simulation und echter Welt, an denen Policies scheitern
+            correct: true
+            why: Genau der Grund, warum Sim-to-Real eigene Techniken braucht.
+          - text: Die Zeit zwischen Training und Einsatz
+            correct: false
+            why: Gemeint ist ein inhaltlicher, kein zeitlicher Unterschied.
+          - text: Fehlende Daten in der Simulation
+            correct: false
+            why: In der Simulation sind Daten gerade billig; das Problem ist ihre Abweichung von der Realität.

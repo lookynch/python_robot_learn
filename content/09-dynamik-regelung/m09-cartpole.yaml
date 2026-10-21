@@ -1,0 +1,289 @@
+id: m09-cartpole
+title: CartPole – wenn ein Motor fehlt
+minutes: 10
+goals:
+  - Unteraktuierte Systeme erkennen (weniger Motoren als Freiheitsgrade)
+  - Sehen, warum ein PD-Regler auf den Stabwinkel den Wagen davonfahren lässt
+  - Eine Zustandsrückführung mit allen vier Zustandsgrößen einsetzen
+concepts: [unteraktuierung]
+steps:
+  - type: text
+    body: |
+      ## Balancieren mit der Hand
+
+      Beim **CartPole** (`lab.envs.CartPole`) steht ein Stab auf einem Wagen. Zustand $[x, \dot x, \theta, \dot\theta]$, $\theta = 0$ aufrecht, $\theta > 0$ = Stab kippt Richtung $+x$. Der einzige Motor schiebt den **Wagen** mit einer Kraft $F$ (N); am Stabgelenk sitzt **kein** Motor.
+
+      Zwei Freiheitsgrade, ein Motor: Das System ist **unteraktuiert** (underactuated). Den Stab kann man nur indirekt bewegen – indem man den Wagen unter ihm herschiebt, wie beim Balancieren eines Besens auf der Hand.
+
+      `env.dynamics(state, force)` rechnet einen Schritt ($dt = 0.02$ s) mit beliebiger Kraft; `env.step(a)` kennt nur $a = 0$ (−10 N) oder $a = 1$ (+10 N) – das nutzen wir später im RL.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import CartPole
+
+      env = CartPole()
+      state = np.array([0.0, 0.0, 0.05, 0.0])
+      xs, ths = [state[0]], [state[2]]
+      for k in range(60):
+          state = env.dynamics(state, 0.0)
+          xs.append(state[0])
+          ths.append(state[2])
+          if env.failed(state):
+              print("Nach", round((k + 1) * 0.02, 2), "s ist der Stab über 12° gekippt.")
+              break
+      lab.cartpole(xs, ths, title="Ohne Regler")
+    subgoals:
+      - lines: [5, 7]
+        label: Umgebung und Startzustand
+      - lines: [8, 11]
+        label: Ohne Kraft simulieren
+      - lines: [12, 14]
+        label: Abbruch, wenn der Stab kippt
+      - lines: 15
+        label: Animieren
+    after: |
+      Schon 0.05 rad Startauslenkung reichen: Nach gut einer halben Sekunde ist der Stab weg. Wie beim Pendel oben ist aufrecht ein **instabiles** Gleichgewicht.
+  - type: explain
+    question: |
+      Warum kann man nicht einfach – wie beim Pendel – einen PD-Regler $u = -K_p\theta - K_d\dot\theta$ als Moment auf das Stabgelenk geben?
+    options:
+      - text: Am Stabgelenk gibt es keinen Motor; die einzige Stellgröße ist die Wagenkraft.
+        correct: true
+        why: Genau das heißt unteraktuiert. Man kann den Stab nur über die Beschleunigung des Wagens beeinflussen.
+      - text: Weil der Stab zu leicht ist.
+        correct: false
+        why: Die Masse ändert nichts daran, dass kein Motor da ist.
+      - text: Weil $\theta$ nicht gemessen werden kann.
+        correct: false
+        why: $\theta$ ist Teil des Zustands und bekannt.
+  - type: example
+    title: PD auf den Winkel – über die Wagenkraft
+    intro: |
+      Idee: Kippt der Stab nach rechts ($\theta > 0$), schiebe den Wagen nach rechts darunter. Also $F = K_p\theta + K_d\dot\theta$ (begrenzt auf ±10 N). Der Wagen hat am Anfang 0.3 m/s.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import CartPole
+
+      env = CartPole()
+      state = np.array([0.0, 0.3, 0.05, 0.0])
+      X = [state]
+      for k in range(500):                          # 10 s
+          F = np.clip(30.0 * state[2] + 5.0 * state[3], -10, 10)
+          state = env.dynamics(state, F)
+          X.append(state)
+      X = np.array(X)
+
+      t = np.arange(len(X)) * 0.02
+      fig = lab.Figure(title="PD nur auf den Winkel", xlabel="t (s)")
+      fig.line(X[:, 2], x=t, label="θ (rad)")
+      fig.line(X[:, 0], x=t, label="x (m)")
+      fig.hline(2.4, label="Bahnende")
+      fig.show()
+      lab.cartpole(X[::2, 0], X[::2, 2], title="Stab oben – Wagen weg")
+    subgoals:
+      - lines: [8, 11]
+        label: Wagenkraft aus Winkel und Winkelgeschwindigkeit
+      - lines: [14, 19]
+        label: Winkel und Position plotten
+      - lines: 20
+        label: Animieren
+    after: |
+      Der Stab steht – aber der Wagen fährt mit konstanter Geschwindigkeit davon und verlässt die Bahn (±2.4 m). Der Regler „sieht“ $x$ und $\dot x$ gar nicht.
+  - type: predict
+    code: |
+      import numpy as np
+      from lab.envs import CartPole
+
+      env = CartPole()
+      state = np.array([0.0, 0.3, 0.05, 0.0])
+      on_track = True
+      for k in range(500):
+          state = env.dynamics(state, np.clip(30.0 * state[2] + 5.0 * state[3], -10, 10))
+          on_track = on_track and abs(state[0]) <= 2.4
+      print("Stab oben:", bool(abs(state[2]) < 0.05))
+      print("Wagen auf der Bahn:", bool(on_track))
+    options:
+      - |
+        Stab oben: True
+        Wagen auf der Bahn: False
+      - |
+        Stab oben: True
+        Wagen auf der Bahn: True
+      - |
+        Stab oben: False
+        Wagen auf der Bahn: False
+      - |
+        Stab oben: False
+        Wagen auf der Bahn: True
+    answer: |
+      Stab oben: True
+      Wagen auf der Bahn: False
+    explanation: |
+      Der Winkelregler hält den Stab, aber nichts bremst den Wagen: Jede konstante Geschwindigkeit ist mit aufrechtem Stab verträglich. Man muss $x$ und $\dot x$ **mit** zurückführen.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ergänze die `policy` um die Rückführung von Position und Geschwindigkeit des Wagens mit den Beträgen $k_x = 2.8$ N/m und $k_v = 5.3$ N·s/m, sodass Stab **und** Wagen in die Mitte zurückkommen. Das Vorzeichen musst du herausfinden – probiere beide und schau dir die Animation an.
+
+      Die Gains stammen aus einem LQR-Entwurf (Linear-Quadratic Regulator) am linearisierten Modell; wie man sie berechnet, ist hier nicht Thema.
+    starter: |
+      import numpy as np
+      import lab
+      from lab.envs import CartPole
+
+      def policy(state):
+          x, x_dot, theta, theta_dot = state
+          return 46.4 * theta + 12.0 * theta_dot
+
+      env = CartPole()
+      state = np.array([0.5, 0.0, -0.1, 0.0])
+      X = [state]
+      for k in range(400):
+          state = env.dynamics(state, np.clip(policy(state), -10, 10))
+          X.append(state)
+      X = np.array(X)
+      lab.cartpole(X[::2, 0], X[::2, 2], title="Meine Rückführung")
+    solution: |
+      import numpy as np
+      import lab
+      from lab.envs import CartPole
+
+      def policy(state):
+          x, x_dot, theta, theta_dot = state
+          return 2.8 * x + 5.3 * x_dot + 46.4 * theta + 12.0 * theta_dot
+
+      env = CartPole()
+      state = np.array([0.5, 0.0, -0.1, 0.0])
+      X = [state]
+      for k in range(400):
+          state = env.dynamics(state, np.clip(policy(state), -10, 10))
+          X.append(state)
+      X = np.array(X)
+      lab.cartpole(X[::2, 0], X[::2, 2], title="Meine Rückführung")
+    tests:
+      - name: Stab bleibt oben, Wagen bleibt auf der Bahn
+        code: |
+          import numpy as np
+          from lab.envs import CartPole
+          _env = CartPole()
+          for s0 in [(0.0, 0.3, 0.05, 0.0), (0.5, 0.0, -0.1, 0.0), (-1.0, 0.2, 0.15, 0.0)]:
+              s = np.array(s0)
+              for k in range(500):
+                  s = _env.dynamics(s, np.clip(policy(s), -10, 10))
+                  assert not _env.failed(s), f"Start {s0}: nach {(k + 1) * 0.02:.2f} s gescheitert (x = {s[0]:.2f} m, θ = {s[2]:.2f} rad)"
+      - name: Wagen kommt in die Mitte zurück
+        code: |
+          import numpy as np
+          from lab.envs import CartPole
+          _env = CartPole()
+          for s0 in [(0.0, 0.3, 0.05, 0.0), (0.5, 0.0, -0.1, 0.0)]:
+              s = np.array(s0)
+              for k in range(500):
+                  s = _env.dynamics(s, np.clip(policy(s), -10, 10))
+              assert abs(s[0]) < 0.05 and abs(s[2]) < 0.01, f"Start {s0}: nach 10 s x = {s[0]:.3f} m, θ = {s[2]:.3f} rad – erwartet beides ≈ 0"
+    mutants:
+      - |
+        import numpy as np
+        def policy(state):
+            x, x_dot, theta, theta_dot = state
+            return -2.8 * x - 5.3 * x_dot + 46.4 * theta + 12.0 * theta_dot
+      - |
+        import numpy as np
+        def policy(state):
+            x, x_dot, theta, theta_dot = state
+            return 2.8 * x - 5.3 * x_dot + 46.4 * theta + 12.0 * theta_dot
+      - |
+        import numpy as np
+        def policy(state):
+            x, x_dot, theta, theta_dot = state
+            return 2.8 * x + 5.3 * x_dot - 46.4 * theta - 12.0 * theta_dot
+    hints:
+      - "Teilziel: Wagenkraft aus **allen vier** Zustandsgrößen."
+      - "Zwei neue Summanden: einer mit `x`, einer mit `x_dot`."
+      - "Überlege: Um den Wagen nach links zurückzuholen, muss der Stab erst nach links kippen – dafür muss der Wagen kurz nach **rechts**."
+      - "`return 2.8 * x + 5.3 * x_dot + 46.4 * theta + 12.0 * theta_dot`"
+    explanation: |
+      Das positive Vorzeichen bei $x$ wirkt zunächst falsch („weg von der Mitte“) – ist aber nötig: Der Wagen holt erst aus, damit der Stab in Richtung Mitte kippt, und folgt ihm dann. Solche kontraintuitiven Gesetze findet man nicht mehr durch Probieren einzelner Gains, sondern mit einem **Modell** (LQR) – und wenn große Winkel ins Spiel kommen (z. B. Hochschwingen aus dem Hängen), versagen lineare Regler ganz. Dann helfen **Planen mit Modell** (Modul 11) oder **Reinforcement Learning** (ab Modul 13).
+  - type: quiz
+    question: |
+      Welches System ist **unteraktuiert**?
+    options:
+      - text: Ein CartPole mit Motor nur am Wagen
+        correct: true
+        why: Zwei Freiheitsgrade ($x$, $\theta$), ein Motor.
+      - text: Ein 2-Gelenk-Arm mit einem Motor pro Gelenk
+        correct: false
+        why: Zwei Freiheitsgrade, zwei Motoren – voll aktuiert.
+      - text: Ein Pendel mit Motor im Drehpunkt
+        correct: false
+        why: Ein Freiheitsgrad, ein Motor.
+  - type: quiz
+    question: |
+      Warum lohnt es sich, für Aufgaben wie das Hochschwingen des CartPole-Stabs über **Planen** oder **Lernen** nachzudenken statt über weitere PD-Varianten?
+    options:
+      - text: Lineare Regler gelten nur nahe am Gleichgewicht; für große, nichtlineare Bewegungen mit Kraftgrenzen braucht man Methoden, die vorausschauen oder aus Erfahrung lernen.
+        correct: true
+        why: Swing-up erfordert, gezielt Schwung aufzubauen – eine Folge von Aktionen, die man planen (MPC) oder lernen (RL) kann.
+      - text: Weil PD-Regler grundsätzlich nicht auf echten Robotern funktionieren.
+        correct: false
+        why: PD-Regler sind in Gelenkantrieben allgegenwärtig – nur eben lokal.
+      - text: Weil Planen und RL kein Modell der Physik brauchen.
+        correct: false
+        why: Planen braucht gerade ein Modell; RL kann ohne auskommen, braucht dafür viele Versuche.
+cards:
+  - id: m09-c-unteraktuiert
+    concept: unteraktuierung
+    variants:
+      - type: quiz
+        question: Ein Roboter hat 3 Freiheitsgrade, aber nur 2 Motoren. Wie nennt man ihn?
+        options:
+          - text: Unteraktuiert
+            correct: true
+            why: Weniger Stellgrößen als Freiheitsgrade.
+          - text: Redundant
+            correct: false
+            why: Redundant heißt mehr Gelenke als für die Aufgabe nötig – alle angetrieben.
+          - text: Singulär
+            correct: false
+            why: Singulär beschreibt eine Stellung mit $\det J = 0$.
+      - type: quiz
+        question: Was passiert beim CartPole, wenn die Wagenkraft nur von $\theta$ und $\dot\theta$ abhängt?
+        options:
+          - text: Der Stab kann oben bleiben, aber der Wagen driftet weg
+            correct: true
+            why: Position und Geschwindigkeit des Wagens werden nicht zurückgeführt.
+          - text: Der Stab fällt sofort um
+            correct: false
+            why: Den Winkel kann ein solcher Regler durchaus stabilisieren.
+          - text: Alles kommt in der Mitte zur Ruhe
+            correct: false
+            why: Dafür fehlt die Rückführung von $x$ und $\dot x$.
+  - id: m09-c-cartpole-vorzeichen
+    concept: unteraktuierung
+    variants:
+      - type: quiz
+        question: Der Stab kippt nach rechts ($\theta > 0$). Wohin muss der Wagen, um ihn aufzufangen?
+        options:
+          - text: Nach rechts, unter den Stab
+            correct: true
+            why: Die Beschleunigung des Wagens nach rechts dreht den Stab zurück nach links.
+          - text: Nach links
+            correct: false
+            why: Dann kippt der Stab noch schneller.
+          - text: Gar nicht, der Stab richtet sich selbst auf
+            correct: false
+            why: Aufrecht ist ein instabiles Gleichgewicht.
+      - type: quiz
+        question: Der Wagen steht rechts von der Mitte, der Stab ist aufrecht. Was macht ein guter Regler **zuerst**?
+        options:
+          - text: Kurz nach rechts fahren, damit der Stab nach links kippt
+            correct: true
+            why: Erst dann kann der Wagen nach links fahren, ohne dass der Stab nach rechts fällt.
+          - text: Sofort nach links fahren
+            correct: false
+            why: Dann kippt der Stab nach rechts, und der Wagen muss doch wieder nach rechts.
+          - text: Stehen bleiben
+            correct: false
+            why: Dann kommt der Wagen nie in die Mitte.

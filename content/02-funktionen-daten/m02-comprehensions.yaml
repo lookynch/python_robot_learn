@@ -1,0 +1,303 @@
+id: m02-comprehensions
+title: Comprehensions, zip und enumerate
+minutes: 10
+goals:
+  - Listen mit einer List-Comprehension umwandeln und filtern
+  - Mit `zip` parallel über zwei Listen laufen
+  - Mit `enumerate` Index und Element gleichzeitig erhalten
+concepts: [m02-comprehension, m02-zip-enumerate]
+steps:
+  - type: text
+    body: |
+      ## Eine Schleife in einer Zeile
+
+      Dieses Muster kennst du: leere Liste, Schleife, `append`. Es ist so häufig, dass Python eine Kurzform hat – die **List-Comprehension**:
+
+      ```python
+      neu = [ausdruck for x in folge]
+      neu = [ausdruck for x in folge if bedingung]
+      ```
+
+      Lies sie wie Mathematik: $\{\,2x \mid x \in A,\ x > 0\,\}$ wird zu `[2 * x for x in A if x > 0]`.
+  - type: example
+    code: |
+      mm = [250, 500, 1200]
+      m = []
+      for x in mm:
+          m.append(x / 1000)
+      print(m)
+
+      m2 = [x / 1000 for x in mm]
+      print(m2)
+
+      lang = [x for x in mm if x > 400]
+      print(lang)
+    subgoals:
+      - lines: [1, 5]
+        label: Umrechnen mit Schleife und append
+      - lines: [7, 8]
+        label: Dasselbe als Comprehension
+      - lines: [10, 11]
+        label: Filtern mit if
+    after: |
+      Beide Varianten erzeugen dieselbe Liste. Die Comprehension ist kürzer und sagt direkt, **was** entsteht. Für komplizierte Schleifen mit mehreren Schritten bleibt die normale `for`-Schleife lesbarer.
+  - type: predict
+    code: |
+      werte = [-1, 2, 0, 5]
+      print([w * 2 for w in werte if w > 0])
+    options: ["[4, 10]", "[-2, 4, 0, 10]", "[4, 0, 10]", "[2, 5]"]
+    answer: "[4, 10]"
+    explanation: |
+      Zuerst filtert `if w > 0` (0 ist nicht größer als 0), dann wird jeder verbleibende Wert verdoppelt.
+  - type: text
+    body: |
+      ## Parallel laufen: `zip` und `enumerate`
+
+      - `zip(a, b)` liefert Paare `(a[0], b[0])`, `(a[1], b[1])`, … – ideal für zusammengehörige Listen wie Soll- und Ist-Werte. Es endet bei der **kürzeren** Liste.
+      - `enumerate(a)` liefert Paare `(index, element)`.
+
+      Beides entpackst du direkt in der `for`-Zeile. Auch Dicts lassen sich so bauen – als **Dict-Comprehension**:
+
+      ```python
+      {name: q for name, q in zip(namen, winkel)}
+      ```
+  - type: example
+    code: |
+      namen = ["schulter", "ellbogen", "hand"]
+      winkel = [0.5, -0.2, 0.0]
+
+      for i, name in enumerate(namen):
+          print(i, name)
+
+      for name, q in zip(namen, winkel):
+          print(name, q)
+
+      pose = {name: q for name, q in zip(namen, winkel)}
+      print(pose)
+    subgoals:
+      - lines: [1, 2]
+        label: Zwei zusammengehörige Listen
+      - lines: [4, 5]
+        label: Mit Index iterieren
+      - lines: [7, 8]
+        label: Paarweise iterieren
+      - lines: [10, 11]
+        label: Dict aus Paaren bauen
+  - type: explain
+    question: |
+      Warum schreibt man `for name, q in zip(namen, winkel)` statt `for i in range(len(namen))` mit `namen[i]` und `winkel[i]`?
+    options:
+      - text: Es sagt direkt, dass die Listen paarweise zusammengehören, und vermeidet Indexfehler.
+        correct: true
+        why: Weniger Indizes heißt weniger Gelegenheiten für Off-by-one-Fehler, und der Code liest sich wie die Absicht.
+      - text: "`range(len(...))` funktioniert bei Listen mit Kommazahlen nicht."
+        correct: false
+        why: Der Index ist immer eine ganze Zahl; die Werte dürfen beliebig sein. Beide Varianten funktionieren.
+      - text: "`zip` prüft, dass beide Listen gleich lang sind."
+        correct: false
+        why: Im Gegenteil – `zip` hört still bei der kürzeren Liste auf. Unterschiedliche Längen fallen dadurch nicht auf.
+  - type: predict
+    code: |
+      a = [1, 2, 3]
+      b = ["x", "y"]
+      print(list(zip(a, b)))
+    options:
+      - "[(1, 'x'), (2, 'y')]"
+      - "[(1, 'x'), (2, 'y'), (3, None)]"
+      - "[1, 'x', 2, 'y']"
+      - "[(1, 2, 3), ('x', 'y')]"
+    answer: "[(1, 'x'), (2, 'y')]"
+    explanation: |
+      `zip` endet bei der kürzeren Liste; die 3 fällt ohne Fehlermeldung weg. `list(...)` macht die Paare sichtbar.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne den Regelfehler „Soll minus Ist“ (in mm) für jedes Gelenk. Erwartet: `[20, 0, -30]`.
+    code: |
+      soll = [100, 50, -20]
+      ist = [80, 50, 10]
+      fehler = [___ for s, i in ___(soll, ist)]
+      print(fehler)
+    blanks:
+      - answer: s - i
+        options: [s - i, i - s, "s, i"]
+      - answer: zip
+        options: [zip, enumerate, range]
+    expect_output: "[20, 0, -30]"
+  - type: parsons
+    fading: true
+    prompt: |
+      Gib Index und Wert aller Messungen über 1,0 aus.
+    lines:
+      - "werte = [0.2, 1.7, 0.4, 2.1]"
+      - "for i, w in enumerate(werte):"
+      - "    if w > 1.0:"
+      - '        print("Index", i, "Wert", w)'
+    distractors:
+      - "for i, w in werte:"
+      - "for w, i in enumerate(werte):"
+    expect_output: |
+      Index 1 Wert 1.7
+      Index 3 Wert 2.1
+  - type: exercise
+    mode: modify
+    prompt: |
+      `nahe_cm` soll nur Abstände **unter 500 mm** behalten und sie in **cm** umrechnen (durch 10 teilen). Ändere die Comprehension.
+
+      Beispiel: `nahe_cm([800, 150, 1200, 50, 400])` → `[15.0, 5.0, 40.0]`
+    starter: |
+      def nahe_cm(abstaende_mm):
+          return [a for a in abstaende_mm]
+    solution: |
+      def nahe_cm(abstaende_mm):
+          return [a / 10 for a in abstaende_mm if a < 500]
+    tests:
+      - name: Beispiel
+        code: |
+          r = nahe_cm([800, 150, 1200, 50, 400])
+          assert r == [15.0, 5.0, 40.0], f"Erwartet [15.0, 5.0, 40.0], bekommen {r}"
+      - name: Grenze 500 mm
+        code: |
+          r = nahe_cm([500, 499])
+          assert r == [49.9], f"500 mm ist nicht unter 500 – erwartet [49.9], bekommen {r}"
+      - name: Nichts in der Nähe
+        code: |
+          r = nahe_cm([900, 1000])
+          assert r == [], f"Erwartet [], bekommen {r}"
+    mutants:
+      - |
+        def nahe_cm(abstaende_mm):
+            return [a / 10 for a in abstaende_mm if a <= 500]
+      - |
+        def nahe_cm(abstaende_mm):
+            return [a * 10 for a in abstaende_mm if a < 500]
+      - |
+        def nahe_cm(abstaende_mm):
+            return [a / 10 for a in abstaende_mm]
+    hints:
+      - "Teilziel: erst filtern, dann umrechnen – beides in der Comprehension."
+      - "Der Ausdruck vorne bestimmt den neuen Wert, `if …` hinten den Filter."
+      - "`[a / 10 for a in abstaende_mm if a < 500]`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `argmax(werte)`, die den **Index** des größten Werts zurückgibt (bei Gleichstand den ersten). Nutze `enumerate`. Diese Funktion brauchst du später, um die beste Aktion eines Roboters auszuwählen.
+
+      Beispiel: `argmax([3, 7, 2])` → `1`
+    starter: |
+      def argmax(werte):
+          bester = 0
+          # über enumerate(werte) laufen
+          return bester
+    solution: |
+      def argmax(werte):
+          bester = 0
+          for i, w in enumerate(werte):
+              if w > werte[bester]:
+                  bester = i
+          return bester
+    tests:
+      - name: Beispiel
+        code: |
+          assert argmax([3, 7, 2]) == 1, f"argmax([3, 7, 2]) sollte 1 sein, liefert {argmax([3, 7, 2])}"
+      - name: Ein Element
+        code: |
+          assert argmax([5]) == 0, f"argmax([5]) sollte 0 sein, liefert {argmax([5])}"
+      - name: Nur negative Werte
+        code: |
+          assert argmax([-3, -1, -2]) == 1, f"argmax([-3, -1, -2]) sollte 1 sein, liefert {argmax([-3, -1, -2])}"
+      - name: Gleichstand
+        code: |
+          assert argmax([4, 9, 9]) == 1, f"Bei Gleichstand der erste Index – argmax([4, 9, 9]) sollte 1 sein, liefert {argmax([4, 9, 9])}"
+          assert argmax([2, 1, 8]) == 2, f"argmax([2, 1, 8]) sollte 2 sein, liefert {argmax([2, 1, 8])}"
+    mutants:
+      - |
+        def argmax(werte):
+            bester = 0
+            for i, w in enumerate(werte):
+                if w >= werte[bester]:
+                    bester = i
+            return bester
+      - |
+        def argmax(werte):
+            bester = 0
+            for i, w in enumerate(werte):
+                if w > werte[bester]:
+                    bester = i
+            return werte[bester]
+      - |
+        def argmax(werte):
+            bester = 0
+            for i, w in enumerate(werte):
+                if w > bester:
+                    bester = i
+            return bester
+    hints:
+      - "Teilziel: jeden Wert mit dem bisher besten vergleichen und dessen **Index** merken."
+      - "`bester` ist ein Index – der zugehörige Wert ist `werte[bester]`."
+      - "`if w > werte[bester]:` dann `bester = i`"
+  - type: quiz
+    question: Was ergibt `[c for c in "robot" if c != "o"]`?
+    options:
+      - text: "`['r', 'b', 't']`"
+        correct: true
+        why: Ein String ist eine Folge von Zeichen; alle `o` werden herausgefiltert.
+      - text: "`'rbt'`"
+        correct: false
+        why: Eine List-Comprehension liefert immer eine **Liste**, keinen String.
+      - text: "`['o', 'o']`"
+        correct: false
+        why: Die Bedingung behält Zeichen, die **ungleich** `o` sind.
+cards:
+  - id: m02-c-comprehension
+    concept: m02-comprehension
+    variants:
+      - type: predict
+        code: |
+          print([i * i for i in range(4)])
+        options: ["[0, 1, 4, 9]", "[1, 4, 9, 16]", "[0, 1, 2, 3]"]
+        answer: "[0, 1, 4, 9]"
+        explanation: "`range(4)` liefert 0 bis 3; jede Zahl wird quadriert."
+      - type: predict
+        code: |
+          print([x - 1 for x in [3, 0, 8] if x > 1])
+        options: ["[2, 7]", "[2, -1, 7]", "[3, 8]"]
+        answer: "[2, 7]"
+        explanation: Erst filtern (0 fällt weg), dann 1 abziehen.
+      - type: predict
+        code: |
+          d = {k: k * 2 for k in [1, 2]}
+          print(d)
+        options: ["{1: 2, 2: 4}", "[2, 4]", "{2: 1, 4: 2}"]
+        answer: "{1: 2, 2: 4}"
+        explanation: "Eine Dict-Comprehension erzeugt Paare `schluessel: wert`."
+  - id: m02-c-zip-enumerate
+    concept: m02-zip-enumerate
+    variants:
+      - type: predict
+        code: |
+          for i, c in enumerate(["a", "b"]):
+              print(i, c)
+        options:
+          - |
+            0 a
+            1 b
+          - |
+            1 a
+            2 b
+          - |
+            a 0
+            b 1
+        answer: |
+          0 a
+          1 b
+        explanation: "`enumerate` beginnt bei 0 und liefert (Index, Element)."
+      - type: predict
+        code: |
+          s = 0
+          for a, b in zip([1, 2, 3], [10, 20]):
+              s = s + a * b
+          print(s)
+        options: ["50", "53", "140"]
+        answer: "50"
+        explanation: "`zip` endet bei der kürzeren Liste: $1 \\cdot 10 + 2 \\cdot 20 = 50$."

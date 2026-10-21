@@ -1,0 +1,223 @@
+id: m19-ros2
+title: ROS 2 – wann du es brauchst
+minutes: 8
+goals:
+  - Nodes, Topics, Services und Actions als Konzepte unterscheiden
+  - Die aktuelle LTS-Distribution kennen
+  - Entscheiden, ob ein Projekt ROS 2 braucht
+concepts: [ros2-middleware]
+steps:
+  - type: text
+    body: |
+      ## Was ist ROS 2?
+
+      ROS 2 (Robot Operating System) ist kein Betriebssystem, sondern **Middleware** plus Werkzeuge und ein großes Paket-Ökosystem. Ein Robotersystem wird in **Nodes** zerlegt – eigenständige Programme, z. B. Kameratreiber, Regler, Planer. Sie kommunizieren über:
+
+      - **Topics**: Publish/Subscribe-Datenströme, z. B. Gelenkstellungen 100-mal pro Sekunde. Wer sendet, weiß nicht, wer zuhört.
+      - **Services**: Anfrage → Antwort, z. B. „kalibriere jetzt“.
+      - **Actions**: lange Aufgaben mit Zwischenmeldungen und Abbruchmöglichkeit, z. B. „fahre zu Pose X“.
+
+      Nodes können auf verschiedenen Rechnern laufen und in C++ oder Python geschrieben sein.
+  - type: example
+    intro: |
+      Eine Spielversion von Publish/Subscribe in reinem Python. ROS 2 macht dasselbe – nur über Prozess- und Rechnergrenzen hinweg und mit festen Nachrichtentypen.
+    code: |
+      abonnenten = {}
+
+      def subscribe(topic, callback):
+          abonnenten.setdefault(topic, []).append(callback)
+
+      def publish(topic, nachricht):
+          for callback in abonnenten.get(topic, []):
+              callback(nachricht)
+
+      def regler(msg):
+          print("Regler bekommt", msg)
+
+      def logger(msg):
+          print("Logger speichert", msg)
+
+      subscribe("/joint_states", regler)
+      subscribe("/joint_states", logger)
+      publish("/joint_states", [0.1, -0.4])
+      publish("/camera", "bild")
+    subgoals:
+      - lines: [1, 8]
+        label: Topic-Verwaltung anlegen
+      - lines: [10, 14]
+        label: Nodes als Callbacks definieren
+      - lines: [16, 19]
+        label: Abonnieren und Nachrichten senden
+    after: |
+      Beide Abonnenten bekommen die Gelenkstellungen. Die Nachricht auf `/camera` verschwindet einfach – niemand hört zu. Der Sender muss die Empfänger nicht kennen; das macht ROS-Systeme modular.
+  - type: predict
+    code: |
+      abonnenten = {}
+      def subscribe(topic, callback):
+          abonnenten.setdefault(topic, []).append(callback)
+      def publish(topic, nachricht):
+          for callback in abonnenten.get(topic, []):
+              callback(nachricht)
+
+      subscribe("/cmd", lambda m: print("Arm:", m))
+      publish("/status", "ok")
+      publish("/cmd", 0.5)
+    options:
+      - "Arm: 0.5"
+      - |
+        Arm: ok
+        Arm: 0.5
+      - |
+        ok
+        0.5
+      - "Fehler: /status existiert nicht"
+    answer: "Arm: 0.5"
+    explanation: |
+      Auf `/status` hat niemand abonniert – kein Fehler, keine Ausgabe. Nur `/cmd` erreicht den Arm.
+  - type: text
+    body: |
+      ## Distributionen
+
+      | Distribution | erschienen | Support bis | Typ |
+      |---|---|---|---|
+      | **Lyrical Luth** | 22.05.2026 | Mai 2031 | LTS |
+      | Kilted Kaiju | 23.05.2025 | Dezember 2026 | kurz |
+      | Jazzy Jalisco | 23.05.2024 | Mai 2029 | LTS |
+      | Humble Hawksbill | 23.05.2022 | Mai 2027 | LTS |
+
+      Lyrical ist die aktuelle LTS-Version, mit Ubuntu 26.04 als Hauptplattform (Tier 1) ([ROS-2-Doku, Quelltext](https://github.com/ros2/ros2_documentation/blob/rolling/source/Releases.rst), [Lyrical](https://github.com/ros2/ros2_documentation/blob/rolling/source/Releases/Release-Lyrical-Luth.rst)). Prüfe vor dem Start, ob die Pakete, die du brauchst (z. B. MoveIt), schon für deine Distribution veröffentlicht sind. *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Brauchst du ROS 2?
+
+      **Eher ja**, wenn
+      - mehrere Sensoren, Rechner oder Programme zusammenarbeiten sollen,
+      - es für deine Hardware schon ROS-Treiber gibt (viele Industriearme, mobile Basen, Lidar),
+      - du fertige Bausteine willst: Bewegungsplanung mit [MoveIt](https://moveit.ai/), Hardware-Abstraktion mit [ros2_control](https://control.ros.org/), Navigation mit [Nav2](https://docs.nav2.org/), Visualisierung und Aufzeichnung.
+
+      **Eher nein**, wenn du einen SO-101 mit LeRobot betreibst (die Servos hängen per USB direkt am Rechner) oder in Gymnasium/MuJoCo lernst. Für das **Lernen** einer Policy brauchst du ROS nicht – erst für die Integration in ein größeres System.
+  - type: explain
+    question: |
+      Du willst einen SO-101 mit ACT einen Würfel greifen lassen. Später soll derselbe Arm auf einer fahrbaren Plattform mit Lidar sitzen, die durch die Wohnung navigiert. Was ist sinnvoll?
+    options:
+      - text: Jetzt LeRobot ohne ROS; ROS 2 erst für das Gesamtsystem mit Navigation, Lidar und mehreren Komponenten.
+        correct: true
+        why: Genau. Für das Greifen reicht LeRobot. Bei vielen zusammenarbeitenden Komponenten lohnt sich ROS 2 mit fertigen Paketen wie Nav2.
+      - text: Sofort alles in ROS 2, sonst kann ACT nicht trainiert werden.
+        correct: false
+        why: Training und Ausführung von ACT laufen in LeRobot ohne ROS.
+      - text: ROS 2 nie, weil es nur für Industrieroboter ist.
+        correct: false
+        why: ROS 2 wird auch für Forschung und Hobbyprojekte genutzt – es lohnt sich, sobald das System groß genug wird.
+  - type: quiz
+    question: |
+      Du startest ein Projekt, das zwei bis drei Jahre laufen soll. Welche ROS-2-Distribution ist (Stand: Oktober 2026) die naheliegende Wahl?
+    options:
+      - text: Lyrical Luth – aktuelle LTS mit Support bis Mai 2031
+        correct: true
+        why: Eine LTS-Version mit langem Support vermeidet einen Umstieg mitten im Projekt – sofern deine Pakete dafür verfügbar sind.
+      - text: Kilted Kaiju
+        correct: false
+        why: Keine LTS; laut Tabelle endet der Support im Dezember 2026.
+      - text: Humble Hawksbill
+        correct: false
+        why: Support nur noch bis Mai 2027 – zu kurz für dieses Projekt.
+cards:
+  - id: m19-c-pubsub
+    concept: ros2-middleware
+    variants:
+      - type: predict
+        code: |
+          abonnenten = {}
+          def subscribe(topic, callback):
+              abonnenten.setdefault(topic, []).append(callback)
+          def publish(topic, nachricht):
+              for callback in abonnenten.get(topic, []):
+                  callback(nachricht)
+          subscribe("/odom", lambda m: print("A", m))
+          subscribe("/odom", lambda m: print("B", m))
+          publish("/odom", 3)
+        options:
+          - |
+            A 3
+            B 3
+          - "A 3"
+          - "B 3"
+          - |
+            B 3
+            A 3
+        answer: |
+          A 3
+          B 3
+        explanation: Jeder Abonnent eines Topics bekommt jede Nachricht – hier in der Reihenfolge des Abonnierens.
+      - type: quiz
+        question: |
+          Ein Node veröffentlicht Kamerabilder auf einem Topic. Muss er wissen, welche Nodes die Bilder verwenden?
+        options:
+          - text: Nein – Publisher und Subscriber sind entkoppelt.
+            correct: true
+            why: Das ist der Kern von Publish/Subscribe.
+          - text: Ja, er muss jeden Empfänger direkt aufrufen.
+            correct: false
+            why: Das wäre eine feste Kopplung, die Topics gerade vermeiden.
+          - text: Ja, sonst gibt es einen Fehler.
+            correct: false
+            why: Ein Topic ohne Abonnenten ist kein Fehler.
+  - id: m19-c-ros-kommunikation
+    concept: ros2-middleware
+    variants:
+      - type: quiz
+        question: |
+          „Fahre den Arm zu Pose X und melde zwischendurch den Fortschritt“ – welcher ROS-2-Mechanismus passt?
+        options:
+          - text: Action
+            correct: true
+            why: Actions sind für lange Aufgaben mit Feedback und Abbruch gedacht.
+          - text: Topic
+            correct: false
+            why: Topics sind kontinuierliche Datenströme ohne Auftrag und Antwort.
+          - text: Service
+            correct: false
+            why: Services sind kurze Anfrage-Antwort-Aufrufe ohne Zwischenmeldungen.
+      - type: quiz
+        question: |
+          Gelenkstellungen sollen 100-mal pro Sekunde an Regler und Logger gehen. Welcher Mechanismus passt?
+        options:
+          - text: Topic
+            correct: true
+            why: Ein kontinuierlicher Datenstrom an beliebig viele Empfänger.
+          - text: Service
+            correct: false
+            why: Für jede Messung eine Anfrage zu stellen wäre umständlich.
+          - text: Action
+            correct: false
+            why: Es gibt kein Ziel, das erreicht werden soll – nur Daten.
+  - id: m19-c-ros-wann
+    concept: ros2-middleware
+    variants:
+      - type: quiz
+        question: |
+          In welchem Fall lohnt sich ROS 2 am meisten?
+        options:
+          - text: Ein Industriearm mit vorhandenem ROS-Treiber, zwei Kameras und Bewegungsplanung mit MoveIt
+            correct: true
+            why: Fertige Treiber und Pakete plus mehrere Komponenten – genau dafür ist ROS gemacht.
+          - text: Eine Policy für Reacher-v5 in Colab trainieren
+            correct: false
+            why: Dafür reichen Gymnasium und PyTorch.
+          - text: Einen einzelnen SO-101 mit LeRobot steuern
+            correct: false
+            why: LeRobot spricht die Servos direkt per USB an.
+      - type: quiz
+        question: |
+          Was bedeutet „LTS“ bei einer ROS-2-Distribution?
+        options:
+          - text: Long Term Support – mehrere Jahre Fehlerkorrekturen bei stabiler Schnittstelle
+            correct: true
+            why: Darum eignen sich LTS-Versionen für länger laufende Projekte.
+          - text: Die schnellste Version
+            correct: false
+            why: LTS sagt etwas über die Supportdauer, nicht über Geschwindigkeit.
+          - text: Eine Version nur für Simulation
+            correct: false
+            why: LTS-Versionen sind vollwertige Distributionen.

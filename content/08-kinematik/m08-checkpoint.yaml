@@ -1,0 +1,253 @@
+id: m08-checkpoint
+title: "Checkpoint: Kinematik"
+kind: checkpoint
+minutes: 15
+goals:
+  - FK, Arbeitsraum, IK, Jacobi-Matrix und Singularitäten sicher anwenden
+concepts: [vorwaertskinematik, fk-kette, arbeitsraum, inverse-kinematik, jacobi-matrix, differentielle-ik, singularitaet]
+steps:
+  - type: predict
+    code: |
+      import numpy as np
+
+      q = [np.pi / 2, np.pi / 2]
+      x = np.cos(q[0]) + np.cos(q[0] + q[1])
+      y = np.sin(q[0]) + np.sin(q[0] + q[1])
+      print(f"{x:.1f} {y:.1f}")
+    options: ["-1.0 1.0", "0.0 2.0", "1.0 1.0", "-2.0 0.0"]
+    answer: "-1.0 1.0"
+    explanation: |
+      Glied 1 nach oben bis $(0, 1)$, Glied 2 absolut in Richtung $\pi$, also nach links: $(-1, 1)$.
+  - type: quiz
+    question: |
+      Ein Arm hat $l_1 = 1.2$ m und $l_2 = 0.7$ m, keine Gelenkgrenzen. Welche Aussage über den Arbeitsraum stimmt?
+    options:
+      - text: Ring mit Innenradius 0.5 m und Außenradius 1.9 m
+        correct: true
+        why: $|l_1 - l_2|$ und $l_1 + l_2$.
+      - text: Kreisscheibe mit Radius 1.9 m
+        correct: false
+        why: Eine volle Scheibe gibt es nur bei $l_1 = l_2$.
+      - text: Ring mit Innenradius 0.7 m und Außenradius 1.2 m
+        correct: false
+        why: Das sind die Gliedlängen, nicht die Radien.
+  - type: parsons
+    prompt: |
+      Baue `fk_chain(q, links)` für beliebig viele Gelenke (relative Winkel). Rückgabe: alle Gelenkpositionen inklusive Basis.
+    lines:
+      - "import numpy as np"
+      - "def fk_chain(q, links):"
+      - "    pts = [(0.0, 0.0)]"
+      - "    angle, x, y = 0.0, 0.0, 0.0"
+      - "    for qi, li in zip(q, links):"
+      - "        angle += qi"
+      - "        x += li * np.cos(angle)"
+      - "        y += li * np.sin(angle)"
+      - "        pts.append((x, y))"
+      - "    return np.array(pts)"
+    distractors: ["        angle = qi", "    return pts[-1]"]
+    tests:
+      - name: Vergleich mit lab.arm_points
+        code: |
+          import numpy as np
+          import lab
+          for q, links in [([0.3, -0.8, 1.1], [1.0, 0.6, 0.4]), ([2.0, 0.5], [1.0, 1.0])]:
+              ref = np.array(lab.arm_points(q, links))
+              assert close(fk_chain(q, links), ref), f"Für q={q} stimmen die Gelenkpositionen nicht."
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `ik(p, l1=1.0, l2=1.0, elbow=1)` für den 2-Gelenk-Arm: Rückgabe `np.array([q1, q2])` mit `fk(ik(p)) ≈ p`, Vorzeichen von $q_2$ = `elbow`, `ValueError` bei unerreichbaren Zielen. `fk` ist gegeben.
+    starter: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          pass
+    solution: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]),
+                           l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+
+      def ik(p, l1=1.0, l2=1.0, elbow=1):
+          x, y = p
+          c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+          if abs(c2) > 1:
+              raise ValueError("nicht erreichbar")
+          q2 = elbow * np.arccos(c2)
+          q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+          return np.array([q1, q2])
+    tests:
+      - name: Zurückrechnen über FK
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(21)
+          for _ in range(6):
+              l1, l2 = rng.uniform(0.5, 1.5, 2)
+              p = fk(rng.uniform([-np.pi, 0.2], [np.pi, 2.9]), l1, l2)
+              for e in (1, -1):
+                  q = ik(p, l1, l2, elbow=e)
+                  assert close(fk(q, l1, l2), p), f"fk(ik(p)) ≠ p für p={np.round(p, 3)}, elbow={e}"
+                  assert np.sign(q[1]) == e, f"Vorzeichen von q2 sollte {e} sein, q2 = {q[1]:.3f}"
+      - name: Unerreichbar
+        code: |
+          try:
+              ik((0.0, 2.3))
+          except ValueError:
+              pass
+          else:
+              raise AssertionError("ik((0, 2.3)) sollte ValueError auslösen (Reichweite 2).")
+    mutants:
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            if abs(c2) > 1:
+                raise ValueError("nicht erreichbar")
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan(y / x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan2(y, x) - np.arctan2(l2 * np.sin(q2), l1 + l2 * np.cos(q2))
+            return np.array([q1, q2])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+        def ik(p, l1=1.0, l2=1.0, elbow=1):
+            x, y = p
+            c2 = (x**2 + y**2 - l1**2 - l2**2) / (2 * l1 * l2)
+            if abs(c2) > 1:
+                raise ValueError("nicht erreichbar")
+            q2 = elbow * np.arccos(c2)
+            q1 = np.arctan2(y, x) - np.arctan2(l1 * np.sin(q2), l2 + l1 * np.cos(q2))
+            return np.array([q1, q2])
+    hints:
+      - "Teilziel: erst $q_2$ per Kosinussatz (mit Erreichbarkeitsprüfung), dann $q_1$."
+      - $\cos q_2 = (r^2 - l_1^2 - l_2^2)/(2 l_1 l_2)$; $q_1 = \operatorname{atan2}(y, x) - \operatorname{atan2}(l_2\sin q_2, l_1 + l_2\cos q_2)$.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `jacobian(q, l1=1.0, l2=1.0)` – die 2×2-Jacobi-Matrix der FK als NumPy-Array.
+    starter: |
+      import numpy as np
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          pass
+    solution: |
+      import numpy as np
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12],
+                           [l1 * c1 + l2 * c12, l2 * c12]])
+    tests:
+      - name: Vergleich mit numerischer Ableitung
+        code: |
+          import numpy as np
+          def _fk(q, l1, l2):
+              return np.array([l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1]), l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])])
+          rng = np.random.default_rng(8)
+          for _ in range(6):
+              q = rng.uniform(-np.pi, np.pi, 2)
+              l1, l2 = rng.uniform(0.4, 1.6, 2)
+              Jn = np.stack([(_fk(q + 1e-6 * e, l1, l2) - _fk(q - 1e-6 * e, l1, l2)) / 2e-6 for e in np.eye(2)], axis=1)
+              J = np.asarray(jacobian(q, l1, l2))
+              assert J.shape == (2, 2) and close(J, Jn, tol=1e-6), f"Bei q={np.round(q, 2)}: erwartet {np.round(Jn, 3).tolist()}, bekommen {np.round(J, 3).tolist()}"
+    mutants:
+      - |
+        import numpy as np
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-l1 * s1 - l2 * s12, l1 * c1 + l2 * c12], [-l2 * s12, l2 * c12]])
+      - |
+        import numpy as np
+        def jacobian(q, l1=1.0, l2=1.0):
+            s1, c1 = np.sin(q[0]), np.cos(q[0])
+            s2, c2 = np.sin(q[1]), np.cos(q[1])
+            return np.array([[-l1 * s1 - l2 * s2, -l2 * s2], [l1 * c1 + l2 * c2, l2 * c2]])
+    hints:
+      - "Teilziel: Spalte i = Ableitung von (x, y) nach $q_i$."
+      - "Zeile 1: `[-l1 * s1 - l2 * s12, -l2 * s12]`, Zeile 2: `[l1 * c1 + l2 * c12, l2 * c12]`."
+  - type: predict
+    code: |
+      import numpy as np
+
+      x, y = 0.0, -2.4
+      c2 = (x**2 + y**2 - 1.0 - 1.0) / 2.0
+      print(round(c2, 2), np.arccos(c2))
+    options: ["1.88 nan", "1.88 0.0", "-1.88 nan", "1.88 3.14"]
+    answer: "1.88 nan"
+    explanation: |
+      $\cos q_2 > 1$: Ziel außerhalb der Reichweite 2 (Abstand 2.4). NumPy liefert `nan` statt eines Fehlers.
+  - type: fill
+    prompt: |
+      Ergänze die Iteration der differentiellen IK (DLS, $\lambda = 0.1$, $\alpha = 0.5$).
+    code: |
+      import numpy as np
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      target = np.array([-0.7, 1.1])
+      q = np.array([0.3, 0.6])
+      for k in range(80):
+          J = jacobian(q)
+          e = ___
+          dq = J.T @ np.linalg.solve(J @ J.T + 0.01 * np.eye(2), e)
+          q = ___
+      print(np.round(fk(q), 2))
+    blanks:
+      - answer: "target - fk(q)"
+        options: ["target - fk(q)", "fk(q) - target", "target - q"]
+      - answer: "q + 0.5 * dq"
+        options: ["q + 0.5 * dq", "q - 0.5 * dq", "0.5 * dq"]
+    expect_output: "[-0.7  1.1]"
+  - type: quiz
+    question: |
+      Für welche Stellung ist die Jacobi-Matrix eines 2-Gelenk-Arms singulär?
+    options:
+      - text: $q = (1.2, \pi)$
+        correct: true
+        why: $\det J = l_1 l_2 \sin \pi = 0$ – der Arm ist gefaltet.
+      - text: $q = (0, \pi/2)$
+        correct: false
+        why: $\sin(\pi/2) = 1$ – hier ist $|\det J|$ maximal.
+      - text: $q = (\pi, 1.0)$
+        correct: false
+        why: $q_1$ spielt keine Rolle; $\sin 1.0 \neq 0$.
+  - type: quiz
+    question: |
+      Was beschreibt die **erste Spalte** der Jacobi-Matrix?
+    options:
+      - text: Die Spitzengeschwindigkeit, wenn nur Gelenk 1 mit 1 rad/s dreht
+        correct: true
+        why: $J e_1$ – Ableitung der FK nach $q_1$.
+      - text: Die x-Komponenten der Spitzengeschwindigkeit für beide Gelenke
+        correct: false
+        why: Das ist die erste **Zeile**.
+      - text: Die Position des Ellbogens
+        correct: false
+        why: J enthält Ableitungen, keine Positionen.

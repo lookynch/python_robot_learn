@@ -1,0 +1,336 @@
+id: m01-fehler-lesen
+title: Fehlermeldungen lesen und beheben
+minutes: 10
+goals:
+  - Einen Traceback lesen – Zeile, Fehlertyp und Meldung finden
+  - NameError, TypeError, IndentationError und SyntaxError unterscheiden
+  - Typische Fehler gezielt beheben
+concepts: [traceback-lesen, fehlertypen]
+steps:
+  - type: text
+    body: |
+      ## Fehler sind Hinweise, keine Niederlagen
+
+      Bricht ein Programm ab, zeigt Python einen **Traceback**:
+
+      ```text
+      Traceback (most recent call last):
+        Datei <dein Code>, line 3, in <module>
+          strecke = geschwindigkiet * zeit
+                    ^^^^^^^^^^^^^^^
+      NameError: name 'geschwindigkiet' is not defined. Did you mean: 'geschwindigkeit'?
+      ```
+
+      Lies ihn **von unten nach oben**:
+
+      1. **Letzte Zeile**: Fehlertyp (`NameError`) und Meldung – *was* ist schiefgegangen?
+      2. **Darüber**: die betroffene Zeile (`line 3`), ihr Code und mit `^^^` die Stelle – *wo*?
+      3. Oft hilft Python mit: `Did you mean: 'geschwindigkeit'?` – hier ein Tippfehler.
+
+      Die Meldungen sind englisch, aber sehr regelmäßig. Nach ein paar Mal erkennst du sie sofort.
+  - type: quiz
+    question: |
+      Das Programm bricht mit diesem Traceback ab. Was ist die Ursache?
+
+      ```text
+      Traceback (most recent call last):
+        Datei <dein Code>, line 3, in <module>
+          abstand = ziel_x - start_x
+                             ^^^^^^^
+      NameError: name 'start_x' is not defined
+      ```
+    code: |
+      ziel_x = 0.8
+      ziel_y = 0.3
+      abstand = ziel_x - start_x
+      print(abstand)
+    options:
+      - text: In Zeile 3 wird `start_x` benutzt, aber vorher nie ein Wert dafür zugewiesen.
+        correct: true
+        why: "`NameError` heißt: Diesen Namen kennt Python (noch) nicht. Die `^^^` zeigen genau auf `start_x`."
+      - text: "`ziel_x` ist falsch geschrieben."
+        correct: false
+        why: "`ziel_x` wird in Zeile 1 definiert und ist bekannt – markiert ist `start_x`."
+      - text: Der Fehler liegt in Zeile 4, weil dort `abstand` ausgegeben wird.
+        correct: false
+        why: Zeile 4 wird nie erreicht. Der Traceback nennt Zeile 3.
+      - text: Man darf zwei Variablen nicht voneinander abziehen.
+        correct: false
+        why: Das ist erlaubt. Ein Rechenproblem wäre ein `TypeError`, kein `NameError`.
+  - type: quiz
+    question: |
+      Welche Änderung behebt diesen Fehler, sodass `Winkel: 30` ausgegeben wird?
+
+      ```text
+      Traceback (most recent call last):
+        Datei <dein Code>, line 2, in <module>
+          print("Winkel: " + winkel)
+                ~~~~~~~~~~~^~~~~~~~
+      TypeError: can only concatenate str (not "int") to str
+      ```
+    code: |
+      winkel = 30
+      print("Winkel: " + winkel)
+    options:
+      - text: '`print("Winkel: " + str(winkel))`'
+        correct: true
+        why: "`TypeError`: Die Typen passen nicht zum Operator. Mit `str()` sind beide Seiten Text und `+` verkettet. Ebenso ginge `f\"Winkel: {winkel}\"`."
+      - text: '`print("Winkel: " + "winkel")`'
+        correct: false
+        why: "Kein Fehler mehr – aber ausgegeben wird `Winkel: winkel`, der Name statt des Werts."
+      - text: '`print("Winkel: " winkel)`'
+        correct: false
+        why: Ohne Operator oder Komma ist das ein `SyntaxError`.
+      - text: '`print(int("Winkel: ") + winkel)`'
+        correct: false
+        why: '`int("Winkel: ")` ist kein Zahlentext – `ValueError`.'
+  - type: text
+    body: |
+      ## Die vier häufigsten Fehlertypen
+
+      | Typ | Bedeutung | typische Ursache |
+      |---|---|---|
+      | `NameError` | Name unbekannt | Tippfehler, Variable erst später definiert, Anführungszeichen vergessen |
+      | `TypeError` | Operation passt nicht zum Typ | Text + Zahl, `input()` nicht umgewandelt |
+      | `IndentationError` | Einrückung falsch | Block nach `:` nicht eingerückt, Zeile grundlos eingerückt |
+      | `SyntaxError` | Grammatik verletzt | `:` vergessen, Klammer oder `"` nicht geschlossen, `=` statt `==` |
+
+      Ein Unterschied ist wichtig: `SyntaxError` und `IndentationError` findet Python **bevor** das Programm startet – dann läuft gar nichts, und die Zeile `Traceback (most recent call last):` fehlt. `NameError` und `TypeError` treten erst **beim Ausführen** auf; alles davor ist schon passiert.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Das Programm bricht mit diesem Fehler ab. Behebe ihn, sodass `Strecke: 2.0 m` ausgegeben wird.
+
+      ```text
+      NameError: name 'geschwindigkiet' is not defined. Did you mean: 'geschwindigkeit'?
+      ```
+    starter: |
+      geschwindigkeit = 0.5
+      zeit = 4
+      strecke = geschwindigkiet * zeit
+      print(f"Strecke: {strecke} m")
+    solution: |
+      geschwindigkeit = 0.5
+      zeit = 4
+      strecke = geschwindigkeit * zeit
+      print(f"Strecke: {strecke} m")
+    tests:
+      - name: Ausgabe
+        code: |
+          assert lines() == ["Strecke: 2.0 m"], f"Erwartet ['Strecke: 2.0 m'], bekommen {lines()}"
+    mutants:
+      - |
+        geschwindigkeit = 0.5
+        zeit = 4
+        geschwindigkiet = 0
+        strecke = geschwindigkiet * zeit
+        print(f"Strecke: {strecke} m")
+      - |
+        geschwindigkeit = 0.5
+        zeit = 4
+        strecke = zeit
+        print(f"Strecke: {strecke} m")
+    hints:
+      - "Teilziel: die Zeile aus dem Traceback finden und den unbekannten Namen prüfen."
+      - Vergleiche den markierten Namen Buchstabe für Buchstabe mit der Zuweisung in Zeile 1.
+      - "In Zeile 3 sind `e` und `i` vertauscht – richtig heißt der Name `geschwindigkeit`."
+  - type: exercise
+    mode: modify
+    prompt: |
+      Behebe den `TypeError`, sodass genau `Gelenke: 3` ausgegeben wird.
+    starter: |
+      anzahl = 3
+      print("Gelenke: " + anzahl)
+    solution: |
+      anzahl = 3
+      print("Gelenke: " + str(anzahl))
+    tests:
+      - name: Ausgabe
+        code: |
+          assert lines() == ["Gelenke: 3"], f"Erwartet ['Gelenke: 3'], bekommen {lines()}"
+    mutants:
+      - |
+        anzahl = 3
+        print("Gelenke: " + "anzahl")
+      - |
+        anzahl = 3
+        print("Gelenke: ", anzahl)
+      - |
+        anzahl = "3"
+        print("Gelenke:" + anzahl)
+    hints:
+      - "Teilziel: beide Seiten von `+` zum selben Typ machen."
+      - "`+` verbindet nur Text mit Text. Eine Zahl wird mit `str()` zu Text – alternativ geht ein f-String."
+      - '`print("Gelenke: " + str(anzahl))`'
+    explanation: |
+      Auch `print(f"Gelenke: {anzahl}")` oder `print("Gelenke:", anzahl)` funktionieren. Bei der Komma-Variante setzt `print` das Leerzeichen selbst – im Text darf dann keins mehr stehen, sonst sind es zwei.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Python meldet `IndentationError: expected an indented block after 'if' statement on line 2`. Behebe den Fehler: `zu heiß` soll nur über 80 Grad erscheinen, `fertig` **immer**. Bei 70 Grad also nur `fertig`.
+    starter: |
+      temperatur = 70
+      if temperatur > 80:
+      print("zu heiß")
+      print("fertig")
+    solution: |
+      temperatur = 70
+      if temperatur > 80:
+          print("zu heiß")
+      print("fertig")
+    tests:
+      - name: Bei 70 Grad nur fertig
+        code: |
+          assert lines() == ["fertig"], f"Bei 70 Grad erwartet ['fertig'], bekommen {lines()}"
+    mutants:
+      - |
+        temperatur = 70
+        if temperatur > 80:
+            print("zu heiß")
+            print("fertig")
+      - |
+        temperatur = 70
+        print("zu heiß")
+        print("fertig")
+      - |
+        temperatur = 70
+            if temperatur > 80:
+            print("zu heiß")
+        print("fertig")
+    hints:
+      - "Teilziel: entscheiden, welche Zeilen zum `if`-Block gehören."
+      - Nach einer Zeile mit Doppelpunkt muss mindestens eine eingerückte Zeile folgen. Nur was zum Block gehört, wird eingerückt.
+      - Rücke nur `print("zu heiß")` um 4 Leerzeichen ein.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Python meldet `SyntaxError: expected ':'`. Behebe den Fehler, sodass `Gelenk 0`, `Gelenk 1`, `Gelenk 2` ausgegeben werden.
+    starter: |
+      for i in range(3)
+          print("Gelenk", i)
+    solution: |
+      for i in range(3):
+          print("Gelenk", i)
+    tests:
+      - name: Drei Gelenke
+        code: |
+          assert lines() == ["Gelenk 0", "Gelenk 1", "Gelenk 2"], f"Erwartet Gelenk 0 bis 2, bekommen {lines()}"
+    mutants:
+      - |
+        for i in range(3):
+        print("Gelenk", i)
+      - |
+        for i in range(1, 3):
+            print("Gelenk", i)
+    hints:
+      - "Teilziel: die markierte Zeile nach dem fehlenden Zeichen absuchen."
+      - Zeilen mit `for`, `while`, `if`, `elif` und `else` enden mit einem Doppelpunkt.
+      - "`for i in range(3):`"
+  - type: quiz
+    question: |
+      Was erscheint im Terminal, wenn dieses Programm läuft?
+    code: |
+      print("Start")
+      x = 5
+      print(y)
+    options:
+      - text: "Zuerst `Start`, dann ein Traceback mit `NameError` für Zeile 3."
+        correct: true
+        why: Ein `NameError` tritt erst beim Ausführen von Zeile 3 auf. Zeile 1 ist da schon gelaufen.
+      - text: Nur der Traceback, `Start` erscheint nicht.
+        correct: false
+        why: So wäre es bei einem `SyntaxError` – der verhindert den Start. Ein `NameError` passiert erst unterwegs.
+      - text: "`Start` und dann `5`."
+        correct: false
+        why: "`y` ist nicht `x` – Python rät nicht, welcher Name gemeint war."
+      - text: "`Start` und eine leere Zeile, weil `y` leer ist."
+        correct: false
+        why: Eine nie zugewiesene Variable ist nicht „leer“, sondern unbekannt → `NameError`.
+  - type: explain
+    question: |
+      Ein Traceback ist zehn Zeilen lang. Was ist die sinnvollste Reihenfolge beim Lesen?
+    options:
+      - text: Erst die letzte Zeile (Typ und Meldung), dann die genannte Zeilennummer und die `^`-Markierung im Code.
+        correct: true
+        why: Die letzte Zeile sagt, *was* passiert ist, die Angabe darüber, *wo*. Mit beidem findest du die Ursache meist sofort.
+      - text: Von oben nach unten alles genau lesen.
+        correct: false
+        why: Die obersten Zeilen sind meist am wenigsten hilfreich – das Wichtigste steht ganz unten.
+      - text: Den Traceback ignorieren und den Code noch einmal neu schreiben.
+        correct: false
+        why: Damit verschenkst du die genaueste Information, die du bekommen kannst.
+cards:
+  - id: m01-c-fehlertyp-erkennen
+    concept: fehlertypen
+    variants:
+      - type: quiz
+        question: Welchen Fehler erzeugt `print(Hallo)`?
+        options:
+          - text: "`NameError`"
+            correct: true
+            why: Ohne Anführungszeichen sucht Python eine Variable `Hallo`.
+          - text: "`SyntaxError`"
+            correct: false
+            why: Die Grammatik stimmt – nur der Name ist unbekannt.
+          - text: "`TypeError`"
+            correct: false
+            why: Es wird gar nicht gerechnet; der Name selbst fehlt.
+      - type: quiz
+        question: 'Welchen Fehler erzeugt `print("Achse " + 2)`?'
+        options:
+          - text: "`TypeError`"
+            correct: true
+            why: Text und Zahl lassen sich nicht mit `+` verbinden.
+          - text: "`NameError`"
+            correct: false
+            why: Alle Werte sind bekannt, nur ihre Typen passen nicht zusammen.
+          - text: "`ValueError`"
+            correct: false
+            why: "`ValueError` gibt es z. B. bei `int(\"2.5\")` – hier passt der Typ nicht."
+      - type: quiz
+        question: Welchen Fehler erzeugt eine `if`-Zeile ohne Doppelpunkt am Ende?
+        options:
+          - text: "`SyntaxError` (expected ':')"
+            correct: true
+            why: Der Doppelpunkt gehört zur Grammatik von `if`.
+          - text: "`IndentationError`"
+            correct: false
+            why: Die Einrückung kann korrekt sein – es fehlt ein Zeichen.
+          - text: "`NameError`"
+            correct: false
+            why: Mit Namen hat das nichts zu tun.
+  - id: m01-c-syntax-vor-start
+    concept: traceback-lesen
+    variants:
+      - type: quiz
+        question: Was erscheint im Terminal?
+        code: |
+          print("Start")
+          if 5 > 3
+              print("ja")
+        options:
+          - text: Nur der `SyntaxError` – auch `Start` erscheint nicht.
+            correct: true
+            why: Syntaxfehler findet Python, bevor das Programm überhaupt startet.
+          - text: "`Start`, dann der `SyntaxError`."
+            correct: false
+            why: So läuft es bei Fehlern, die erst beim Ausführen auftreten (z. B. `NameError`).
+          - text: "`Start` und `ja`."
+            correct: false
+            why: Der fehlende Doppelpunkt ist ein echter Fehler, Python ergänzt ihn nicht.
+      - type: quiz
+        question: Was erscheint im Terminal?
+        code: |
+          print("A")
+          print(1 + "2")
+          print("B")
+        options:
+          - text: "`A`, dann ein `TypeError` – `B` erscheint nicht."
+            correct: true
+            why: Zeile 1 läuft, Zeile 2 bricht ab, Zeile 3 wird nie erreicht.
+          - text: Nur der `TypeError`.
+            correct: false
+            why: Ein `TypeError` entsteht erst beim Ausführen – Zeile 1 ist dann schon gelaufen.
+          - text: "`A`, `3`, `B`."
+            correct: false
+            why: Python wandelt `"2"` nicht automatisch in eine Zahl um.

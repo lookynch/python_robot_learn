@@ -1,0 +1,352 @@
+id: m05-homogen
+title: Homogene Transformationen und Ketten
+minutes: 10
+goals:
+  - Rotation und Translation in einer 3×3-Matrix zusammenfassen
+  - Punkte (mit 1) und Richtungen (mit 0) richtig erweitern
+  - Gliedtransformationen zu einer Kette multiplizieren – die Vorstufe der Vorwärtskinematik
+concepts: [la-homogen, la-kette]
+steps:
+  - type: text
+    body: |
+      ## Drehen **und** Verschieben in einer Matrix
+
+      $\vec p' = R\,\vec p + \vec t$ ist keine Matrixmultiplikation allein. Trick: Hänge an jeden Punkt eine **1** an, $(x, y, 1)$, und schreibe
+
+      $$ T = \begin{pmatrix} R & \vec t \\ 0\;\,0 & 1 \end{pmatrix}, \qquad \begin{pmatrix} \vec p' \\ 1 \end{pmatrix} = T \begin{pmatrix} \vec p \\ 1 \end{pmatrix} $$
+
+      Das sind **homogene Koordinaten**. Der Gewinn: Mehrere Transformationen hintereinander sind einfach ein Produkt $T_1 T_2 T_3$.
+
+      **Robotik-Bild:** Jedes Glied ist eine Transformation „drehe um $q_i$, gehe $l_i$ entlang der neuen x-Achse“. Die Kette $T = T_1 T_2 \cdots$ führt von der Basis bis zur Spitze.
+  - type: example
+    code: |
+      import numpy as np
+
+      def transform(theta, tx, ty):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s, tx],
+                           [s, c, ty],
+                           [0.0, 0.0, 1.0]])
+
+      T = transform(np.pi / 2, 2.0, 0.0)
+      p = np.array([1.0, 0.0, 1.0])        # Punkt (1, 0) homogen
+      print(np.round(T, 3))
+      print(np.round(T @ p, 3))
+    subgoals:
+      - lines: [3, 7]
+        label: Homogene Matrix aus Winkel und Verschiebung
+      - lines: [9, 10]
+        label: Transformation und Punkt festlegen
+      - lines: [11, 12]
+        label: Anwenden und ausgeben
+    after: |
+      Erst wird $(1, 0)$ um 90° auf $(0, 1)$ gedreht, dann um $(2, 0)$ verschoben: $(2, 1)$. Die letzte Komponente bleibt 1.
+  - type: explain
+    question: |
+      Warum bekommen Punkte als dritte Koordinate eine **1**, Richtungsvektoren (z. B. eine Geschwindigkeit) aber eine **0**?
+    options:
+      - text: Die dritte Koordinate multipliziert die Translationsspalte. Mit 1 wird verschoben, mit 0 nur gedreht – eine Richtung ändert sich durch Verschieben nicht.
+        correct: true
+        why: Genau. Ein Punkt hat einen Ort, eine Richtung nicht.
+      - text: Die 1 ist nur Platzhalter; man könnte jede Zahl nehmen.
+        correct: false
+        why: Mit 2 würde doppelt verschoben (und das Ergebnis hätte nicht mehr 1 als letzte Komponente).
+      - text: Mit 0 wird der Vektor auf den Ursprung gesetzt.
+        correct: false
+        why: Gedreht wird er trotzdem; nur die Translation fällt weg.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def transform(theta, tx, ty):
+          c, s = np.cos(theta), np.sin(theta)
+          return np.array([[c, -s, tx], [s, c, ty], [0.0, 0.0, 1.0]])
+
+      T = transform(np.pi / 2, 2.0, 0.0)
+      richtung = np.array([1.0, 0.0, 0.0])
+      print(np.round(T @ richtung, 3))
+    options:
+      - "[0. 1. 0.]"
+      - "[2. 1. 0.]"
+      - "[2. 1. 1.]"
+      - "[3. 0. 0.]"
+    answer: "[0. 1. 0.]"
+    explanation: |
+      Mit 0 als dritter Komponente wirkt nur die Rotation: $(1, 0)$ wird zu $(0, 1)$, keine Verschiebung.
+  - type: example
+    intro: |
+      Für einen Arm definieren wir pro Glied `glied(q, l)`: drehe um `q`, dann gehe `l` entlang der neuen x-Achse. Die Translationsspalte ist dann $(l\cos q,\ l\sin q)$.
+    code: |
+      import numpy as np
+      import lab
+
+      def glied(q, l):
+          c, s = np.cos(q), np.sin(q)
+          return np.array([[c, -s, l * c],
+                           [s, c, l * s],
+                           [0.0, 0.0, 1.0]])
+
+      q1, q2 = 0.5, 0.9
+      l1, l2 = 1.0, 0.7
+      T1 = glied(q1, l1)
+      T12 = T1 @ glied(q2, l2)
+      ellbogen = T1[:2, 2]
+      spitze = T12[:2, 2]
+      formel = np.array([l1 * np.cos(q1) + l2 * np.cos(q1 + q2),
+                         l1 * np.sin(q1) + l2 * np.sin(q1 + q2)])
+      print(np.round(spitze, 4), np.allclose(spitze, formel))
+      lab.chain([[(0, 0), ellbogen, spitze]], title="Kette T1 · T2")
+    subgoals:
+      - lines: [4, 8]
+        label: Gliedtransformation definieren
+      - lines: [10, 13]
+        label: Kette von der Basis zur Spitze multiplizieren
+      - lines: [14, 15]
+        label: Positionen aus der Translationsspalte lesen
+      - lines: [16, 19]
+        label: Mit der FK-Formel vergleichen und zeichnen
+    after: |
+      Die Position jedes Gelenks steht in der letzten Spalte der Kette bis dorthin: `T[:2, 2]`. Das Ergebnis stimmt mit der Formel $x = l_1\cos q_1 + l_2\cos(q_1+q_2)$ usw. überein – ohne dass du $q_1 + q_2$ selbst addieren musstest; die Matrixmultiplikation erledigt das. `lab.chain` zeichnet einen Arm aus einer Liste von Stellungen, jede als Liste von Gelenkpositionen.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def glied(q, l):
+          c, s = np.cos(q), np.sin(q)
+          return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+      A1 = glied(np.pi / 2, 1.0)
+      A2 = glied(0.0, 1.0)
+      print(np.round((A1 @ A2)[:2, 2], 3))
+      print(np.round((A2 @ A1)[:2, 2], 3))
+    options:
+      - |
+        [0. 2.]
+        [1. 1.]
+      - |
+        [0. 2.]
+        [0. 2.]
+      - |
+        [1. 1.]
+        [0. 2.]
+      - |
+        [1. 1.]
+        [1. 1.]
+    answer: |
+      [0. 2.]
+      [1. 1.]
+    explanation: |
+      `A1 @ A2`: Erst Gelenk 1 um 90° (Glied zeigt nach oben), Glied 2 setzt gerade fort → Spitze bei $(0, 2)$. `A2 @ A1` beschreibt einen **anderen** Arm: erst ein gerades Glied nach rechts, dann um 90° nach oben → $(1, 1)$. Die Reihenfolge Basis → Spitze ist von links nach rechts.
+  - type: fill
+    fading: true
+    prompt: |
+      Berechne die Spitze für beliebig viele Glieder mit einer Schleife: Kette von links nach rechts aufmultiplizieren, am Ende die Position aus der Translationsspalte lesen.
+    code: |
+      import numpy as np
+
+      def glied(q, l):
+          c, s = np.cos(q), np.sin(q)
+          return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+      q = [np.pi / 2, -np.pi / 2]
+      l = [1.0, 1.0]
+      T = np.eye(3)
+      for qi, li in zip(q, l):
+          T = T ___ glied(qi, li)
+      print(np.round(T[:2, ___], 3))
+    blanks:
+      - answer: "@"
+        options: ["@", "*", "+"]
+      - answer: "2"
+        options: ["2", "0", "1"]
+    expect_output: "[1. 1.]"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `fk_homogen(q, l)` für einen planaren Arm mit beliebig vielen Gliedern (Winkel relativ, in rad). Gib alle Gelenkpositionen als Array der Form `(n + 1, 2)` zurück: Basis $(0, 0)$, dann das Ende jedes Glieds. `glied` ist schon da.
+    starter: |
+      import numpy as np
+
+      def glied(q, l):
+          c, s = np.cos(q), np.sin(q)
+          return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+      def fk_homogen(q, l):
+          T = np.eye(3)
+          punkte = [T[:2, 2]]
+          # Schleife über die Glieder
+          return np.array(punkte)
+    solution: |
+      import numpy as np
+
+      def glied(q, l):
+          c, s = np.cos(q), np.sin(q)
+          return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+      def fk_homogen(q, l):
+          T = np.eye(3)
+          punkte = [T[:2, 2]]
+          for qi, li in zip(q, l):
+              T = T @ glied(qi, li)
+              punkte.append(T[:2, 2])
+          return np.array(punkte)
+    tests:
+      - name: Zwei Glieder gegen die Formel
+        code: |
+          import numpy as np
+          q1, q2, l1, l2 = 0.3, 0.8, 1.0, 0.5
+          P = fk_homogen([q1, q2], [l1, l2])
+          erwartet = [[0.0, 0.0],
+                      [l1 * np.cos(q1), l1 * np.sin(q1)],
+                      [l1 * np.cos(q1) + l2 * np.cos(q1 + q2), l1 * np.sin(q1) + l2 * np.sin(q1 + q2)]]
+          assert np.shape(P) == (3, 2), f"Erwartet Form (3, 2), bekommen {np.shape(P)}"
+          assert close(P, erwartet), f"Erwartet {np.round(erwartet, 3).tolist()}, bekommen {np.round(P, 3).tolist()}"
+      - name: Drei Glieder
+        code: |
+          import numpy as np
+          P = fk_homogen([np.pi / 2, -np.pi / 2, -np.pi / 2], [1.0, 1.0, 1.0])
+          assert np.shape(P) == (4, 2), f"Erwartet Form (4, 2), bekommen {np.shape(P)}"
+          assert close(P, [[0, 0], [0, 1], [1, 1], [1, 0]]), f"Erwartet [[0, 0], [0, 1], [1, 1], [1, 0]], bekommen {np.round(P, 3).tolist()}"
+    mutants:
+      - |
+        import numpy as np
+
+        def glied(q, l):
+            c, s = np.cos(q), np.sin(q)
+            return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+        def fk_homogen(q, l):
+            T = np.eye(3)
+            punkte = [T[:2, 2]]
+            for qi, li in zip(q, l):
+                T = glied(qi, li) @ T
+                punkte.append(T[:2, 2])
+            return np.array(punkte)
+      - |
+        import numpy as np
+
+        def glied(q, l):
+            c, s = np.cos(q), np.sin(q)
+            return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+        def fk_homogen(q, l):
+            T = np.eye(3)
+            punkte = [T[:2, 2]]
+            winkel = 0.0
+            for qi, li in zip(q, l):
+                winkel = winkel + qi
+                T = T @ glied(winkel, li)
+                punkte.append(T[:2, 2])
+            return np.array(punkte)
+      - |
+        import numpy as np
+
+        def glied(q, l):
+            c, s = np.cos(q), np.sin(q)
+            return np.array([[c, -s, l * c], [s, c, l * s], [0.0, 0.0, 1.0]])
+
+        def fk_homogen(q, l):
+            T = np.eye(3)
+            punkte = []
+            for qi, li in zip(q, l):
+                T = T @ glied(qi, li)
+                punkte.append(T[:2, 2])
+            return np.array(punkte)
+    hints:
+      - "Teilziel: Schleife über die Glieder – Kette erweitern, Position anhängen."
+      - "Neue Glieder kommen **rechts** an die Kette: `T = T @ glied(qi, li)`. Die Winkel sind relativ, die Matrixmultiplikation addiert sie automatisch."
+      - "`for qi, li in zip(q, l):`"
+      - "Im Rumpf: `T = T @ glied(qi, li)` und `punkte.append(T[:2, 2])`"
+    explanation: |
+      Das ist die allgemeine Vorwärtskinematik für planare Arme, die du in Modul 8 wieder brauchst. Mit `lab.chain([fk_homogen(q, l)])` kannst du das Ergebnis zeichnen.
+  - type: quiz
+    question: |
+      In der Kette $T = A_1 A_2 A_3$ eines 3-Glied-Arms: Was steht in `T[:2, 2]`?
+    options:
+      - text: Die Position der Spitze (Ende von Glied 3) in Basiskoordinaten.
+        correct: true
+        why: Die Translationsspalte der ganzen Kette ist der Ursprung des letzten Koordinatensystems, gesehen von der Basis.
+      - text: Die Position des Ellbogens (Ende von Glied 1).
+        correct: false
+        why: Die steht in der Translationsspalte von $A_1$ allein.
+      - text: Die Summe der Gelenkwinkel.
+        correct: false
+        why: Die steckt im Rotationsteil `T[:2, :2]`; die letzte Spalte ist eine Position.
+cards:
+  - id: m05-c-homogen-punkt-richtung
+    concept: la-homogen
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          T = np.array([[1.0, 0.0, 3.0],
+                        [0.0, 1.0, -1.0],
+                        [0.0, 0.0, 1.0]])
+          print(T @ np.array([2.0, 2.0, 1.0]))
+        options: ["[5. 1. 1.]", "[2. 2. 1.]", "[5. 1. 0.]", "[ 3. -1.  1.]"]
+        answer: "[5. 1. 1.]"
+        explanation: Reine Verschiebung um $(3, -1)$; ein Punkt (letzte Komponente 1) wird verschoben.
+      - type: predict
+        code: |
+          import numpy as np
+          T = np.array([[1.0, 0.0, 3.0],
+                        [0.0, 1.0, -1.0],
+                        [0.0, 0.0, 1.0]])
+          print(T @ np.array([2.0, 2.0, 0.0]))
+        options: ["[2. 2. 0.]", "[5. 1. 0.]", "[5. 1. 1.]", "[ 3. -1.  0.]"]
+        answer: "[2. 2. 0.]"
+        explanation: Eine Richtung (letzte Komponente 0) wird nicht verschoben.
+  - id: m05-c-kette-reihenfolge
+    concept: la-kette
+    variants:
+      - type: quiz
+        question: |
+          `A1` beschreibt Glied 1 (an der Basis), `A2` Glied 2. Welche Kette liefert die Spitze in Basiskoordinaten?
+        options:
+          - text: "`A1 @ A2`"
+            correct: true
+            why: Von der Basis zur Spitze, von links nach rechts.
+          - text: "`A2 @ A1`"
+            correct: false
+            why: Das beschreibt einen Arm, bei dem Glied 2 an der Basis sitzt.
+          - text: "`A1 + A2`"
+            correct: false
+            why: Transformationen verkettet man durch Multiplikation, nicht durch Addition.
+      - type: quiz
+        question: |
+          Ein Arm hat 4 Glieder mit Matrizen `A[0]` bis `A[3]`. Wie baust du die Kette in einer Schleife?
+        options:
+          - text: "`T = np.eye(3)`, dann für jedes `i`: `T = T @ A[i]`"
+            correct: true
+            why: Starten mit der Identität, jedes neue Glied rechts anhängen.
+          - text: "`T = np.zeros((3, 3))`, dann `T = T @ A[i]`"
+            correct: false
+            why: Mit der Nullmatrix bleibt das Produkt immer null.
+          - text: "`T = np.eye(3)`, dann `T = A[i] @ T`"
+            correct: false
+            why: Das hängt die Glieder links an – die Reihenfolge wird umgekehrt.
+  - id: m05-c-homogen-translation
+    concept: la-homogen
+    variants:
+      - type: quiz
+        question: |
+          Wo steht in einer homogenen 2D-Transformation $T$ (3×3) die Verschiebung?
+        options:
+          - text: "In `T[:2, 2]` – den ersten zwei Einträgen der letzten Spalte."
+            correct: true
+            why: Sie wird mit der 1 des Punkts multipliziert und addiert.
+          - text: "In `T[2, :2]` – der letzten Zeile."
+            correct: false
+            why: Die letzte Zeile ist bei starren Transformationen immer $(0, 0, 1)$.
+          - text: "In `T[:2, :2]`."
+            correct: false
+            why: Das ist der Rotationsteil.
+      - type: predict
+        code: |
+          import numpy as np
+          T1 = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+          T2 = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 2.0], [0.0, 0.0, 1.0]])
+          print((T1 @ T2)[:2, 2])
+        options: ["[1. 2.]", "[1. 0.]", "[0. 2.]", "[2. 1.]"]
+        answer: "[1. 2.]"
+        explanation: Zwei reine Verschiebungen hintereinander addieren sich.

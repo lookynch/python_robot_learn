@@ -1,0 +1,40 @@
+id: m09
+number: 9
+title: Dynamik & Regelung
+summary: |
+  Vom Sollwert zum Drehmoment: P-, PD- und PID-Regler, Pendel balancieren, Schwerkraftkompensation, der dynamische 2-Gelenk-Arm, Kräfte an der Spitze über Jᵀ – und warum der CartPole mehr braucht als einen PD-Regler.
+depth: voll
+lessons:
+  - m09-regelkreis
+  - m09-pd-pid
+  - m09-pendel-regeln
+  - m09-schwerkraft
+  - m09-zwei-gelenke
+  - m09-task-space
+  - m09-cartpole
+  - m09-checkpoint
+concepts:
+  - id: regelkreis
+    name: Regelkreis und P-Regler
+    description: Fehler e = Soll − Ist; ein P-Regler stellt das Drehmoment τ = Kp·e. Das Vorzeichen entscheidet über Stabilität.
+  - id: pd-regler
+    name: D-Anteil
+    description: τ = Kp·e − Kd·q̇ wirkt wie Feder plus Dämpfer und verkürzt Ausschwingen und Überschwingen.
+  - id: pid-regler
+    name: I-Anteil
+    description: Der Integralanteil Ki·∫e dt beseitigt die bleibende Regelabweichung bei konstanten Störungen.
+  - id: instabiles-gleichgewicht
+    name: Instabiles Gleichgewicht und Stellgrößenbegrenzung
+    description: Ein aufrechtes Pendel lässt sich mit PD halten, wenn Kp die Schwerkraft überwiegt; begrenztes Drehmoment begrenzt den Bereich, aus dem es sich fangen lässt.
+  - id: schwerkraftkompensation
+    name: Schwerkraftkompensation
+    description: Das Modell-Schwerkraftmoment G(q) wird zum PD-Regler addiert; dadurch verschwindet das Durchhängen ohne I-Anteil.
+  - id: manipulator-dynamik
+    name: Manipulator-Dynamik
+    description: M(q)q̈ + C(q,q̇)q̇ + G(q) = τ – die Gelenke sind über Massenmatrix und Coriolis-/Zentrifugalterme gekoppelt.
+  - id: jacobi-transponiert
+    name: Kraft an der Spitze über Jᵀ
+    description: Eine Kraft F am Endeffektor entspricht den Gelenkmomenten τ = Jᵀ F; damit lässt sich die Spitze wie an einer virtuellen Feder führen.
+  - id: unteraktuierung
+    name: Unteraktuierung
+    description: Weniger Motoren als Freiheitsgrade (CartPole); ein PD-Regler auf den Winkel allein reicht nicht – man braucht Modell, Planung oder Lernen.

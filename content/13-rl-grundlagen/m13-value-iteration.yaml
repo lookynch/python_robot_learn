@@ -1,0 +1,382 @@
+id: m13-value-iteration
+title: Value Iteration
+minutes: 12
+goals:
+  - Die Bellman-Optimalitätsgleichung als Update-Regel einsetzen
+  - Value Iteration implementieren und gegen die bekannte Lösung prüfen
+  - Aus V eine greedy Policy ableiten, anzeigen und ausführen
+concepts: [dp-bellman-optimal, dp-value-iteration, dp-greedy-policy]
+steps:
+  - type: text
+    body: |
+      ## Vom Bewerten zum Optimieren
+
+      Policy Evaluation fragt: Wie gut ist **diese** Policy? Jetzt wollen wir die **beste**. Der **Aktionswert** $Q(s, a)$ ist der erwartete Return, wenn man in $s$ zuerst $a$ wählt:
+
+      $$Q(s, a) = \sum_{(p,\, s',\, r,\, \text{done})} p\,\big[\,r + \gamma\, V(s')(1 - \text{done})\,\big]$$
+
+      Die optimale Wertfunktion erfüllt die **Bellman-Optimalitätsgleichung** – Maximum statt Mittel über die Aktionen:
+
+      $$V^*(s) = \max_a Q^*(s, a)$$
+
+      **Value Iteration:** diese Gleichung als Update immer wieder auf alle Zustände anwenden. Danach ist die **greedy Policy** $\pi(s) = \arg\max_a Q(s, a)$ optimal.
+  - type: predict
+    intro: |
+      Ein Backup von Hand: drei Aktionen, jede kostet −1 und führt sicher in einen anderen Folgezustand.
+    code: |
+      gamma = 0.9
+      V = [0.0, -2.0, -5.0]                  # Werte der Folgezustände
+      q = [-1 + gamma * V[1], -1 + gamma * V[2], -1 + gamma * V[0]]
+      print(round(max(q), 2), q.index(max(q)))
+    options: ["-1.0 2", "-2.8 0", "0.0 0", "-5.5 1"]
+    answer: "-1.0 2"
+    explanation: |
+      $Q = (-2{,}8;\ -5{,}5;\ -1{,}0)$. Das Maximum ist $-1{,}0$ bei Aktion 2 – sie führt in den Folgezustand mit Wert 0.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      env, gamma = GridWorld(), 1.0
+      V = np.zeros(env.n_states)
+      for sweep in range(1000):
+          V_new = np.array([np.max(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+          delta = np.max(np.abs(V_new - V))
+          V = V_new
+          if delta < 1e-8:
+              break
+
+      pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+      print("Sweeps:", sweep + 1)
+      print(V.reshape(4, 4))
+      env.render(values=V, policy=pi, title="V* und greedy Policy")
+    subgoals:
+      - lines: [4, 9]
+        label: Q-Werte eines Zustands aus dem Modell
+      - lines: [11, 18]
+        label: Optimalitäts-Backup bis zur Konvergenz
+      - lines: [20, 20]
+        label: Greedy Policy ablesen
+      - lines: [21, 23]
+        label: Werte und Pfeile zeigen
+    after: |
+      Mit $\gamma = 1$ und −1 pro Schritt ist $V^*(s)$ einfach minus die Zahl der kostenpflichtigen Schritte auf dem kürzesten Weg: vom Start 5 (der sechste Schritt ins Ziel kostet 0). Die Pfeile machen um die Falle einen Bogen, Feld 7 läuft nach links statt nach unten in die Falle.
+  - type: explain
+    question: |
+      Warum braucht Value Iteration hier genau 6 Sweeps?
+    options:
+      - text: Information breitet sich pro Sweep einen Schritt vom Ziel aus; der weiteste Zustand ist 6 Schritte entfernt, der 6. Sweep bestätigt nur noch, dass sich nichts mehr ändert.
+        correct: true
+        why: Nach Sweep $k$ sind alle Zustände korrekt, die höchstens $k$ Schritte vom Ziel weg sind. Der längste kürzeste Weg hat 6 Schritte (5 kostenpflichtige) – ab Sweep 5 stimmt alles, Sweep 6 hat Änderung 0.
+      - text: Weil die Gitterwelt 6 freie Felder in der ersten Zeile hat.
+        correct: false
+        why: Die erste Zeile hat 4 Felder; die Zahl hat mit Entfernungen zu tun.
+      - text: Weil $\gamma = 1$ immer zu 6 Sweeps führt.
+        correct: false
+        why: In einer größeren Welt mit längeren Wegen braucht es entsprechend mehr.
+      - text: Zufall – mit anderem Seed wären es mehr.
+        correct: false
+        why: Die Welt ist deterministisch, Value Iteration verwendet keinen Zufall.
+  - type: example
+    intro: |
+      Jetzt rutschig (`slip=0.2`) und mit $\gamma = 0{,}95$. Achte auf die Felder neben der Falle.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      env, gamma = GridWorld(slip=0.2, seed=0), 0.95
+      V = np.zeros(env.n_states)
+      for sweep in range(1000):
+          V_new = np.array([np.max(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+          if np.max(np.abs(V_new - V)) < 1e-8:
+              break
+          V = V_new
+      pi = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+
+      s = env.reset()
+      path, done = [s], False
+      while not done:
+          s, r, done = env.step(pi[s])
+          path.append(s)
+      print("Sweeps:", sweep + 1, " Pfad:", path)
+      env.render(values=V, policy=pi, title="Rutschige Welt: V* und Policy")
+      env.render(path=path, title="Eine Episode mit der greedy Policy")
+    subgoals:
+      - lines: [11, 18]
+        label: Value Iteration
+      - lines: [20, 24]
+        label: Episode mit der Policy ausführen
+      - lines: [25, 27]
+        label: Ergebnis zeigen
+    after: |
+      Von Feld 10 geht die Policy jetzt **nach links** statt nach unten: Nach unten würde man mit 0,1 nach rechts in die Falle rutschen. Der Umweg über 9 → 13 → 14 kostet ein paar Schritte, aber weniger als das Risiko von −100. Diese Abwägung entsteht allein aus dem Modell – niemand hat sie einprogrammiert.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze Optimalitäts-Backup und Policy-Extraktion. Der Test prüft, dass der Agent vom Start in 6 Schritten das Ziel erreicht.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      env, gamma = GridWorld(), 0.95
+      V = np.zeros(env.n_states)
+      for sweep in range(500):
+          V = np.array([np.___(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+      pi = np.array([np.___(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+    blanks:
+      - answer: max
+        options: [max, mean, argmax]
+      - answer: argmax
+        options: [argmax, max, argmin]
+    tests:
+      - name: Policy erreicht das Ziel auf kürzestem Weg
+        code: |
+          s, steps, done = env.reset(), 0, False
+          while not done and steps < 50:
+              s, r, done = env.step(pi[s])
+              steps += 1
+          assert s == 15 and steps == 6, f"Erwartet: Ziel 15 nach 6 Schritten, bekommen: Feld {s} nach {steps} Schritten"
+    explanation: |
+      Mit `mean` würde man die Zufalls-Policy bewerten statt zu optimieren. `max` liefert den **Wert**, `argmax` die **Aktion** – beim Backup braucht man den Wert, für die Policy die Aktion.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `value_iteration(env, gamma, theta=1e-8)`, die $V^*$ zurückgibt. `q_values` ist schon da. Wiederhole Sweeps, bis die größte Änderung kleiner als `theta` ist.
+    starter: |
+      import numpy as np
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def value_iteration(env, gamma, theta=1e-8):
+          V = np.zeros(env.n_states)
+          for sweep in range(2000):
+              V_new = np.zeros(env.n_states)
+              # Backup für alle Zustände, dann Abbruch prüfen
+          return V
+    solution: |
+      import numpy as np
+
+      def q_values(env, V, s, gamma):
+          q = np.zeros(env.n_actions)
+          for a in range(env.n_actions):
+              for p, s2, r, done in env.P[s][a]:
+                  q[a] += p * (r + gamma * V[s2] * (not done))
+          return q
+
+      def value_iteration(env, gamma, theta=1e-8):
+          V = np.zeros(env.n_states)
+          for sweep in range(2000):
+              V_new = np.zeros(env.n_states)
+              for s in range(env.n_states):
+                  V_new[s] = np.max(q_values(env, V, s, gamma))
+              if np.max(np.abs(V_new - V)) < theta:
+                  return V_new
+              V = V_new
+          return V
+    tests:
+      - name: Bekannte Lösung der Standardwelt (γ = 1)
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          V = value_iteration(GridWorld(), 1.0)
+          known = np.array([-5, -4, -3, -4, -4, 0, -2, -3, -3, -2, -1, 0, 0, -1, 0, 0], dtype=float)
+          assert np.shape(V) == (16,), f"V sollte Shape (16,) haben, hat {np.shape(V)}"
+          assert close(V, known), f"Erwartet (Zeilen) {known.reshape(4, 4).tolist()}, bekommen {np.round(V, 2).reshape(4, 4).tolist()}"
+      - name: Rutschige Welt erfüllt die Optimalitätsgleichung
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env_t = GridWorld(slip=0.2)
+          V = value_iteration(env_t, 0.95)
+          residual = max(abs(V[s] - max(sum(p * (r + 0.95 * V[s2] * (not d)) for p, s2, r, d in env_t.P[s][a]) for a in range(4))) for s in range(16))
+          assert residual < 1e-6, f"V erfüllt die Bellman-Optimalitätsgleichung nicht (Abweichung {residual:.2e})"
+          assert close(V[0], -6.43, 0.01), f"V[0] sollte etwa -6.43 sein, ist {V[0]:.3f}"
+    mutants:
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def value_iteration(env, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            for sweep in range(2000):
+                V_new = np.array([np.mean(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+                if np.max(np.abs(V_new - V)) < theta:
+                    return V_new
+                V = V_new
+            return V
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def value_iteration(env, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            V_new = np.array([np.max(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+            return V_new
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def value_iteration(env, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            for sweep in range(2000):
+                V_new = np.array([np.max(q_values(env, V, s, gamma)) for s in range(env.n_states)])
+                if np.max(np.abs(V_new - V)) < theta:
+                    return V_new
+            return V
+      - |
+        import numpy as np
+        def q_values(env, V, s, gamma):
+            q = np.zeros(env.n_actions)
+            for a in range(env.n_actions):
+                for p, s2, r, done in env.P[s][a]:
+                    q[a] += p * (r + gamma * V[s2] * (not done))
+            return q
+        def value_iteration(env, gamma, theta=1e-8):
+            V = np.zeros(env.n_states)
+            for sweep in range(2000):
+                V_new = np.array([np.argmax(q_values(env, V, s, gamma)) for s in range(env.n_states)], dtype=float)
+                if np.max(np.abs(V_new - V)) < theta:
+                    return V_new
+                V = V_new
+            return V
+    hints:
+      - "Teilziel: pro Sweep alle Zustände mit dem Optimalitäts-Backup aktualisieren, dann auf Konvergenz prüfen."
+      - "Der neue Wert eines Zustands ist das Maximum seiner Q-Werte."
+      - "`V_new[s] = np.max(q_values(env, V, s, gamma))` in einer Schleife über `s`."
+      - |
+        ```python
+        if np.max(np.abs(V_new - V)) < theta:
+            return V_new
+        V = V_new
+        ```
+    explanation: |
+      Der zweite Test prüft eine **Eigenschaft** statt Zahlen: $V^*$ ist der Fixpunkt der Bellman-Optimalitätsgleichung. Das Rezept „Ergebnis in die Gleichung einsetzen“ funktioniert für jede Welt.
+  - type: quiz
+    question: |
+      Value Iteration hat $V^*$ geliefert. Was braucht man zusätzlich, um daraus die greedy Policy zu berechnen?
+    options:
+      - text: Das Modell `env.P` – für $\arg\max_a Q(s, a)$ muss man wissen, wohin jede Aktion führt.
+        correct: true
+        why: "$V$ allein sagt nicht, welche Aktion zu welchem Folgezustand führt. Darum lernt man ohne Modell (Modul 14) direkt $Q$."
+      - text: Nichts – man nimmt in jedem Zustand die Aktion mit dem größten $V$.
+        correct: false
+        why: "$V$ hat einen Wert pro Zustand, nicht pro Aktion."
+      - text: Eine Zufalls-Policy als Startpunkt.
+        correct: false
+        why: Value Iteration startet mit $V = 0$; eine Start-Policy braucht erst Policy Iteration.
+cards:
+  - id: m13-c-max-backup
+    concept: dp-bellman-optimal
+    variants:
+      - type: predict
+        code: |
+          q = [-3.0, -1.5, -2.0, -1.5]
+          print(max(q), q.index(max(q)))
+        options: ["-1.5 1", "-1.5 3", "-3.0 0", "-2.0 2"]
+        answer: "-1.5 1"
+        explanation: Wert = Maximum; bei Gleichstand liefert `index` (wie `np.argmax`) den ersten Treffer.
+      - type: quiz
+        question: |
+          Was unterscheidet das Backup der Value Iteration von dem der Policy Evaluation?
+        options:
+          - text: Maximum über die Aktionen statt Mittel mit den Policy-Wahrscheinlichkeiten.
+            correct: true
+            why: Optimalität statt Erwartung unter einer festen Policy.
+          - text: Value Iteration ignoriert die Übergangswahrscheinlichkeiten.
+            correct: false
+            why: Über die Ergebnisse einer Aktion wird weiterhin mit $p$ gemittelt.
+          - text: Value Iteration nutzt keinen Diskont.
+            correct: false
+            why: "$\\gamma$ steht in beiden Backups."
+  - id: m13-c-vi-ausbreitung
+    concept: dp-value-iteration
+    variants:
+      - type: quiz
+        question: |
+          Deterministische Welt, $\gamma = 1$, $V = 0$ zu Beginn. Nach dem ersten Sweep – welche Zustände haben **sicher** schon ihren endgültigen Wert?
+        options:
+          - text: Die Endzustände und alle, die das Ziel in einem Schritt erreichen.
+            correct: true
+            why: Information breitet sich pro Sweep einen Schritt vom Ziel aus.
+          - text: Alle Zustände.
+            correct: false
+            why: Weit entfernte Zustände kennen nach einem Sweep nur die Kosten eines Schritts.
+          - text: Keiner.
+            correct: false
+            why: Nachbarn des Ziels sind schon korrekt (Wert 0).
+      - type: quiz
+        question: |
+          Die längsten kürzesten Wege einer Gitterwelt haben 20 Schritte. Wie viele Sweeps braucht Value Iteration mit $\gamma = 1$ (deterministisch, $V = 0$ zu Beginn) etwa?
+        options:
+          - text: Etwa 20 – plus einen, der die Konvergenz bestätigt.
+            correct: true
+            why: Ein Schritt Informationsausbreitung pro Sweep.
+          - text: Genau einen.
+            correct: false
+            why: Ein Sweep schaut nur einen Schritt voraus.
+          - text: Unendlich viele.
+            correct: false
+            why: In deterministischen Welten mit $\gamma = 1$ und erreichbarem Ziel endet es nach endlich vielen Sweeps.
+  - id: m13-c-greedy
+    concept: dp-greedy-policy
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          Q = np.array([[-2.0, -1.0, -3.0, -1.5],
+                        [-0.5, -4.0, -0.5, -2.0]])
+          print(np.argmax(Q, axis=1))
+        options: ["[1 0]", "[1 2]", "[0 1]", "[-1.  -0.5]"]
+        answer: "[1 0]"
+        explanation: Pro Zeile (Zustand) die Aktion mit dem größten Q; bei Gleichstand die erste.
+      - type: quiz
+        question: |
+          `pi[s] = np.max(q)` statt `np.argmax(q)` – was ist falsch?
+        options:
+          - text: "`np.max` liefert den Wert (z. B. −3.0), keine Aktionsnummer."
+            correct: true
+            why: Die Policy braucht den Index der besten Aktion.
+          - text: Nichts, beides ist gleich.
+            correct: false
+            why: Wert und Index sind verschiedene Dinge.
+          - text: "`np.max` ist langsamer."
+            correct: false
+            why: Es geht nicht um Geschwindigkeit, sondern um die Bedeutung.

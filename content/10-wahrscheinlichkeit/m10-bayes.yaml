@@ -1,0 +1,288 @@
+id: m10-bayes
+title: Bayes-Regel und Sensoren
+minutes: 9
+goals:
+  - Mit der Bayes-Regel aus einer Sensormessung eine Wahrscheinlichkeit aktualisieren
+  - Den Einfluss der A-priori-Wahrscheinlichkeit (Basisrate) einschätzen
+  - Einen Histogrammfilter für die Position eines Roboters schreiben
+concepts: [wk-bayes, wk-histogrammfilter]
+steps:
+  - type: text
+    body: |
+      ## Was sagt mir die Messung?
+
+      Ein Roboter fährt einen Flur entlang. Ein Detektor meldet „Tür“. Steht er wirklich vor einer Tür? Die **Bayes-Regel**:
+
+      $$
+      P(H \mid D) = \frac{P(D \mid H)\,P(H)}{P(D)}, \qquad P(D) = \sum_h P(D \mid h)\,P(h)
+      $$
+
+      - $P(H)$: **Prior** – was du vor der Messung glaubst
+      - $P(D \mid H)$: **Likelihood** – wie wahrscheinlich die Messung wäre, wenn $H$ stimmt (Sensormodell)
+      - $P(H \mid D)$: **Posterior** – was du nach der Messung glaubst
+
+      Der Nenner normiert nur. Merksatz: **Posterior ∝ Likelihood × Prior.**
+  - type: example
+    code: |
+      p_tuer = 0.3          # Prior: 30 % des Flurs sind Türen
+      p_sig_tuer = 0.9      # Detektor meldet Tür, wenn eine da ist
+      p_sig_wand = 0.2      # Fehlalarm vor einer Wand
+
+      p_sig = p_sig_tuer * p_tuer + p_sig_wand * (1 - p_tuer)
+      post = p_sig_tuer * p_tuer / p_sig
+      print(round(p_sig, 2), round(post, 3))
+
+      p_sig2 = p_sig_tuer * post + p_sig_wand * (1 - post)
+      post2 = p_sig_tuer * post / p_sig2
+      print(round(post2, 3))
+    subgoals:
+      - lines: [1, 3]
+        label: Prior und Sensormodell festlegen
+      - lines: 5
+        label: Normierung (totale Wahrscheinlichkeit)
+      - lines: [6, 7]
+        label: Posterior berechnen
+      - lines: [9, 11]
+        label: Posterior als neuer Prior
+    after: |
+      Nach einer Meldung ist die Tür erst zu 66 % sicher, nach einer zweiten (unabhängigen) Meldung zu 90 %. Der Posterior von heute ist der Prior von morgen – so arbeiten alle Zustandsschätzer (Kalman-, Partikel-, Histogrammfilter).
+  - type: predict
+    intro: |
+      Jetzt ist nur jede zwanzigste Stelle eine Tür (Prior 0,05). Der Detektor ist gut: $P(\text{Signal} \mid \text{Tür}) = 0.9$, Fehlalarmrate $0.1$.
+    code: |
+      prior = 0.05
+      p_sig = 0.9 * prior + 0.1 * (1 - prior)
+      print(round(0.9 * prior / p_sig, 2))
+    options: ["0.32", "0.9", "0.05", "0.5"]
+    answer: "0.32"
+    explanation: |
+      $0.045 / (0.045 + 0.095) \approx 0.32$. Weil Wände so viel häufiger sind, stammen die meisten Signale von Fehlalarmen. Die 0,9 ist $P(\text{Signal} \mid \text{Tür})$, nicht $P(\text{Tür} \mid \text{Signal})$ – die Verwechslung heißt **Basisraten-Fehler**.
+  - type: explain
+    question: |
+      Wofür steht der Nenner $P(D)$ in der Bayes-Regel praktisch?
+    options:
+      - text: Er sorgt dafür, dass sich die Posterior-Wahrscheinlichkeiten aller Hypothesen zu 1 summieren.
+        correct: true
+        why: "$P(D) = \\sum_h P(D \\mid h) P(h)$ ist genau die Summe der Zähler. Im Code: erst multiplizieren, dann durch die Summe teilen."
+      - text: Er ist die Wahrscheinlichkeit, dass der Sensor richtig misst.
+        correct: false
+        why: Die Sensorgüte steckt in der Likelihood $P(D \mid H)$. $P(D)$ ist die Gesamtwahrscheinlichkeit der Messung über alle Hypothesen.
+      - text: Er lässt sich weglassen, weil er immer 1 ist.
+        correct: false
+        why: "$P(D)$ ist meist kleiner als 1. Weglassen darf man ihn nur, wenn man danach selbst normiert."
+  - type: example
+    intro: |
+      **Histogrammfilter:** Der Flur hat 10 Zellen (als Ring: rechts raus = links rein), Türen bei 1, 2 und 6. Der Roboter weiß anfangs nichts. Pro Zelle speichern wir eine Wahrscheinlichkeit („Belief“). Messen = mit der Likelihood multiplizieren und normieren; Fahren = Belief verschieben (`np.roll`).
+    code: |
+      import numpy as np
+      import lab
+
+      tuer = np.zeros(10, dtype=bool)
+      tuer[[1, 2, 6]] = True
+      bel = np.full(10, 0.1)
+
+      def messen(bel, signal):
+          lik = np.where(tuer, 0.9, 0.2) if signal else np.where(tuer, 0.1, 0.8)
+          post = bel * lik
+          return post / np.sum(post)
+
+      fig = lab.Figure(title="Wo bin ich?", xlabel="Zelle", ylabel="Belief")
+      bel = messen(bel, True)
+      fig.line(bel, label="1: Tür")
+      bel = messen(np.roll(bel, 1), True)
+      fig.line(bel, label="2: Tür")
+      bel = messen(np.roll(bel, 1), False)
+      fig.line(bel, label="3: keine Tür")
+      fig.show()
+      print(np.round(bel, 2), np.argmax(bel))
+    subgoals:
+      - lines: [4, 6]
+        label: Karte und gleichverteilter Prior
+      - lines: [8, 11]
+        label: Messupdate (Bayes)
+      - lines: [14, 19]
+        label: Abwechselnd fahren und messen
+    after: |
+      Nach der ersten Messung sind alle drei Türen gleich wahrscheinlich. „Tür, eine Zelle weiter, wieder Tür“ passt am besten zu den Zellen 1 → 2 (Belief in Zelle 2 rund 47 %); danach „keine Tür“ in Zelle 3 – der Belief hat dort sein Maximum (54 %). Die Bewegung ist hier exakt; echte Filter verschmieren den Belief beim Fahren zusätzlich.
+  - type: fill
+    fading: true
+    prompt: |
+      Vervollständige das Messupdate für drei Hypothesen.
+    code: |
+      import numpy as np
+      prior = np.array([0.25, 0.25, 0.5])
+      lik = np.array([0.8, 0.1, 0.1])
+      post = prior ___ lik
+      post = post / np.___(post)
+      print(np.round(post, 3))
+    blanks:
+      - answer: "*"
+        options: ["*", "+", "/"]
+      - answer: "sum"
+        options: ["sum", "max", "mean"]
+    expect_output: "[0.727 0.091 0.182]"
+    explanation: |
+      Elementweise multiplizieren (Likelihood × Prior), dann durch die Summe teilen. Durch `max` zu teilen ergäbe keine Wahrscheinlichkeiten, die sich zu 1 summieren.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `update(bel, tuer, signal)` für den Histogrammfilter: `bel` ist der Belief (Array), `tuer` ein boolesches Array (Tür ja/nein pro Zelle), `signal` ist `True` („Tür gemeldet“) oder `False`.
+
+      Sensormodell: $P(\text{Tür gemeldet} \mid \text{Tür}) = 0.9$, $P(\text{Tür gemeldet} \mid \text{Wand}) = 0.2$. Für `signal == False` gelten die Gegenwahrscheinlichkeiten. Gib den normierten Posterior zurück.
+    starter: |
+      import numpy as np
+
+      def update(bel, tuer, signal):
+          # dein Code
+          pass
+
+      tuer = np.array([True, False, False, True])
+      print(update(np.full(4, 0.25), tuer, True))
+    solution: |
+      import numpy as np
+
+      def update(bel, tuer, signal):
+          if signal:
+              lik = np.where(tuer, 0.9, 0.2)
+          else:
+              lik = np.where(tuer, 0.1, 0.8)
+          post = bel * lik
+          return post / np.sum(post)
+
+      tuer = np.array([True, False, False, True])
+      print(update(np.full(4, 0.25), tuer, True))
+    tests:
+      - name: Signal „Tür“
+        code: |
+          tuer = np.array([True, False, False, True])
+          r = update(np.full(4, 0.25), tuer, True)
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          erwartet = np.array([0.9, 0.2, 0.2, 0.9]) / 2.2
+          assert close(r, erwartet), f"Erwartet {np.round(erwartet, 4)}, bekommen {np.round(r, 4)}"
+      - name: Signal „keine Tür“
+        code: |
+          tuer = np.array([True, False, True])
+          r = update(np.array([0.5, 0.3, 0.2]), tuer, False)
+          erwartet = np.array([0.05, 0.24, 0.02]) / 0.31
+          assert close(r, erwartet), f"Erwartet {np.round(erwartet, 4)}, bekommen {np.round(r, 4)}"
+      - name: Summe 1 bei ungleichem Prior
+        code: |
+          r = update(np.array([0.7, 0.1, 0.2]), np.array([False, True, False]), True)
+          assert close(np.sum(r), 1.0), f"Der Posterior muss sich zu 1 summieren, Summe {np.sum(r)}"
+          assert close(r, np.array([0.14, 0.09, 0.04]) / 0.27), f"Falscher Posterior: {np.round(r, 4)}"
+    mutants:
+      - |
+        import numpy as np
+        def update(bel, tuer, signal):
+            lik = np.where(tuer, 0.9, 0.2)
+            post = bel * lik
+            return post / np.sum(post)
+      - |
+        import numpy as np
+        def update(bel, tuer, signal):
+            if signal:
+                lik = np.where(tuer, 0.9, 0.2)
+            else:
+                lik = np.where(tuer, 0.1, 0.8)
+            return bel * lik
+      - |
+        import numpy as np
+        def update(bel, tuer, signal):
+            if signal:
+                lik = np.where(tuer, 0.9, 0.2)
+            else:
+                lik = np.where(tuer, 0.1, 0.8)
+            return lik / np.sum(lik)
+      - |
+        import numpy as np
+        def update(bel, tuer, signal):
+            if signal:
+                lik = np.where(tuer, 0.9, 0.2)
+            else:
+                lik = np.where(tuer, 0.8, 0.1)
+            post = bel * lik
+            return post / np.sum(post)
+    hints:
+      - "Teilziel: Likelihood pro Zelle bauen → mit dem Prior multiplizieren → normieren."
+      - "`np.where(tuer, a, b)` liefert `a` an Türzellen und `b` sonst. Ohne Signal: $P(\\text{nicht gemeldet} \\mid \\text{Tür}) = 1 - 0.9$."
+      - "`lik = np.where(tuer, 0.9, 0.2)` bzw. `np.where(tuer, 0.1, 0.8)`"
+      - "`post = bel * lik` und `return post / np.sum(post)`"
+  - type: quiz
+    question: |
+      Ein Kollisionssensor schlägt bei echter Kollision zu 99 % an, sonst zu 1 % (Fehlalarm). Kollisionen sind sehr selten. Was folgt für einen Alarm?
+    options:
+      - text: Die Wahrscheinlichkeit einer echten Kollision kann trotz guten Sensors klein sein.
+        correct: true
+        why: Bei einer seltenen Ursache dominiert die große Zahl der Fehlalarme – der Prior zählt.
+      - text: Es ist zu 99 % eine echte Kollision.
+        correct: false
+        why: 99 % ist $P(\text{Alarm} \mid \text{Kollision})$, gefragt ist $P(\text{Kollision} \mid \text{Alarm})$.
+      - text: Es ist zu 1 % eine echte Kollision.
+        correct: false
+        why: Die Fehlalarmrate allein bestimmt den Posterior nicht; man braucht zusätzlich den Prior.
+cards:
+  - id: m10-c-bayes-rechnen
+    concept: wk-bayes
+    variants:
+      - type: predict
+        code: |
+          prior = 0.5
+          p_sig = 0.8 * prior + 0.4 * (1 - prior)
+          print(round(0.8 * prior / p_sig, 3))
+        options: ["0.667", "0.8", "0.5", "0.4"]
+        answer: "0.667"
+        explanation: $0.4 / (0.4 + 0.2) = 2/3$. Bei Prior 0,5 entscheidet nur das Verhältnis der Likelihoods (0,8 zu 0,4).
+      - type: predict
+        code: |
+          prior = 0.1
+          p_sig = 0.8 * prior + 0.1 * (1 - prior)
+          print(round(0.8 * prior / p_sig, 3))
+        options: ["0.471", "0.8", "0.1", "0.889"]
+        answer: "0.471"
+        explanation: $0.08 / (0.08 + 0.09) \approx 0.47$ – der kleine Prior hält den Posterior unter 50 %.
+  - id: m10-c-bayes-normieren
+    concept: wk-bayes
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          post = np.array([0.5, 0.5]) * np.array([0.6, 0.2])
+          print(post, post / post.sum())
+        options: ["[0.3 0.1] [0.75 0.25]", "[0.6 0.2] [0.75 0.25]", "[0.3 0.1] [0.3 0.1]", "[0.3 0.1] [0.5 0.5]"]
+        answer: "[0.3 0.1] [0.75 0.25]"
+        explanation: Das Produkt summiert sich nur zu 0,4. Erst durch das Teilen durch die Summe wird daraus eine Verteilung.
+      - type: quiz
+        question: Im Histogrammfilter multiplizierst du den Belief mit der Likelihood. Was musst du danach tun?
+        options:
+          - text: Durch die Summe teilen
+            correct: true
+            why: Das ist der Nenner $P(D)$ der Bayes-Regel.
+          - text: Durch das Maximum teilen
+            correct: false
+            why: Dann wäre der größte Wert 1 – die Summe wäre aber nicht 1.
+          - text: Nichts, das Produkt ist schon der Posterior
+            correct: false
+            why: Das Produkt ist nur **proportional** zum Posterior.
+  - id: m10-c-histogrammfilter
+    concept: wk-histogrammfilter
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          bel = np.array([0.0, 1.0, 0.0, 0.0])
+          print(np.roll(bel, 1))
+        options: ["[0. 0. 1. 0.]", "[1. 0. 0. 0.]", "[0. 1. 0. 0.]", "[0. 0. 0. 1.]"]
+        answer: "[0. 0. 1. 0.]"
+        explanation: "`np.roll(bel, 1)` verschiebt alles um eine Zelle nach rechts – der Roboter ist eine Zelle weitergefahren."
+      - type: quiz
+        question: Der Belief ist gleichverteilt, die Messung ist für alle Zellen gleich wahrscheinlich. Wie sieht der Posterior aus?
+        options:
+          - text: Wieder gleichverteilt
+            correct: true
+            why: Eine Likelihood, die überall gleich ist, unterscheidet keine Hypothese – nach dem Normieren ändert sich nichts.
+          - text: Er konzentriert sich auf eine Zelle.
+            correct: false
+            why: Dafür müsste die Messung in einer Zelle wahrscheinlicher sein als in anderen.
+          - text: Alle Werte werden 0.
+            correct: false
+            why: Multipliziert wird mit derselben positiven Zahl; das Normieren stellt die Summe 1 wieder her.

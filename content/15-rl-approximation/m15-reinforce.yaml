@@ -1,0 +1,494 @@
+id: m15-reinforce
+title: REINFORCE – die Policy direkt lernen
+minutes: 14
+goals:
+  - Den Policy-Gradienten mit dem Log-Ableitungs-Trick begründen
+  - "$\\nabla \\log \\pi$ einer linearen Softmax-Policy berechnen und numerisch prüfen"
+  - REINFORCE auf CartPole implementieren
+concepts: [policy-gradient, softmax-policy-gradient, reinforce-algorithmus]
+steps:
+  - type: text
+    body: |
+      ## Ohne Umweg über Q
+
+      Bisher: Werte lernen, dann $\arg\max$. Jetzt parametrisierst du die **Policy selbst**. Für CartPole reicht eine lineare Softmax-Policy mit einer $4 \times 2$-Matrix $W$:
+
+      $$\pi_W(a \mid s) = \operatorname{softmax}(s^\top W)_a$$
+
+      Sie ist **stochastisch** – das Erkunden ist eingebaut, kein ε nötig. Ziel ist der erwartete Return $J(W) = \mathbb{E}[G_0]$. Gesucht: $\nabla_W J$, um Gradientenaufstieg zu machen. Das Problem: $J$ hängt über die **Umgebung** von $W$ ab, und die kennst du nicht.
+  - type: text
+    body: |
+      ## Der Log-Ableitungs-Trick
+
+      Für eine Episode $\tau$ mit Wahrscheinlichkeit $p_W(\tau)$ gilt $\nabla p = p\, \nabla \log p$. Damit
+
+      $$\nabla_W J = \nabla_W \sum_\tau p_W(\tau) R(\tau) = \mathbb{E}_\tau\big[R(\tau)\, \nabla_W \log p_W(\tau)\big]$$
+
+      $\log p_W(\tau)$ ist eine Summe aus $\log$ Übergangswahrscheinlichkeiten (hängen **nicht** von $W$ ab, fallen weg) und $\sum_t \log \pi_W(a_t \mid s_t)$. Ersetzt man $R(\tau)$ noch durch den Return **ab** $t$ (frühere Belohnungen hängen nicht von $a_t$ ab), folgt **REINFORCE** (Williams 1992):
+
+      $$W \leftarrow W + \alpha \sum_t G_t\, \nabla_W \log \pi_W(a_t \mid s_t)$$
+
+      Sutton & Barto schreiben noch einen Faktor $\gamma^t$ dazu; in der Praxis lässt man ihn meist weg.
+  - type: example
+    intro: |
+      Für die lineare Softmax-Policy ist $\nabla_W \log \pi(a \mid s) = s \otimes (e_a - \pi(\cdot \mid s))$ – ein äußeres Produkt aus Zustand und „One-hot minus Wahrscheinlichkeiten“. Prüfung mit dem numerischen Gradienten aus Modul 12:
+    code: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def grad_log_pi(W, s, a):
+          p = softmax(s @ W)
+          return np.outer(s, np.eye(2)[a] - p)
+
+      rng = np.random.default_rng(0)
+      W, s, a = rng.normal(size=(4, 2)), rng.normal(size=4), 1
+      num = np.zeros_like(W)
+      for i in range(4):
+          for j in range(2):
+              Wp, Wm = W.copy(), W.copy()
+              Wp[i, j] += 1e-5
+              Wm[i, j] -= 1e-5
+              num[i, j] = (np.log(softmax(s @ Wp)[a]) - np.log(softmax(s @ Wm)[a])) / 2e-5
+      print("pi(.|s) =", np.round(softmax(s @ W), 3))
+      print("max. Abweichung:", np.max(np.abs(num - grad_log_pi(W, s, a))))
+    subgoals:
+      - lines: [3, 5]
+        label: Softmax stabil berechnen
+      - lines: [7, 9]
+        label: Analytischer Gradient
+      - lines: [11, 19]
+        label: Zentraldifferenz je Gewicht
+      - lines: [20, 21]
+        label: Vergleichen
+    after: |
+      Die Abweichung liegt weit unter $10^{-9}$ – die Formel stimmt. Anschaulich: Für die gewählte Aktion ist $e_a - \pi$ positiv, ein Schritt in Richtung $\nabla \log \pi$ macht sie also wahrscheinlicher, umso stärker, je größer $G_t$ war.
+  - type: predict
+    code: |
+      import numpy as np
+      p = np.array([0.25, 0.75])
+      a = 0
+      s = np.array([2.0, 0.0, 1.0, 0.0])
+      print(np.eye(2)[a] - p)
+      print(np.outer(s, np.eye(2)[a] - p)[0])
+    options:
+      - |
+        [ 0.75 -0.75]
+        [ 1.5 -1.5]
+      - |
+        [0.75 0.25]
+        [1.5 0.5]
+      - |
+        [-0.25  0.25]
+        [-0.5  0.5]
+      - |
+        [ 0.75 -0.75]
+        [ 0.75 -0.75]
+    answer: |
+      [ 0.75 -0.75]
+      [ 1.5 -1.5]
+    explanation: |
+      $e_0 - \pi = [1 - 0.25,\; 0 - 0.75]$. Zeile 0 des äußeren Produkts ist $s_0 \cdot [0.75, -0.75]$ mit $s_0 = 2$. Die Einträge einer Zeile summieren sich zu 0: Was eine Aktion gewinnt, verliert die andere.
+  - type: explain
+    question: |
+      Warum steht im Update $\nabla \log \pi(a \mid s)$ und nicht einfach $\nabla \pi(a \mid s)$?
+    options:
+      - text: "$\\nabla \\log \\pi = \\nabla \\pi / \\pi$ gleicht aus, dass häufige Aktionen auch häufiger gezogen werden."
+        correct: true
+        why: Ohne die Division würden Aktionen schon deshalb verstärkt, weil sie oft vorkommen – der Schätzer wäre verzerrt.
+      - text: Weil der Logarithmus negative Returns verhindert.
+        correct: false
+        why: Returns können trotzdem negativ sein; der Logarithmus wirkt auf die Wahrscheinlichkeit, nicht auf $G$.
+      - text: Weil $\log$ die Rechnung schneller macht.
+        correct: false
+        why: Es geht um Korrektheit des Schätzers (Erwartungswert), nicht um Rechenzeit.
+      - text: Weil $\pi$ selbst nicht differenzierbar ist.
+        correct: false
+        why: Die Softmax ist überall differenzierbar.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `grad_log_pi(W, s, a)` für die lineare Softmax-Policy mit 2 Aktionen: Rückgabe ist die $4 \times 2$-Matrix $s \otimes (e_a - \pi(\cdot \mid s))$. `softmax` ist vorgegeben.
+    starter: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def grad_log_pi(W, s, a):
+          p = softmax(s @ W)
+          # one-hot von a minus p, dann äußeres Produkt mit s
+          pass
+    solution: |
+      import numpy as np
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def grad_log_pi(W, s, a):
+          p = softmax(s @ W)
+          return np.outer(s, np.eye(2)[a] - p)
+    tests:
+      - name: Form 4 × 2
+        code: |
+          import numpy as np
+          g = grad_log_pi(np.zeros((4, 2)), np.ones(4), 0)
+          assert np.shape(g) == (4, 2), f"Erwartet Form (4, 2), bekommen {np.shape(g)}"
+      - name: Bei W = 0 einfach
+        code: |
+          import numpy as np
+          g = grad_log_pi(np.zeros((4, 2)), np.array([1.0, 2.0, 0.0, -1.0]), 1)
+          expected = [[-0.5, 0.5], [-1.0, 1.0], [0.0, 0.0], [0.5, -0.5]]
+          assert close(g, expected), f"Bei W = 0 ist π = [0.5, 0.5]; erwartet {expected}, bekommen {np.round(g, 3).tolist()}"
+      - name: Stimmt mit numerischem Gradienten überein
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(3)
+          for a in (0, 1):
+              W, s = rng.normal(size=(4, 2)), rng.normal(size=4)
+              num = np.zeros((4, 2))
+              for i in range(4):
+                  for j in range(2):
+                      Wp, Wm = W.copy(), W.copy()
+                      Wp[i, j] += 1e-5
+                      Wm[i, j] -= 1e-5
+                      num[i, j] = (np.log(softmax(s @ Wp)[a]) - np.log(softmax(s @ Wm)[a])) / 2e-5
+              err = np.max(np.abs(num - grad_log_pi(W, s, a)))
+              assert err < 1e-6, f"Aktion {a}: Abweichung zum numerischen Gradienten ist {err:.2e}"
+    mutants:
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def grad_log_pi(W, s, a):
+            p = softmax(s @ W)
+            return np.outer(s, p - np.eye(2)[a])
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def grad_log_pi(W, s, a):
+            p = softmax(s @ W)
+            return np.outer(s, np.eye(2)[a])
+      - |
+        import numpy as np
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def grad_log_pi(W, s, a):
+            p = softmax(s @ W)
+            return s[:, None] * (np.eye(2)[a] - p) * p[a]
+    hints:
+      - "Teilziel: One-hot-Vektor bilden, Wahrscheinlichkeiten abziehen, mit dem Zustand außen multiplizieren."
+      - "`np.eye(2)[a]` ist der One-hot-Vektor $e_a$. `np.outer(u, v)` bildet die Matrix $u_i v_j$."
+      - "`return np.outer(s, np.eye(2)[a] - p)`"
+  - type: example
+    title: REINFORCE auf CartPole
+    intro: |
+      Pro Episode: mit der stochastischen Policy spielen, Returns rückwärts berechnen, dann **einmal** updaten. Die Summe $\sum_t G_t\, s_t \otimes (e_{a_t} - \pi_t)$ ist vektorisiert eine Matrixmultiplikation `S.T @ (...)`.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import CartPole
+
+      def softmax(z):
+          e = np.exp(z - np.max(z, axis=-1, keepdims=True))
+          return e / e.sum(axis=-1, keepdims=True)
+
+      def returns(rewards, gamma):
+          G, out = 0.0, np.zeros(len(rewards))
+          for t in reversed(range(len(rewards))):
+              G = rewards[t] + gamma * G
+              out[t] = G
+          return out
+
+      env = CartPole(max_steps=200, seed=0)
+      rng = np.random.default_rng(0)
+      W = np.zeros((4, 2))
+      lengths = []
+      for k in range(100):
+          s, done, S, A, R = env.reset(), False, [], [], []
+          while not done:
+              p = softmax(s @ W)
+              a = int(rng.random() < p[1])         # Aktion 1 mit Wahrscheinlichkeit p[1]
+              S.append(s)
+              A.append(a)
+              s, r, done = env.step(a)
+              R.append(r)
+          S, A, G = np.array(S), np.array(A), returns(R, 0.99)
+          P = softmax(S @ W)                       # T × 2
+          W += 0.005 * S.T @ ((np.eye(2)[A] - P) * G[:, None])
+          lengths.append(len(R))
+          lab.progress((k + 1) / 100, "Training")
+
+      fig = lab.Figure(title="REINFORCE: Schritte pro Episode", xlabel="Episode", ylabel="Schritte")
+      fig.line(lengths, label="Episode")
+      fig.line(np.convolve(lengths, np.ones(10) / 10, mode="valid"), x=np.arange(9, 100), label="Mittel über 10")
+      fig.show()
+
+      s, done, states = env.reset(), False, []
+      while not done:
+          states.append(s)
+          s, r, done = env.step(int(np.argmax(s @ W)))
+      env.render(np.array(states), title=f"Greedy: {len(states)} Schritte")
+    subgoals:
+      - lines: [5, 14]
+        label: Softmax und Returns
+      - lines: [21, 28]
+        label: Episode mit der Policy spielen
+      - lines: [29, 31]
+        label: Policy-Gradient-Schritt
+      - lines: [35, 38]
+        label: Lernkurve zeichnen
+      - lines: [40, 44]
+        label: Ergebnis animieren
+    heavy: true
+    after: |
+      Acht Gewichte genügen, um den Stab oft über 100 Schritte zu halten. Die Kurve ist stark verrauscht: Jede Episode liefert nur **eine** Stichprobe des Gradienten. Und weil bei CartPole jeder Return positiv ist, wird jede gewählte Aktion verstärkt – nur unterschiedlich stark. Genau da setzt die nächste Lektion (Baseline) an.
+  - type: exercise
+    mode: modify
+    heavy: true
+    prompt: |
+      In `train` fehlt der Lernschritt. Ergänze nach der Berechnung von `G` das REINFORCE-Update: Für jeden Zeitschritt `t` wird `W` um `lr * G[t] * grad_log_pi(W, S[t], A[t])` verschoben. Getestet wird, ob die letzten 20 Episoden im Mittel über 60 Schritte dauern.
+    starter: |
+      import numpy as np
+      from lab.envs import CartPole
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def grad_log_pi(W, s, a):
+          return np.outer(s, np.eye(2)[a] - softmax(s @ W))
+
+      def train(episodes, seed=0, lr=0.005, gamma=0.99):
+          env = CartPole(max_steps=200, seed=seed)
+          rng = np.random.default_rng(seed)
+          W = np.zeros((4, 2))
+          lengths = []
+          for k in range(episodes):
+              s, done, S, A, R = env.reset(), False, [], [], []
+              while not done:
+                  a = int(rng.random() < softmax(s @ W)[1])
+                  S.append(s)
+                  A.append(a)
+                  s, r, done = env.step(a)
+                  R.append(r)
+              G, g = np.zeros(len(R)), 0.0
+              for t in reversed(range(len(R))):
+                  g = R[t] + gamma * g
+                  G[t] = g
+              # hier fehlt das Update von W
+              lengths.append(len(R))
+          return lengths
+    solution: |
+      import numpy as np
+      from lab.envs import CartPole
+
+      def softmax(z):
+          e = np.exp(z - np.max(z))
+          return e / e.sum()
+
+      def grad_log_pi(W, s, a):
+          return np.outer(s, np.eye(2)[a] - softmax(s @ W))
+
+      def train(episodes, seed=0, lr=0.005, gamma=0.99):
+          env = CartPole(max_steps=200, seed=seed)
+          rng = np.random.default_rng(seed)
+          W = np.zeros((4, 2))
+          lengths = []
+          for k in range(episodes):
+              s, done, S, A, R = env.reset(), False, [], [], []
+              while not done:
+                  a = int(rng.random() < softmax(s @ W)[1])
+                  S.append(s)
+                  A.append(a)
+                  s, r, done = env.step(a)
+                  R.append(r)
+              G, g = np.zeros(len(R)), 0.0
+              for t in reversed(range(len(R))):
+                  g = R[t] + gamma * g
+                  G[t] = g
+              for t in range(len(R)):
+                  W += lr * G[t] * grad_log_pi(W, S[t], A[t])
+              lengths.append(len(R))
+          return lengths
+    tests:
+      - name: Policy wird besser
+        code: |
+          import numpy as np
+          lengths = train(100, seed=0)
+          first, last = np.mean(lengths[:20]), np.mean(lengths[-20:])
+          assert last > 60, f"Die letzten 20 Episoden dauern im Mittel {last:.0f} Schritte (die ersten 20: {first:.0f}); erwartet über 60. Stimmt Richtung und Gewichtung mit G[t]?"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import CartPole
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def grad_log_pi(W, s, a):
+            return np.outer(s, np.eye(2)[a] - softmax(s @ W))
+
+        def train(episodes, seed=0, lr=0.005, gamma=0.99):
+            env = CartPole(max_steps=200, seed=seed)
+            rng = np.random.default_rng(seed)
+            W = np.zeros((4, 2))
+            lengths = []
+            for k in range(episodes):
+                s, done, S, A, R = env.reset(), False, [], [], []
+                while not done:
+                    a = int(rng.random() < softmax(s @ W)[1])
+                    S.append(s)
+                    A.append(a)
+                    s, r, done = env.step(a)
+                    R.append(r)
+                G, g = np.zeros(len(R)), 0.0
+                for t in reversed(range(len(R))):
+                    g = R[t] + gamma * g
+                    G[t] = g
+                for t in range(len(R)):
+                    W -= lr * G[t] * grad_log_pi(W, S[t], A[t])
+                lengths.append(len(R))
+            return lengths
+      - |
+        import numpy as np
+        from lab.envs import CartPole
+
+        def softmax(z):
+            e = np.exp(z - np.max(z))
+            return e / e.sum()
+
+        def grad_log_pi(W, s, a):
+            return np.outer(s, np.eye(2)[a] - softmax(s @ W))
+
+        def train(episodes, seed=0, lr=0.005, gamma=0.99):
+            env = CartPole(max_steps=200, seed=seed)
+            rng = np.random.default_rng(seed)
+            W = np.zeros((4, 2))
+            lengths = []
+            for k in range(episodes):
+                s, done, S, A, R = env.reset(), False, [], [], []
+                while not done:
+                    a = int(rng.random() < softmax(s @ W)[1])
+                    S.append(s)
+                    A.append(a)
+                    s, r, done = env.step(a)
+                    R.append(r)
+                G, g = np.zeros(len(R)), 0.0
+                for t in reversed(range(len(R))):
+                    g = R[t] + gamma * g
+                    G[t] = g
+                for t in range(len(R)):
+                    W += lr * R[t] * grad_log_pi(W, S[t], A[t])
+                lengths.append(len(R))
+            return lengths
+    hints:
+      - "Teilziel: über alle Zeitschritte der Episode laufen und je einen Gradientenschritt machen."
+      - Jeder Schritt verschiebt $W$ in Richtung $\nabla \log \pi(a_t \mid s_t)$, gewichtet mit dem Return **ab** $t$.
+      - "`for t in range(len(R)):`"
+      - "`    W += lr * G[t] * grad_log_pi(W, S[t], A[t])`"
+  - type: quiz
+    question: |
+      Warum braucht REINFORCE **kein Modell** der Umgebung, obwohl $J$ von der Dynamik abhängt?
+    options:
+      - text: Im Gradienten von $\log p_W(\tau)$ fallen die Übergangswahrscheinlichkeiten weg, weil sie nicht von $W$ abhängen.
+        correct: true
+        why: Übrig bleibt $\sum_t \nabla \log \pi_W(a_t \mid s_t)$ – das kann der Agent selbst berechnen, die Dynamik steckt nur in den gesammelten Episoden.
+      - text: Weil CartPole deterministisch ist.
+        correct: false
+        why: Die Herleitung gilt auch für stochastische Umgebungen.
+      - text: Weil die Policy linear ist.
+        correct: false
+        why: REINFORCE funktioniert mit beliebigen differenzierbaren Policies, z. B. neuronalen Netzen.
+      - text: Weil das Update erst am Episodenende passiert.
+        correct: false
+        why: Der Zeitpunkt ändert nichts daran, ob man ein Modell braucht.
+cards:
+  - id: m15-c-grad-log-softmax
+    concept: softmax-policy-gradient
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          p = np.array([0.5, 0.5])
+          print(np.eye(2)[1] - p)
+        options: ["[-0.5  0.5]", "[0.5 0.5]", "[ 0.5 -0.5]", "[0. 1.]"]
+        answer: "[-0.5  0.5]"
+        explanation: Gewählte Aktion 1 bekommt $1 - 0.5$, die andere $0 - 0.5$.
+      - type: predict
+        code: |
+          import numpy as np
+          p = np.array([0.9, 0.1])
+          print(np.round(np.eye(2)[0] - p, 2))
+        options: ["[ 0.1 -0.1]", "[ 0.9 -0.1]", "[-0.1  0.1]", "[0.1 0.9]"]
+        answer: "[ 0.1 -0.1]"
+        explanation: War die Aktion schon wahrscheinlich, ist der Schritt klein – es gibt wenig zu verstärken.
+  - id: m15-c-reinforce-idee
+    concept: reinforce-algorithmus
+    variants:
+      - type: quiz
+        question: Womit wird $\nabla \log \pi(a_t \mid s_t)$ im REINFORCE-Update gewichtet?
+        options:
+          - text: Mit dem Return $G_t$ ab Zeitschritt $t$
+            correct: true
+            why: Aktionen, nach denen viel Belohnung kam, werden stärker verstärkt.
+          - text: Mit der Belohnung $r_t$ allein
+            correct: false
+            why: Dann zählte nur der unmittelbare Effekt; bei CartPole wäre das immer 1.
+          - text: Mit dem Return der ganzen Episode ab $t = 0$
+            correct: false
+            why: Das ist erwartungstreu, aber unnötig verrauscht – frühere Belohnungen hängen nicht von $a_t$ ab.
+      - type: quiz
+        question: Wie erkundet eine Softmax-Policy?
+        options:
+          - text: Sie zieht Aktionen zufällig gemäß ihren Wahrscheinlichkeiten.
+            correct: true
+            why: Die Erkundung ist in der stochastischen Policy eingebaut.
+          - text: Mit einem zusätzlichen ε-greedy-Schritt.
+            correct: false
+            why: Nicht nötig – sie ist schon stochastisch.
+          - text: Gar nicht, sie wählt immer die wahrscheinlichste Aktion.
+            correct: false
+            why: Das wäre die greedy Auswertung, nicht das Lernen.
+  - id: m15-c-log-trick
+    concept: policy-gradient
+    variants:
+      - type: quiz
+        question: Welche Identität steckt hinter dem Policy-Gradienten?
+        options:
+          - text: $\nabla p = p\, \nabla \log p$
+            correct: true
+            why: Damit wird aus dem Gradienten einer Summe ein Erwartungswert, den man per Stichprobe schätzen kann.
+          - text: $\nabla \log p = \log \nabla p$
+            correct: false
+            why: Das gilt nicht; Ableitung und Logarithmus vertauschen nicht.
+          - text: $\nabla p = 1/p$
+            correct: false
+            why: Das ist die Ableitung von $\log p$ nach $p$, nicht nach $W$.
+      - type: quiz
+        question: Warum taucht die Dynamik der Umgebung in $\nabla_W \log p_W(\tau)$ nicht auf?
+        options:
+          - text: Die Übergangswahrscheinlichkeiten hängen nicht von $W$ ab, ihr Gradient ist null.
+            correct: true
+            why: Übrig bleiben nur die Terme $\nabla \log \pi_W(a_t \mid s_t)$.
+          - text: Weil die Umgebung deterministisch angenommen wird.
+            correct: false
+            why: Die Herleitung gilt auch für stochastische Umgebungen.
+          - text: Weil man sie vorher aus Daten schätzt.
+            correct: false
+            why: REINFORCE schätzt kein Modell – das ist gerade der Vorteil.

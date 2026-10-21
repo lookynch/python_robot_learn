@@ -1,0 +1,357 @@
+id: m01-while
+title: Wiederholen mit while
+minutes: 10
+goals:
+  - Einen Block mit `while` wiederholen, solange eine Bedingung gilt
+  - Das Muster Startwert → Bedingung → Aktualisierung anwenden
+  - Endlosschleifen erkennen und mit der Stopp-Taste beenden
+concepts: [while-schleife]
+steps:
+  - type: text
+    body: |
+      ## Solange …
+
+      Ein Regler wiederholt dieselben Schritte, bis das Ziel erreicht ist. In Python:
+
+      ```python
+      while bedingung:
+          block
+      ```
+
+      1. Python prüft die Bedingung.
+      2. Ist sie `True`, läuft der eingerückte Block – danach geht es zurück zu 1.
+      3. Ist sie `False`, geht es nach der Schleife weiter.
+
+      Damit die Schleife endet, muss der Block etwas ändern, das die Bedingung beeinflusst – meist einen **Zähler**.
+  - type: example
+    code: |
+      n = 3
+      while n > 0:
+          print("Countdown:", n)
+          n = n - 1
+      print("Start!")
+    subgoals:
+      - lines: 1
+        label: Startwert festlegen
+      - lines: 2
+        label: Bedingung prüfen
+      - lines: [3, 4]
+        label: Arbeiten und Zähler ändern
+      - lines: 5
+        label: Nach der Schleife weiter
+    after: |
+      Die Bedingung wird **viermal** geprüft: bei `n = 3, 2, 1` ist sie `True`, bei `n = 0` `False` – dann geht es mit `Start!` weiter.
+  - type: explain
+    question: |
+      Warum endet die Schleife im Beispiel?
+    options:
+      - text: Weil `n = n - 1` den Zähler bei jedem Durchlauf verkleinert, bis `n > 0` nicht mehr gilt.
+        correct: true
+        why: Die Aktualisierung im Block treibt die Bedingung Richtung `False`.
+      - text: Weil eine `while`-Schleife höchstens dreimal läuft.
+        correct: false
+        why: "`while` hat keine feste Anzahl – sie läuft, solange die Bedingung gilt."
+      - text: Weil `print("Start!")` die Schleife beendet.
+        correct: false
+        why: Diese Zeile ist nicht eingerückt und läuft erst, **nachdem** die Schleife geendet hat.
+  - type: trace
+    intro: |
+      Verfolge `position` Durchlauf für Durchlauf.
+    code: |
+      position = 0
+      while position < 10:
+          position = position + 4
+      print(position)
+    questions:
+      - line: 3
+        hit: 2
+        var: position
+        answer: "8"
+        prompt: Zeile 3 lief zum 2. Mal. Welchen Wert hat `position`?
+      - line: 3
+        hit: 3
+        var: position
+        answer: "12"
+        prompt: Und nach dem 3. Mal?
+    after: |
+      Bei `position = 8` gilt `8 < 10` noch, also läuft der Block ein drittes Mal – das Ergebnis 12 liegt **über** der Grenze. Die Bedingung wird nur am Anfang jedes Durchlaufs geprüft, nicht mitten im Block.
+  - type: predict
+    code: |
+      i = 1
+      while i < 5:
+          i = i * 2
+      print(i)
+    options: ["4", "8", "16", "5"]
+    answer: "8"
+    explanation: |
+      1 → 2 → 4 → 8. Bei `i = 4` gilt `4 < 5` noch, also wird verdoppelt. Bei 8 ist Schluss.
+  - type: predict
+    code: |
+      i = 0
+      while i <= 3:
+          print(i)
+          i = i + 1
+    options:
+      - |
+        0
+        1
+        2
+      - |
+        0
+        1
+        2
+        3
+      - |
+        1
+        2
+        3
+        4
+      - |
+        1
+        2
+        3
+    answer: |
+      0
+      1
+      2
+      3
+    explanation: |
+      Ausgegeben wird **vor** dem Erhöhen, beginnend bei 0. Wegen `<=` läuft auch `i = 3` noch. Mit `<` wären es nur 0, 1, 2.
+  - type: text
+    body: |
+      ## Endlosschleifen und die Stopp-Taste
+
+      Wird die Bedingung nie `False`, läuft die Schleife **für immer** – eine Endlosschleife. Typische Ursachen:
+
+      - Die Aktualisierung fehlt oder ist nicht eingerückt (steht also hinter der Schleife).
+      - Der Zähler läuft in die falsche Richtung (`n = n + 1` statt `n - 1`).
+
+      Das passiert jedem einmal und ist harmlos. Tippe dann auf die **Stopp-Taste**: Die App beendet Python dabei komplett und **startet es neu** – das dauert einen Moment. Nötig ist das, weil die App eine laufende Python-Schleife nicht auf andere Weise unterbrechen kann.
+
+      Gibt die Schleife dabei ständig etwas aus, bricht die App nach sehr viel Ausgabe auch von selbst ab.
+  - type: quiz
+    question: |
+      Was passiert bei diesem Programm?
+    code: |
+      n = 5
+      while n > 0:
+          print(n)
+      n = n - 1
+    options:
+      - text: Es gibt endlos `5` aus.
+        correct: true
+        why: "`n = n - 1` ist nicht eingerückt, gehört also nicht zur Schleife. `n` bleibt 5, die Bedingung bleibt `True`."
+      - text: Es gibt 5, 4, 3, 2, 1 aus.
+        correct: false
+        why: Das wäre richtig, wenn `n = n - 1` eingerückt wäre.
+      - text: Es gibt einmal `5` aus und endet.
+        correct: false
+        why: Nach dem Block prüft `while` die Bedingung erneut – und `n` hat sich nicht geändert.
+      - text: Python meldet einen `IndentationError`.
+        correct: false
+        why: Die Einrückung ist gültig – nur nicht die gemeinte. Python kann Logikfehler nicht erkennen.
+  - type: fill
+    fading: true
+    prompt: |
+      Addiere 1 + 2 + 3 + 4. Ergänze so, dass `10` ausgegeben wird.
+    code: |
+      summe = 0
+      k = 1
+      while k ___ 4:
+          summe = summe + k
+          k = ___
+      print(summe)
+    blanks:
+      - answer: "<="
+        options: ["<=", "<", "==", ">"]
+      - answer: k + 1
+        options: [k + 1, k + 2, summe + 1]
+    expect_output: "10"
+    explanation: |
+      Mit `<` fehlte die 4 (Ergebnis 6). Mit `==` oder `>` ist die Bedingung schon am Anfang `False`, die Schleife läuft nie.
+  - type: parsons
+    fading: true
+    prompt: |
+      Der Roboter beschleunigt in Schritten von 1 m/s bis 3 m/s und meldet jede Stufe. Bringe die Zeilen in Reihenfolge und Einrückung.
+    lines:
+      - "geschw = 0"
+      - "while geschw < 3:"
+      - "    geschw = geschw + 1"
+      - '    print("Geschwindigkeit", geschw)'
+      - 'print("Ziel erreicht")'
+    distractors:
+      - "while geschw < 3"
+      - "while geschw < 3 do:"
+    expect_output: |
+      Geschwindigkeit 1
+      Geschwindigkeit 2
+      Geschwindigkeit 3
+      Ziel erreicht
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Regler halbiert den Abstand zum Ziel in jedem Schritt. Starte bei `abstand = 1.0` und halbiere, **solange** der Abstand mindestens 0.1 beträgt. Zähle die Schritte in `schritte` und gib sie aus.
+
+      Erwartete Ausgabe:
+      ```
+      4
+      ```
+    starter: |
+      abstand = 1.0
+      schritte = 0
+      # while ...
+      print(schritte)
+    solution: |
+      abstand = 1.0
+      schritte = 0
+      while abstand >= 0.1:
+          abstand = abstand / 2
+          schritte = schritte + 1
+      print(schritte)
+    tests:
+      - name: Anzahl Schritte
+        code: |
+          assert schritte == 4, f"schritte sollte 4 sein (1.0 → 0.5 → 0.25 → 0.125 → 0.0625), ist {schritte}"
+      - name: Endabstand
+        code: |
+          assert abstand == 0.0625, f"abstand sollte am Ende 0.0625 sein, ist {abstand}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["4"], f"Erwartete Ausgabe 4, bekommen {lines()}"
+    mutants:
+      - |
+        abstand = 1.0
+        schritte = 0
+        while abstand >= 0.1:
+            abstand = abstand / 2
+        print(schritte)
+      - |
+        abstand = 1.0
+        schritte = 1
+        while abstand >= 0.1:
+            abstand = abstand / 2
+            schritte = schritte + 1
+        print(schritte)
+      - |
+        abstand = 1.0
+        schritte = 0
+        while abstand >= 0.1:
+            abstand = abstand - 0.5
+            schritte = schritte + 1
+        print(schritte)
+      - |
+        abstand = 1.0
+        schritte = 0
+        while abstand <= 0.1:
+            abstand = abstand / 2
+            schritte = schritte + 1
+        print(schritte)
+    hints:
+      - "Teilziel: Bedingung prüfen → halbieren → Schritt zählen."
+      - "„Solange mindestens 0.1“ heißt `abstand >= 0.1`. Im Block ändern sich **zwei** Variablen."
+      - |
+        ```python
+        while abstand >= 0.1:
+            abstand = abstand / 2
+            ...
+        ```
+      - |
+        ```python
+        while abstand >= 0.1:
+            abstand = abstand / 2
+            schritte = schritte + 1
+        ```
+    explanation: |
+      Hier steht vorher nicht fest, wie viele Durchläufe nötig sind – genau dafür ist `while` da. Ist die Anzahl bekannt, ist `for` (nächste Lektion) meist einfacher.
+  - type: quiz
+    question: |
+      Welche Änderung macht aus dieser Endlosschleife eine Schleife, die 0, 1, 2 ausgibt?
+    code: |
+      i = 0
+      while i < 3:
+          print(i)
+    options:
+      - text: "Im Block, eingerückt nach `print(i)`, die Zeile `i = i + 1` ergänzen."
+        correct: true
+        why: Dann wächst `i` in jedem Durchlauf, bis `i < 3` nicht mehr gilt.
+      - text: "`i = i + 1` nach der Schleife ohne Einrückung ergänzen."
+        correct: false
+        why: Diese Zeile würde nie erreicht – die Schleife läuft vorher endlos.
+      - text: "`while i < 3:` durch `while i <= 3:` ersetzen."
+        correct: false
+        why: "`i` ändert sich trotzdem nicht – weiterhin endlos."
+      - text: "Im Block `i = i - 1` ergänzen."
+        correct: false
+        why: "`i` wird immer kleiner, `i < 3` bleibt für immer `True`."
+cards:
+  - id: m01-c-while-zaehlen
+    concept: while-schleife
+    variants:
+      - type: predict
+        code: |
+          n = 10
+          while n > 6:
+              n = n - 3
+          print(n)
+        options: ["4", "7", "6", "1"]
+        answer: "4"
+        explanation: 10 → 7 → 4. Bei 7 gilt `7 > 6` noch, bei 4 nicht mehr.
+      - type: predict
+        code: |
+          x = 1
+          while x < 20:
+              x = x * 3
+          print(x)
+        options: ["27", "9", "20", "81"]
+        answer: "27"
+        explanation: 1 → 3 → 9 → 27. Bei 9 gilt `9 < 20` noch, also wird ein letztes Mal verdreifacht.
+      - type: predict
+        code: |
+          k = 0
+          while k < 3:
+              k = k + 1
+              print(k)
+        options:
+          - |
+            1
+            2
+            3
+          - |
+            0
+            1
+            2
+          - |
+            1
+            2
+        answer: |
+          1
+          2
+          3
+        explanation: Erst wird erhöht, dann ausgegeben – deshalb beginnt die Ausgabe bei 1 und endet bei 3.
+  - id: m01-c-endlosschleife
+    concept: while-schleife
+    variants:
+      - type: quiz
+        question: Welche Schleife endet **nicht** von selbst?
+        options:
+          - text: "`n = 1` … `while n > 0:` mit `n = n + 1` im Block"
+            correct: true
+            why: "`n` wächst und bleibt immer größer als 0 – Endlosschleife."
+          - text: "`n = 5` … `while n > 0:` mit `n = n - 1` im Block"
+            correct: false
+            why: "`n` erreicht 0, dann endet die Schleife."
+          - text: "`n = 0` … `while n < 5:` mit `n = n + 2` im Block"
+            correct: false
+            why: "0, 2, 4, 6 – bei 6 ist `n < 5` False."
+      - type: quiz
+        question: Dein Programm hängt in einer Endlosschleife. Was tust du?
+        options:
+          - text: Die Stopp-Taste tippen – Python wird neu gestartet – und dann die Aktualisierung im Schleifenblock prüfen.
+            correct: true
+            why: In der App lässt sich eine laufende Schleife nur durch den Neustart von Python beenden. Ursache ist meist ein Zähler, der sich nicht (richtig) ändert.
+          - text: Warten, Python bricht Schleifen nach einigen Sekunden selbst ab.
+            correct: false
+            why: Eine Schleife ohne Ausgabe läuft unbegrenzt weiter.
+          - text: Die App deinstallieren.
+            correct: false
+            why: Nicht nötig – Stopp reicht.

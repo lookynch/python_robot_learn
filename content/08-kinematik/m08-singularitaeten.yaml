@@ -1,0 +1,332 @@
+id: m08-singularitaeten
+title: Singularitäten
+minutes: 9
+goals:
+  - Singuläre Stellungen über $\det J = l_1 l_2 \sin q_2$ erkennen
+  - Verstehen, warum $J^{-1}$ dort riesige Gelenkschritte liefert
+  - DLS mit passender Dämpfung nahe Singularitäten einsetzen
+concepts: [singularitaet]
+steps:
+  - type: text
+    body: |
+      ## Wenn eine Richtung fehlt
+
+      Für den 2-Gelenk-Arm gilt
+
+      $$\det J(q) = l_1 l_2 \sin q_2$$
+
+      Bei $q_2 = 0$ (gestreckt) und $q_2 = \pi$ (gefaltet) ist $\det J = 0$: eine **Singularität**. Beide Spalten von $J$ sind dann parallel – die Spitze kann sich in erster Ordnung nur noch **quer** zum Arm bewegen, nicht radial. $J$ ist nicht invertierbar.
+
+      Gefährlicher als die Singularität selbst ist ihre **Nähe**: $J^{-1}$ enthält den Faktor $1/\det J$.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def jacobian(q, l1=1.0, l2=1.0):
+          s1, c1 = np.sin(q[0]), np.cos(q[0])
+          s12, c12 = np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]])
+
+      q2s = np.linspace(-np.pi, np.pi, 121)
+      dets = [np.linalg.det(jacobian([0.7, q2], 1.0, 0.6)) for q2 in q2s]
+      fig = lab.Figure(title="det J über q2 (l1 = 1, l2 = 0.6)", xlabel="q2 (rad)", ylabel="det J")
+      fig.line(dets, x=q2s, label="np.linalg.det")
+      fig.line(1.0 * 0.6 * np.sin(q2s), x=q2s, label="l1·l2·sin q2")
+      fig.hline(0.0)
+      fig.show()
+    subgoals:
+      - lines: [9, 10]
+        label: Determinante über viele Stellungen berechnen
+      - lines: [11, 15]
+        label: Mit der Formel vergleichen
+    after: |
+      Beide Kurven liegen aufeinander, und $q_1$ spielt keine Rolle (hier fest 0.7). Nullstellen bei $q_2 = -\pi, 0, \pi$.
+  - type: predict
+    code: |
+      import numpy as np
+
+      J = np.array([[0.0, 0.0], [2.0, 1.0]])    # gestreckter Arm, q = (0, 0)
+      e = np.array([0.0, 0.5])                  # Wunsch: Spitze nach oben
+      print(round(np.linalg.det(J), 2))
+      dq = J.T @ np.linalg.solve(J @ J.T + 0.1**2 * np.eye(2), e)
+      print(np.round(dq, 2))
+    options:
+      - |
+        0.0
+        [0.2 0.1]
+      - |
+        2.0
+        [0.2 0.1]
+      - |
+        0.0
+        [nan nan]
+      - |
+        0.0
+        [0. 0.]
+    answer: |
+      0.0
+      [0.2 0.1]
+    explanation: |
+      $\det J = 0$ – $J^{-1}$ existiert nicht. DLS liefert trotzdem einen endlichen Schritt: Die gewünschte Bewegung nach oben (quer zum Arm) ist möglich, also bewegen sich die Gelenke. Für eine **radiale** Wunschrichtung $e = (0.5, 0)$ würde DLS $\Delta q = (0, 0)$ liefern – dorthin geht es nicht.
+
+      Achtung: `np.linalg.solve(J, e)` mit exakt singulärem `J` wirft je nach NumPy-Installation einen `LinAlgError` – im Browser liefert es dagegen still `[nan nan]`. Darauf solltest du dich also nicht verlassen; prüfe lieber $|\det J|$ oder nutze DLS.
+  - type: explain
+    question: |
+      Warum liefert $J^{-1} e$ **in der Nähe** einer Singularität riesige Gelenkschritte?
+    options:
+      - text: $J^{-1} = \frac{1}{\det J}\,\mathrm{adj}(J)$ – mit $\det J \to 0$ wächst die Inverse über alle Grenzen, sobald $e$ eine radiale Komponente hat.
+        correct: true
+        why: Um die Spitze ein Stück in die „fast unmögliche“ Richtung zu bewegen, müssen sich die Gelenke enorm drehen.
+      - text: Weil die FK in der Nähe der Singularität ungenau wird.
+        correct: false
+        why: Die FK ist überall exakt; das Problem liegt in der Invertierung von $J$.
+      - text: Weil dort $J = 0$ ist.
+        correct: false
+        why: $J$ ist nicht null (eine Richtung geht ja noch), nur ihre Determinante.
+  - type: example
+    title: Inverse vs. DLS am Rand der Reichweite
+    intro: |
+      Ziel $(2.5, 0)$ ist unerreichbar, der Arm muss sich der gestreckten Stellung nähern. Wir vergleichen die Schrittgröße $\lVert\alpha\,\Delta q\rVert$ pro Iteration.
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      def run(method, lam=0.0, iters=60):
+          q, qs, steps = np.array([0.2, 0.4]), [], []
+          for k in range(iters):
+              J, e = jacobian(q), np.array([2.5, 0.0]) - fk(q)
+              if method == "inv":
+                  dq = np.linalg.solve(J, e)
+              else:
+                  dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+              q = q + 0.5 * dq
+              qs.append(q)
+              steps.append(np.linalg.norm(0.5 * dq))
+          return qs, steps
+
+      fig = lab.Figure(title="Schrittgröße pro Iteration", xlabel="Iteration", ylabel="Schritt (rad)", logy=True)
+      for method, lam, label in [("inv", 0.0, "J⁻¹"), ("dls", 0.1, "DLS λ = 0.1"), ("dls", 0.3, "DLS λ = 0.3")]:
+          fig.line(run(method, lam)[1], label=label)
+      fig.show()
+      lab.arm(run("inv")[0], target=(2.5, 0.0), title="J⁻¹: der Arm zuckt")
+    subgoals:
+      - lines: [11, 22]
+        label: IK-Schleife mit wählbarer Methode
+      - lines: [24, 27]
+        label: Schrittgrößen vergleichen
+      - lines: 28
+        label: Bewegung animieren
+    after: |
+      Mit $J^{-1}$ springen die Gelenke immer wieder um viele Radiant – der Arm „zuckt“. DLS mit $\lambda = 0.1$ bleibt beschränkt, pendelt aber zwischen zwei Ellbogenstellungen hin und her. Mit $\lambda = 0.3$ beruhigt sich der Arm gestreckt in Richtung Ziel. Die Dämpfung ist ein **Tuning-Parameter**.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Der Code fährt mit $J^{-1}$ auf das unerreichbare Ziel $(2.5, 0)$ zu und zuckt. Ändere den Gelenkschritt auf **DLS mit $\lambda = 0.3$**, sodass
+
+      - kein Schritt größer als 1 rad ist,
+      - der Arm am Ende ruhig gestreckt in Richtung Ziel steht (Spitze bei $(2, 0)$).
+    starter: |
+      import numpy as np
+      import lab
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      target = np.array([2.5, 0.0])
+      lam = 0.3
+      q = np.array([0.2, 0.4])
+      qs = [q]
+      for k in range(100):
+          J = jacobian(q)
+          e = target - fk(q)
+          dq = np.linalg.solve(J, e)
+          q = q + 0.5 * dq
+          qs.append(q)
+      lab.arm(qs[::2], target=tuple(target), title="Zum Rand der Reichweite")
+    solution: |
+      import numpy as np
+      import lab
+
+      def fk(q):
+          return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+
+      def jacobian(q):
+          s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+          return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+
+      target = np.array([2.5, 0.0])
+      lam = 0.3
+      q = np.array([0.2, 0.4])
+      qs = [q]
+      for k in range(100):
+          J = jacobian(q)
+          e = target - fk(q)
+          dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+          q = q + 0.5 * dq
+          qs.append(q)
+      lab.arm(qs[::2], target=tuple(target), title="Zum Rand der Reichweite")
+    tests:
+      - name: Keine Riesenschritte
+        code: |
+          import numpy as np
+          Q = np.array(qs)
+          assert np.all(np.isfinite(Q)), "Die Gelenkwinkel enthalten nan/inf."
+          step = np.linalg.norm(np.diff(Q, axis=0), axis=1).max()
+          assert step < 1.0, f"Größter Gelenkschritt {step:.2f} rad – erwartet < 1 rad (noch J⁻¹?)"
+      - name: Arm kommt zur Ruhe
+        code: |
+          import numpy as np
+          Q = np.array(qs)
+          late = np.linalg.norm(np.diff(Q[-10:], axis=0), axis=1).max()
+          assert late < 1e-3, f"In den letzten Iterationen bewegt sich der Arm noch um bis zu {late:.3f} rad – er pendelt (λ zu klein?)"
+      - name: Gestreckt Richtung Ziel
+        code: |
+          import numpy as np
+          p = fk(qs[-1])
+          assert close(p, [2.0, 0.0], tol=0.01), f"Die Spitze sollte bei (2, 0) landen, ist bei {np.round(p, 3)}"
+    mutants:
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        target = np.array([2.5, 0.0])
+        q = np.array([0.2, 0.4])
+        qs = [q]
+        for k in range(100):
+            J = jacobian(q)
+            e = target - fk(q)
+            q = q + 0.5 * np.linalg.pinv(J) @ e
+            qs.append(q)
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        target = np.array([2.5, 0.0])
+        lam = 0.1
+        q = np.array([0.2, 0.4])
+        qs = [q]
+        for k in range(100):
+            J = jacobian(q)
+            e = target - fk(q)
+            q = q + 0.5 * J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)
+            qs.append(q)
+      - |
+        import numpy as np
+        def fk(q):
+            return np.array([np.cos(q[0]) + np.cos(q[0] + q[1]), np.sin(q[0]) + np.sin(q[0] + q[1])])
+        def jacobian(q):
+            s1, c1, s12, c12 = np.sin(q[0]), np.cos(q[0]), np.sin(q[0] + q[1]), np.cos(q[0] + q[1])
+            return np.array([[-s1 - s12, -s12], [c1 + c12, c12]])
+        target = np.array([2.5, 0.0])
+        lam = 0.3
+        q = np.array([0.2, 0.4])
+        qs = [q]
+        for k in range(100):
+            J = jacobian(q)
+            e = target - fk(q)
+            q = q + 0.5 * J.T @ np.linalg.solve(J @ J.T + lam**2, e)
+            qs.append(q)
+    hints:
+      - "Teilziel: nur die Zeile mit `dq = ...` ändern."
+      - "DLS: $\\Delta q = J^T (J J^T + \\lambda^2 I)^{-1} e$ – die Inverse wieder über `np.linalg.solve`."
+      - "`np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)` und davor `J.T @`."
+      - "`dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(2), e)`"
+    explanation: |
+      Die Pseudoinverse (`np.linalg.pinv`) hilft hier **nicht**: Nahe der Singularität ist $J$ noch regulär, $J^+ = J^{-1}$ – mit denselben Riesenschritten. Erst die Dämpfung begrenzt sie.
+  - type: quiz
+    question: |
+      Welche Stellungen eines 2-Gelenk-Arms sind singulär?
+    options:
+      - text: Alle mit $q_2 = 0$ oder $q_2 = \pi$, unabhängig von $q_1$
+        correct: true
+        why: $\det J = l_1 l_2 \sin q_2$ hängt nur von $q_2$ ab.
+      - text: Alle mit $q_1 = 0$
+        correct: false
+        why: $q_1$ dreht nur den ganzen Arm – das ändert die Determinante nicht.
+      - text: Nur $q = (0, 0)$
+        correct: false
+        why: Gestreckt ist der Arm für **jedes** $q_1$, solange $q_2 = 0$.
+      - text: Alle mit $q_2 = \pi/2$
+        correct: false
+        why: Dort ist $|\det J|$ gerade **maximal** – die beste Stellung für Bewegungen in alle Richtungen.
+cards:
+  - id: m08-c-det-j
+    concept: singularitaet
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          l1, l2 = 1.0, 0.5
+          for q2 in [0.0, np.pi / 2, np.pi / 6]:
+              print(f"{l1 * l2 * np.sin(q2):.2f}")
+        options:
+          - |
+            0.00
+            0.50
+            0.25
+          - |
+            0.50
+            0.00
+            0.43
+          - |
+            0.00
+            1.50
+            0.75
+        answer: |
+          0.00
+          0.50
+          0.25
+        explanation: $\det J = l_1 l_2 \sin q_2$ – null gestreckt, maximal bei rechtem Winkel.
+      - type: predict
+        code: |
+          import numpy as np
+          J = np.array([[0.0, 0.0], [2.0, 1.0]])
+          print(round(np.linalg.det(J), 2))
+        options: ["0.0", "2.0", "-2.0", "1.0"]
+        answer: "0.0"
+        explanation: Die erste Zeile ist null (gestreckter Arm auf der x-Achse) – keine Bewegung in x möglich, $\det J = 0$.
+  - id: m08-c-singular-verhalten
+    concept: singularitaet
+    variants:
+      - type: quiz
+        question: Der Arm ist gestreckt ($q_2 = 0$). In welche Richtung kann sich die Spitze (in erster Ordnung) **nicht** bewegen?
+        options:
+          - text: Radial, also entlang des Arms
+            correct: true
+            why: Beide Spalten von $J$ stehen senkrecht auf dem gestreckten Arm.
+          - text: Quer zum Arm
+            correct: false
+            why: Quer geht – beide Gelenke drehen die Spitze genau in diese Richtung.
+          - text: In gar keine Richtung
+            correct: false
+            why: $J$ hat noch Rang 1 – eine Richtung bleibt.
+      - type: quiz
+        question: Was passiert mit $\Delta q = J^{-1} e$, wenn sich der Arm einer Singularität nähert und $e$ eine radiale Komponente hat?
+        options:
+          - text: $\lVert\Delta q\rVert$ wächst stark an
+            correct: true
+            why: $J^{-1}$ enthält $1/\det J$.
+          - text: $\Delta q$ wird null
+            correct: false
+            why: Das macht DLS in der Singularität selbst für die unmögliche Richtung – nicht $J^{-1}$.
+          - text: Nichts Besonderes
+            correct: false
+            why: Genau dort wird die Inverse schlecht konditioniert.

@@ -1,0 +1,210 @@
+id: m19-pytorch
+title: PyTorch in Colab – das MLP neu
+minutes: 10
+goals:
+  - Ein Colab-Notebook mit PyTorch einrichten
+  - Das MLP aus Modul 12 in PyTorch lesen und den NumPy-Teilen zuordnen
+  - Die Trainingsschleife mit zero_grad, backward und step verstehen
+concepts: [pytorch-autograd, pytorch-trainingsschleife, pytorch-nn-module]
+steps:
+  - type: text
+    body: |
+      ## Warum raus aus dem Browser?
+
+      NumPy im Browser reicht für Spielversionen. Für Kamerabilder, große Netze und GPUs brauchst du **PyTorch** – das läuft hier nicht.
+
+      Der einfachste Einstieg ist **Google Colab**: Jupyter-Notebooks im Browser, kostenlos nutzbar. GPUs gibt es dort laut FAQ nur „nicht garantiert“ und eingeschränkt, Laufzeiten enden spätestens nach 12 Stunden oder bei Inaktivität ([Colab-FAQ](https://research.google.com/colaboratory/faq.html)). Speichere also Ergebnisse regelmäßig, z. B. in Google Drive.
+
+      Aktuelle PyTorch-Version: 2.14.1 vom 30.09.2026, Python ≥ 3.10 ([PyPI](https://pypi.org/project/torch/)). *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Das MLP in PyTorch
+
+      Diesen Code **in eine Colab-Zelle kopieren** – im Browser dieser App läuft er nicht.
+
+      ```python
+      import torch
+      from torch import nn
+
+      torch.manual_seed(0)
+      X = torch.linspace(-3, 3, 200).reshape(-1, 1)
+      y = torch.sin(X)
+
+      model = nn.Sequential(nn.Linear(1, 32), nn.Tanh(), nn.Linear(32, 1))
+      opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+      loss_fn = nn.MSELoss()
+
+      for epoch in range(500):
+          pred = model(X)            # Vorwärtsrechnung
+          loss = loss_fn(pred, y)    # Verlust
+          opt.zero_grad()            # alte Gradienten löschen
+          loss.backward()            # Autograd: alle Gradienten
+          opt.step()                 # Gewichte aktualisieren
+
+      print(loss.item())
+      ```
+  - type: text
+    body: |
+      ## Was ersetzt was?
+
+      | Modul 12 (NumPy, von Hand) | PyTorch |
+      |---|---|
+      | `W1, b1` als Arrays anlegen | `nn.Linear(1, 32)` |
+      | eigene `forward`-Funktion | `model(X)` |
+      | Backprop von Hand: `dW1 = …` | `loss.backward()` (Autograd) |
+      | `W1 -= lr * dW1` bzw. Adam selbst | `opt.step()` |
+      | Gradienten-Check | bleibt nützlich, um Eigenbauten zu prüfen |
+
+      Die Mathematik ist dieselbe – PyTorch nimmt dir nur die Buchhaltung ab. Weil du Backprop einmal selbst geschrieben hast, weißt du, was `backward()` tut ([Autograd-Tutorial](https://docs.pytorch.org/tutorials/beginner/basics/autogradqs_tutorial.html)).
+  - type: explain
+    question: |
+      Was passiert bei `loss.backward()`?
+    options:
+      - text: PyTorch hat die Vorwärtsrechnung als Graph aufgezeichnet und wendet nun die Kettenregel rückwärts an; die Gradienten landen in `.grad` der Parameter.
+        correct: true
+        why: Genau das, was du in Modul 12 von Hand gemacht hast – automatisch für jede Rechnung.
+      - text: Die Gewichte werden um einen Schritt verändert.
+        correct: false
+        why: Das macht erst `opt.step()`. `backward()` berechnet nur Gradienten.
+      - text: Der Gradient wird numerisch mit kleinen Differenzen geschätzt.
+        correct: false
+        why: Autograd rechnet exakt über die Kettenregel; numerische Differenzen wären viel zu langsam.
+      - text: Das Modell wird rückwärts ausgeführt, um die Eingabe zu rekonstruieren.
+        correct: false
+        why: „Rückwärts“ bezieht sich auf den Gradientenfluss, nicht auf eine Umkehrung des Modells.
+  - type: predict
+    intro: |
+      PyTorch **addiert** neue Gradienten zu den alten in `.grad`. Diese Spielversion simuliert eine Schleife, in der `opt.zero_grad()` vergessen wurde – jeder `backward()`-Aufruf liefert den Gradienten 2,0:
+    code: |
+      grad = 0.0
+      for schritt in range(3):
+          grad = grad + 2.0      # wie loss.backward() ohne zero_grad()
+      print(grad)
+    options: ["6.0", "2.0", "0.0", "8.0"]
+    answer: "6.0"
+    explanation: |
+      Ohne `zero_grad()` wächst der Gradient mit jedem Schritt; die Updates werden immer größer und falsch. Deshalb steht `opt.zero_grad()` in jeder Trainingsschleife.
+  - type: quiz
+    question: |
+      Welche Form hat das Gewicht dieser Schicht?
+    code: |
+      layer = nn.Linear(3, 5)
+      print(layer.weight.shape)
+    options:
+      - text: "`torch.Size([5, 3])`"
+        correct: true
+        why: nn.Linear speichert das Gewicht als (Ausgänge, Eingänge) und rechnet $x W^T + b$ ([Doku](https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html)).
+      - text: "`torch.Size([3, 5])`"
+        correct: false
+        why: Das wäre die Form, wenn man $x W$ rechnen würde wie oft in NumPy; PyTorch transponiert intern.
+      - text: "`torch.Size([5])`"
+        correct: false
+        why: Das ist die Form des Bias, nicht des Gewichts.
+  - type: quiz
+    question: |
+      Du willst ein trainiertes Modell nur auswerten (keine Updates). Wozu dient `with torch.no_grad():`?
+    options:
+      - text: PyTorch zeichnet keinen Rechengraph auf – das spart Speicher und Zeit.
+        correct: true
+        why: Ohne Training braucht man keine Gradienten, also auch keinen Graph.
+      - text: Es setzt alle Gewichte auf null.
+        correct: false
+        why: Die Gewichte bleiben unverändert; nur die Aufzeichnung wird abgeschaltet.
+      - text: Es ist nötig, damit `model(X)` überhaupt etwas zurückgibt.
+        correct: false
+        why: Die Vorwärtsrechnung funktioniert auch ohne; `no_grad` ist eine Optimierung.
+  - type: text
+    body: |
+      ## Dein konkreter Fahrplan
+
+      1. [colab.research.google.com](https://colab.research.google.com) öffnen, neues Notebook, den Code oben einfügen und ausführen.
+      2. Unter „Laufzeit → Laufzeittyp ändern“ eine GPU wählen (falls verfügbar), dann Modell und Daten mit `.to("cuda")` auf die GPU legen.
+      3. Dein Dynamikmodell aus Modul 16 portieren: Datensatz $(s, a, s')$ in Tensoren, MLP für $\Delta s$, dieselbe Normalisierung.
+      4. Danach CEM aus Modul 11 darauf laufen lassen – mit PyTorch kannst du Tausende Rollouts parallel auf der GPU rechnen.
+
+      Die Menüpunkte in Colab können sich ändern; das Prinzip bleibt.
+cards:
+  - id: m19-c-zero-grad
+    concept: pytorch-trainingsschleife
+    variants:
+      - type: predict
+        code: |
+          grad = 0.0
+          for schritt in range(4):
+              grad = 0.0             # wie opt.zero_grad()
+              grad = grad + 1.5      # wie loss.backward()
+          print(grad)
+        options: ["1.5", "6.0", "0.0", "4.0"]
+        answer: "1.5"
+        explanation: Mit Zurücksetzen vor jedem `backward()` enthält `grad` immer nur den aktuellen Gradienten.
+      - type: quiz
+        question: |
+          Welche Reihenfolge ist in einer PyTorch-Trainingsschleife richtig?
+        options:
+          - text: Vorwärts → Verlust → `zero_grad()` → `backward()` → `step()`
+            correct: true
+            why: Erst alte Gradienten löschen, dann neue berechnen, dann anwenden.
+          - text: "`step()` → Vorwärts → `backward()`"
+            correct: false
+            why: "`step()` vor `backward()` benutzt veraltete oder gar keine Gradienten."
+          - text: Vorwärts → `step()` → Verlust
+            correct: false
+            why: Ohne Verlust und `backward()` gibt es nichts, womit `step()` aktualisieren könnte.
+  - id: m19-c-autograd
+    concept: pytorch-autograd
+    variants:
+      - type: quiz
+        question: |
+          Welcher Teil deines NumPy-MLPs aus Modul 12 entfällt in PyTorch komplett?
+        options:
+          - text: Die von Hand hergeleiteten Gradientenformeln (Backprop)
+            correct: true
+            why: Autograd berechnet sie aus der aufgezeichneten Vorwärtsrechnung.
+          - text: Die Verlustfunktion
+            correct: false
+            why: Einen Verlust musst du weiterhin wählen, z. B. `nn.MSELoss()`.
+          - text: Die Trainingsdaten
+            correct: false
+            why: Daten braucht man immer.
+      - type: quiz
+        question: |
+          Wo findest du nach `loss.backward()` den Gradienten eines Gewichts `w`?
+        options:
+          - text: In `w.grad`
+            correct: true
+            why: Autograd legt Gradienten im Attribut `.grad` der Blatt-Tensoren ab.
+          - text: Im Rückgabewert von `loss.backward()`
+            correct: false
+            why: "`backward()` gibt nichts Nützliches zurück; es schreibt in `.grad`."
+          - text: In `loss.grad`
+            correct: false
+            why: Der Verlust ist kein Parameter; gesucht ist der Gradient nach `w`.
+  - id: m19-c-linear-shape
+    concept: pytorch-nn-module
+    variants:
+      - type: quiz
+        question: |
+          Welche Form hat `nn.Linear(8, 2).weight`?
+        options:
+          - text: (2, 8)
+            correct: true
+            why: (Ausgänge, Eingänge).
+          - text: (8, 2)
+            correct: false
+            why: PyTorch speichert das Gewicht transponiert zur NumPy-Gewohnheit $x W$.
+          - text: (2,)
+            correct: false
+            why: Das ist die Form des Bias.
+      - type: quiz
+        question: |
+          Ein Modell soll aus 4 Zustandswerten und 2 Aktionen $\Delta s$ (4 Werte) vorhersagen. Welche erste und letzte Schicht passen?
+        options:
+          - text: "`nn.Linear(6, 64)` … `nn.Linear(64, 4)`"
+            correct: true
+            why: Eingang 4 + 2 = 6 Werte, Ausgang 4 Werte.
+          - text: "`nn.Linear(4, 64)` … `nn.Linear(64, 6)`"
+            correct: false
+            why: Ein- und Ausgang vertauscht – die Aktion gehört in die Eingabe.
+          - text: "`nn.Linear(64, 6)` … `nn.Linear(4, 64)`"
+            correct: false
+            why: Das erste Argument ist die Eingangsgröße der Schicht.

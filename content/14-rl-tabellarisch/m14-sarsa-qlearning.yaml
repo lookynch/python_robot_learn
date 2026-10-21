@@ -1,0 +1,416 @@
+id: m14-sarsa-qlearning
+title: SARSA und Q-Learning an der Klippe
+minutes: 12
+goals:
+  - Die Updates von SARSA und Q-Learning aufschreiben und unterscheiden
+  - On-policy und off-policy an einem Beispiel erklären
+  - Beide Verfahren auf Cliff Walking trainieren und die Pfade vergleichen
+concepts: [sarsa-update, q-learning-update, on-vs-off-policy]
+steps:
+  - type: text
+    body: |
+      ## TD für Entscheidungen
+
+      TD(0) bewertet eine feste Policy. Zum **Steuern** wendest du dieselbe Idee auf $Q(s, a)$ an. Zwei Varianten unterscheiden sich nur im Ziel:
+
+      **SARSA** (aus $S, A, R, S', A'$): die Aktion $a'$, die der Agent als Nächstes **wirklich** wählt.
+      $$Q(s,a) \leftarrow Q(s,a) + \alpha\,[r + \gamma\, Q(s', a') - Q(s,a)]$$
+
+      **Q-Learning**: die **beste** Aktion in $s'$, egal was der Agent dann tut.
+      $$Q(s,a) \leftarrow Q(s,a) + \alpha\,[r + \gamma \max_{a'} Q(s', a') - Q(s,a)]$$
+
+      SARSA ist **on-policy**: Es bewertet die ε-greedy Policy, die handelt. Q-Learning ist **off-policy**: Es lernt die greedy Policy, während eine andere (ε-greedy) erkundet.
+  - type: example
+    intro: |
+      **Cliff Walking** (Sutton & Barto, Beispiel 6.6): Start `S` unten links, Ziel `G` unten rechts, dazwischen die Klippe `X`. Jeder Schritt kostet −1, ein Sturz −100 und zurück zum Start.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      CLIFF = ["............",
+               "............",
+               "............",
+               "SXXXXXXXXXXG"]
+      env = GridWorld(CLIFF, goal_reward=-1, max_steps=500)
+
+      def eps_greedy(Q, s, eps, rng):
+          if rng.random() < eps:
+              return int(rng.integers(4))
+          return int(np.argmax(Q[s]))
+
+      def q_learning(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          returns = []
+          for k in range(episodes):
+              s, done, G = env.reset(), False, 0.0
+              while not done:
+                  a = eps_greedy(Q, s, eps, rng)
+                  s2, r, done = env.step(a)
+                  target = r if done else r + gamma * np.max(Q[s2])
+                  Q[s, a] += alpha * (target - Q[s, a])
+                  s, G = s2, G + r
+              returns.append(G)
+          return Q, returns
+
+      Q, returns = q_learning(env, 200)
+      lab.plot(returns, title="Q-Learning: Return pro Episode", xlabel="Episode", ylabel="Return")
+      policy = np.argmax(Q, axis=1)
+      s, path = env.reset(), [env.start]
+      while not env.is_terminal(s) and len(path) < 40:
+          s, r, done = env.step(int(policy[s]))
+          path.append(s)
+      env.render(policy=policy, path=path, title=f"Greedy-Pfad: {len(path) - 1} Schritte")
+    subgoals:
+      - lines: [5, 9]
+        label: Eigenes Layout anlegen
+      - lines: [11, 14]
+        label: ε-greedy wählen
+      - lines: [22, 27]
+        label: Q-Learning-Update
+      - lines: [31, 38]
+        label: Lernkurve und Pfad zeigen
+    after: |
+      Die greedy Policy läuft direkt an der Klippenkante entlang: 13 Schritte, der kürzeste Weg. Die Lernkurve zeigt aber auch später noch Einbrüche bis −100 und tiefer – mit $\varepsilon = 0.1$ tritt der Agent beim Erkunden immer wieder über die Kante.
+  - type: predict
+    intro: |
+      Derselbe Übergang, zwei Lernziele. Die ε-greedy Policy hat in $s'$ zufällig Aktion 1 gezogen.
+    code: |
+      import numpy as np
+      Q_s2 = np.array([-3.0, -5.0, -2.0, -4.0])   # Q(s', ·)
+      r, gamma = -1.0, 1.0
+      a2 = 1
+      print("Q-Learning:", r + gamma * np.max(Q_s2))
+      print("SARSA:", r + gamma * Q_s2[a2])
+    options:
+      - |
+        Q-Learning: -3.0
+        SARSA: -6.0
+      - |
+        Q-Learning: -3.0
+        SARSA: -3.0
+      - |
+        Q-Learning: -2.0
+        SARSA: -5.0
+      - |
+        Q-Learning: -6.0
+        SARSA: -3.0
+    answer: |
+      Q-Learning: -3.0
+      SARSA: -6.0
+    explanation: |
+      Q-Learning nimmt das Maximum $-2$, SARSA den Wert der tatsächlich gezogenen Aktion $-5$; dazu kommt jeweils $r = -1$. SARSA „rechnet die Erkundung mit ein“.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze das Q-Learning-Update. Getestet wird, ob die greedy Policy nach 200 Episoden in 13 Schritten zum Ziel läuft.
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      CLIFF = ["............", "............", "............", "SXXXXXXXXXXG"]
+
+      def q_learning(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          for k in range(episodes):
+              s, done = env.reset(), False
+              while not done:
+                  if rng.random() < eps:
+                      a = int(rng.integers(4))
+                  else:
+                      a = int(np.argmax(Q[s]))
+                  s2, r, done = env.step(a)
+                  target = r if done else r + gamma * ___
+                  Q[s, a] += ___
+                  s = s2
+          return Q
+    blanks:
+      - answer: "np.max(Q[s2])"
+        options: ["np.max(Q[s2])", "np.max(Q[s])", "np.min(Q[s2])", "np.argmax(Q[s2])"]
+      - answer: "alpha * (target - Q[s, a])"
+        options: ["alpha * (target - Q[s, a])", "alpha * (Q[s, a] - target)", "alpha * target"]
+    tests:
+      - name: Kürzester Weg an der Kante
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env = GridWorld(CLIFF, goal_reward=-1, max_steps=500)
+          for seed in (0, 1):
+              Q = q_learning(env, 200, seed=seed)
+              s, n = env.reset(), 0
+              while not env.is_terminal(s) and n < 40:
+                  s, r, done = env.step(int(np.argmax(Q[s])))
+                  n += 1
+              assert env.char(s) == "G" and n == 13, f"Seed {seed}: Greedy-Pfad sollte in 13 Schritten am Ziel sein, endet nach {n} Schritten auf '{env.char(s)}'."
+    explanation: |
+      Das Ziel braucht den besten Wert im **Folgezustand** `s2` – nicht in `s`, nicht das Minimum und nicht den **Index** der besten Aktion (`argmax`). Das Update schiebt $Q$ **zum** Ziel hin, gewichtet mit $\alpha$.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Baue aus `q_learning` die Funktion `sarsa(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0)`, die ebenfalls `(Q, returns)` zurückgibt.
+
+      Unterschiede: Die erste Aktion wird **vor** der Schleife gewählt. Nach jedem Schritt wählst du `a2` mit ε-greedy in `s2`, nutzt `Q[s2, a2]` im Ziel und führst `a2` im nächsten Schritt auch wirklich aus.
+    starter: |
+      import numpy as np
+
+      def eps_greedy(Q, s, eps, rng):
+          if rng.random() < eps:
+              return int(rng.integers(4))
+          return int(np.argmax(Q[s]))
+
+      def q_learning(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          returns = []
+          for k in range(episodes):
+              s, done, G = env.reset(), False, 0.0
+              while not done:
+                  a = eps_greedy(Q, s, eps, rng)
+                  s2, r, done = env.step(a)
+                  target = r if done else r + gamma * np.max(Q[s2])
+                  Q[s, a] += alpha * (target - Q[s, a])
+                  s, G = s2, G + r
+              returns.append(G)
+          return Q, returns
+    solution: |
+      import numpy as np
+
+      def eps_greedy(Q, s, eps, rng):
+          if rng.random() < eps:
+              return int(rng.integers(4))
+          return int(np.argmax(Q[s]))
+
+      def sarsa(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0):
+          rng = np.random.default_rng(seed)
+          Q = np.zeros((env.n_states, 4))
+          returns = []
+          for k in range(episodes):
+              s, done, G = env.reset(), False, 0.0
+              a = eps_greedy(Q, s, eps, rng)
+              while not done:
+                  s2, r, done = env.step(a)
+                  a2 = eps_greedy(Q, s2, eps, rng)
+                  target = r if done else r + gamma * Q[s2, a2]
+                  Q[s, a] += alpha * (target - Q[s, a])
+                  s, a, G = s2, a2, G + r
+              returns.append(G)
+          return Q, returns
+    tests:
+      - name: Rückgabe
+        code: |
+          from lab.envs import GridWorld
+          env = GridWorld(["S..", "..G"], goal_reward=-1)
+          Q, rets = sarsa(env, 5, seed=0)
+          assert Q.shape == (6, 4), f"Q sollte die Form (6, 4) haben, hat {Q.shape}"
+          assert len(rets) == 5, f"Für 5 Episoden sollte returns 5 Einträge haben, hat {len(rets)}"
+      - name: Sicherer als Q-Learning während des Lernens
+        code: |
+          import numpy as np
+          from lab.envs import GridWorld
+          env = GridWorld(["............", "............", "............", "SXXXXXXXXXXG"], goal_reward=-1, max_steps=500)
+          means = [np.mean(sarsa(env, 300, seed=seed)[1][-100:]) for seed in range(5)]
+          m = float(np.mean(means))
+          assert m > -40, f"Mittlerer Return der letzten 100 Episoden (5 Läufe) ist {m:.1f}. SARSA liegt hier um −27, Q-Learning um −49; erwartet über −40. Nutzt dein Ziel Q[s2, a2] und führst du a2 auch aus?"
+    mutants:
+      - |
+        import numpy as np
+
+        def eps_greedy(Q, s, eps, rng):
+            if rng.random() < eps:
+                return int(rng.integers(4))
+            return int(np.argmax(Q[s]))
+
+        def sarsa(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            Q = np.zeros((env.n_states, 4))
+            returns = []
+            for k in range(episodes):
+                s, done, G = env.reset(), False, 0.0
+                a = eps_greedy(Q, s, eps, rng)
+                while not done:
+                    s2, r, done = env.step(a)
+                    a2 = eps_greedy(Q, s2, eps, rng)
+                    target = r if done else r + gamma * np.max(Q[s2])
+                    Q[s, a] += alpha * (target - Q[s, a])
+                    s, a, G = s2, a2, G + r
+                returns.append(G)
+            return Q, returns
+      - |
+        import numpy as np
+
+        def eps_greedy(Q, s, eps, rng):
+            if rng.random() < eps:
+                return int(rng.integers(4))
+            return int(np.argmax(Q[s]))
+
+        def sarsa(env, episodes, alpha=0.5, gamma=1.0, eps=0.1, seed=0):
+            rng = np.random.default_rng(seed)
+            Q = np.zeros((env.n_states, 4))
+            returns = []
+            for k in range(episodes):
+                s, done, G = env.reset(), False, 0.0
+                a = eps_greedy(Q, s, eps, rng)
+                while not done:
+                    s2, r, done = env.step(a)
+                    a2 = eps_greedy(Q, s2, eps, rng)
+                    target = r if done else r + gamma * Q[s2, a2]
+                    Q[s, a] += alpha * (target - Q[s, a])
+                    s, G = s2, G + r
+                returns.append(G)
+            return Q, returns
+    hints:
+      - "Teilziel: erste Aktion vor der Schleife wählen, nächste Aktion nach dem Schritt wählen, Update, weiterreichen."
+      - SARSA braucht $a'$ schon **vor** dem Update – und genau diese Aktion muss im nächsten Schritt ausgeführt werden.
+      - "Vor `while`: `a = eps_greedy(Q, s, eps, rng)`. Nach `env.step(a)`: `a2 = eps_greedy(Q, s2, eps, rng)`."
+      - "Ziel: `r if done else r + gamma * Q[s2, a2]`; am Ende der Schleife `s, a, G = s2, a2, G + r`."
+  - type: example
+    title: Beide im Vergleich
+    intro: |
+      Gleiche Klippe, gleicher Seed, je 300 Episoden. Die Lernkurven sind über 10 Episoden geglättet (gleitender Mittelwert mit `np.convolve`).
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      env = GridWorld(["............", "............", "............", "SXXXXXXXXXXG"],
+                      goal_reward=-1, max_steps=500)
+
+      def eps_greedy(Q, s, rng):
+          return int(rng.integers(4)) if rng.random() < 0.1 else int(np.argmax(Q[s]))
+
+      def train(method, episodes=300, alpha=0.5):
+          rng = np.random.default_rng(0)
+          Q, returns = np.zeros((env.n_states, 4)), []
+          for k in range(episodes):
+              s, done, G = env.reset(), False, 0.0
+              a = eps_greedy(Q, s, rng)
+              while not done:
+                  s2, r, done = env.step(a)
+                  a2 = eps_greedy(Q, s2, rng)
+                  nxt = Q[s2, a2] if method == "sarsa" else np.max(Q[s2])
+                  Q[s, a] += alpha * ((r if done else r + nxt) - Q[s, a])
+                  s, a, G = s2, a2, G + r
+              returns.append(G)
+          return Q, np.convolve(returns, np.ones(10) / 10, mode="valid")
+
+      fig = lab.Figure(title="Return beim Lernen (geglättet)", xlabel="Episode", ylabel="Return")
+      for method in ("sarsa", "q"):
+          Q, curve = train(method)
+          fig.line(curve, label="SARSA" if method == "sarsa" else "Q-Learning")
+          s, path = env.reset(), [env.start]
+          while not env.is_terminal(s) and len(path) < 40:
+              s, r, done = env.step(int(np.argmax(Q[s])))
+              path.append(s)
+          env.render(policy=np.argmax(Q, axis=1), path=path, title=f"{method}: Greedy-Pfad")
+      fig.show()
+    subgoals:
+      - lines: [8, 9]
+        label: ε-greedy wählen
+      - lines: [11, 24]
+        label: Ein Trainingscode für beide Ziele
+      - lines: [26, 29]
+        label: Lernkurven sammeln
+      - lines: [30, 34]
+        label: Greedy-Pfade zeigen
+    after: |
+      **SARSA** lernt einen Umweg weiter oben – länger, aber ein zufälliger Schritt führt dort nicht in die Klippe. Sein Return **während des Lernens** ist deutlich besser. **Q-Learning** findet den optimalen Weg an der Kante, verliert aber durch die eigene Erkundung immer wieder 100 Punkte. Würde $\varepsilon$ langsam gegen 0 gehen, kämen beide beim optimalen Weg an (Sutton & Barto, Abschnitt 6.5).
+  - type: explain
+    question: |
+      Warum lernt SARSA an der Klippe den **sicheren** Umweg, Q-Learning aber den Weg direkt an der Kante?
+    options:
+      - text: SARSA bewertet die ε-greedy Policy samt ihrer Zufallsschritte; an der Kante enden die oft mit −100.
+        correct: true
+        why: Genau – on-policy heißt, die eigene Erkundung fließt in die Werte ein. Q-Learning bewertet die greedy Policy, die nie zufällig fällt.
+      - text: Q-Learning erkundet weniger als SARSA.
+        correct: false
+        why: Beide handeln mit demselben ε-greedy. Der Unterschied liegt nur im Lernziel.
+      - text: SARSA kennt die Klippe aus `env.P`, Q-Learning nicht.
+        correct: false
+        why: Beide sind modellfrei und kennen `env.P` nicht.
+      - text: Q-Learning ignoriert die Belohnung −100.
+        correct: false
+        why: Q-Learning lernt den Sturz genauso – es nimmt nur an, dass es später nicht mehr zufällig handelt.
+  - type: quiz
+    question: |
+      Ein Roboter soll aus Aufzeichnungen eines **anderen**, vorsichtigen Bedieners die bestmögliche Policy lernen. Welcher Ansatz passt?
+    options:
+      - text: Q-Learning, weil es off-policy ist
+        correct: true
+        why: Das Ziel $\max_{a'} Q$ hängt nicht davon ab, wer die Daten erzeugt hat.
+      - text: SARSA, weil es on-policy ist
+        correct: false
+        why: SARSA bewertet die Policy, die die Daten erzeugt – hier also nur den vorsichtigen Bediener.
+      - text: Keiner – modellfreie Verfahren brauchen eigene Erfahrung
+        correct: false
+        why: Off-policy-Verfahren können aus fremden Übergängen lernen (in der Praxis mit Grenzen, wenn wichtige Aktionen nie vorkommen).
+cards:
+  - id: m14-c-sarsa-vs-q-ziel
+    concept: sarsa-update
+    variants:
+      - type: predict
+        code: |
+          Q_s2 = [1.0, 4.0, 2.0, 0.0]
+          r, gamma, a2 = 0.0, 0.5, 2
+          print(r + gamma * max(Q_s2), r + gamma * Q_s2[a2])
+        options: ["2.0 1.0", "1.0 2.0", "2.0 2.0", "4.0 2.0"]
+        answer: "2.0 1.0"
+        explanation: "Q-Learning: 0.5·4 = 2. SARSA mit a′ = 2: 0.5·2 = 1."
+      - type: predict
+        code: |
+          Q_s2 = [-1.0, -7.0, -2.0, -3.0]
+          r, gamma, a2 = -1.0, 1.0, 0
+          print(r + gamma * max(Q_s2), r + gamma * Q_s2[a2])
+        options: ["-2.0 -2.0", "-2.0 -8.0", "-8.0 -2.0", "-1.0 -1.0"]
+        answer: "-2.0 -2.0"
+        explanation: Hier hat ε-greedy die beste Aktion gezogen – dann sind beide Ziele gleich.
+  - id: m14-c-q-update
+    concept: q-learning-update
+    variants:
+      - type: predict
+        code: |
+          Q = {("s", "a"): 2.0}
+          alpha, r, gamma = 0.5, 1.0, 1.0
+          best_next = 5.0
+          Q[("s", "a")] += alpha * (r + gamma * best_next - Q[("s", "a")])
+          print(Q[("s", "a")])
+        options: ["4.0", "6.0", "3.0", "2.5"]
+        answer: "4.0"
+        explanation: "Ziel = 1 + 5 = 6, δ = 4, Q = 2 + 0.5·4 = 4."
+      - type: predict
+        code: |
+          q, alpha = 0.0, 0.1
+          target = -10.0
+          q += alpha * (target - q)
+          print(q)
+        options: ["-1.0", "-10.0", "1.0", "-0.1"]
+        answer: "-1.0"
+        explanation: Ein Zehntel des Weges zum Ziel −10.
+  - id: m14-c-on-off
+    concept: on-vs-off-policy
+    variants:
+      - type: quiz
+        question: Was macht SARSA zu einem **on-policy**-Verfahren?
+        options:
+          - text: Das Ziel nutzt die Aktion, die die handelnde Policy als Nächstes wirklich wählt.
+            correct: true
+            why: Bewertet wird genau die Policy, die auch handelt – inklusive Erkundung.
+          - text: Es aktualisiert nach jedem Schritt statt am Episodenende.
+            correct: false
+            why: Das tut Q-Learning auch; das ist TD, nicht on-policy.
+          - text: Es braucht kein ε-greedy.
+            correct: false
+            why: SARSA nutzt typischerweise ε-greedy – genau diese Policy bewertet es.
+      - type: quiz
+        question: Q-Learning heißt **off-policy**, weil …
+        options:
+          - text: … es die greedy Policy lernt, während eine andere (z. B. ε-greedy) handelt.
+            correct: true
+            why: Ziel- und Verhaltenspolicy sind verschieden.
+          - text: … es ohne Policy auskommt.
+            correct: false
+            why: Es handelt mit einer Verhaltenspolicy und lernt eine Zielpolicy.
+          - text: … es die Policy erst am Episodenende ausschaltet.
+            correct: false
+            why: Mit „off“ ist nicht Ausschalten gemeint, sondern dass die gelernte Policy nicht die handelnde ist.

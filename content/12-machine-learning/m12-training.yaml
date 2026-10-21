@@ -1,0 +1,368 @@
+id: m12-training
+title: Besser trainieren
+minutes: 12
+goals:
+  - Daten pro Epoche mischen und in Minibatches aufteilen
+  - Eingaben mit Statistiken der Trainingsdaten standardisieren
+  - Den Adam-Optimierer implementieren und mit Lernkurven gegen SGD vergleichen
+concepts: [ml-minibatch, ml-normalisierung, ml-adam]
+steps:
+  - type: text
+    body: |
+      ## Minibatches
+
+      Bei 100 000 Beispielen ist ein voller Gradient pro Schritt teuer. Stattdessen schätzt man ihn aus einem kleinen, zufälligen **Minibatch** von $B$ Beispielen. Das nennt man **stochastischen Gradientenabstieg** (SGD).
+
+      - Eine **Epoche** = einmal durch alle Daten.
+      - Vor jeder Epoche wird die Reihenfolge **gemischt** (`rng.permutation`), sonst sieht das Netz immer dieselben Gruppen.
+      - Der Schätzer ist verrauscht, aber im Mittel richtig – und man macht viel mehr Updates pro Rechenzeit.
+  - type: example
+    code: |
+      import numpy as np
+
+      rng = np.random.default_rng(0)
+      N, B = 10, 4
+      for epoch in range(2):
+          perm = rng.permutation(N)
+          batches = [perm[i:i + B] for i in range(0, N, B)]
+          print("Epoche", epoch, [b.tolist() for b in batches])
+    subgoals:
+      - lines: [3, 4]
+        label: Größen festlegen
+      - lines: 6
+        label: Reihenfolge mischen
+      - lines: 7
+        label: In Batches schneiden
+    after: |
+      Jeder Index kommt pro Epoche **genau einmal** vor. Der letzte Batch ist kleiner, wenn $B$ nicht aufgeht. Mit `X[batch]` holst du dann die passenden Zeilen.
+  - type: predict
+    code: |
+      import numpy as np
+      idx = np.arange(100)
+      sizes = [len(idx[i:i + 32]) for i in range(0, 100, 32)]
+      print(len(sizes), sizes)
+    options:
+      - "4 [32, 32, 32, 4]"
+      - "3 [32, 32, 32]"
+      - "4 [32, 32, 32, 32]"
+      - "3 [33, 33, 34]"
+    answer: "4 [32, 32, 32, 4]"
+    explanation: |
+      `range(0, 100, 32)` liefert 0, 32, 64, 96. Der letzte Slice `idx[96:128]` endet einfach beim Array-Ende – 4 Elemente, kein Fehler.
+  - type: example
+    intro: |
+      **Normalisierung:** Zwei Merkmale, ein Winkel in rad (≈ 1) und ein Motorstrom in mA (≈ 1000). Die Lernrate muss so klein sein, dass der Strom-Anteil nicht divergiert – dann bewegt sich das Winkel-Gewicht kaum.
+
+      Abhilfe: jedes Merkmal standardisieren, $x' = (x - \mu)/\sigma$.
+    code: |
+      import numpy as np
+      import lab
+
+      rng = np.random.default_rng(0)
+      N = 50
+      X = np.column_stack([rng.uniform(-1, 1, N),        # Winkel in rad
+                           rng.uniform(0, 2000, N)])     # Strom in mA
+      y = 2.0 * X[:, 0] + 0.003 * X[:, 1] + rng.normal(0, 0.1, N)
+
+      def train(X, y, lr, steps=200):
+          w, b, losses = np.zeros(2), 0.0, []
+          for _ in range(steps):
+              err = X @ w + b - y
+              losses.append(np.mean(err ** 2))
+              w -= lr * 2 * X.T @ err / len(y)
+              b -= lr * 2 * np.mean(err)
+          return losses
+
+      mu, sigma = X.mean(axis=0), X.std(axis=0)    # pro Spalte
+      roh = train(X, y, lr=3e-7)                    # doppelt so groß divergiert schon
+      norm = train((X - mu) / sigma, y, lr=0.1)
+      print(f"MSE nach 200 Schritten: roh {roh[-1]:.3f}, normalisiert {norm[-1]:.3f}")
+      fig = lab.Figure(title="Gleiche Daten, andere Skalierung", xlabel="Schritt", ylabel="MSE", logy=True)
+      fig.line(roh, label="roh (lr = 3e-7)")
+      fig.line(norm, label="normalisiert (lr = 0.1)")
+      fig.show()
+    subgoals:
+      - lines: [4, 8]
+        label: Daten mit sehr unterschiedlichen Skalen
+      - lines: [10, 17]
+        label: Gradientenabstieg als Funktion
+      - lines: [19, 21]
+        label: Roh und normalisiert trainieren
+      - lines: [22, 26]
+        label: Lernkurven vergleichen
+    after: |
+      Gleicher Algorithmus, gleiche Daten – nur skaliert. Bei neuronalen Netzen wirkt Normalisierung genauso und hält außerdem tanh/Sigmoid aus der Sättigung.
+  - type: explain
+    question: |
+      Warum normalisiert man die Testdaten mit $\mu$ und $\sigma$ der **Trainingsdaten** statt mit ihren eigenen?
+    options:
+      - text: Das Modell hat gelernt, was ein Eingabewert von z. B. 0,5 bedeutet – das muss für neue Daten genauso übersetzt werden.
+        correct: true
+        why: Die Normalisierung ist Teil des Modells. Ein einzelnes neues Beispiel hätte gar keine sinnvolle eigene Statistik ($\sigma = 0$).
+      - text: Die Testdaten haben immer dieselbe Verteilung, deshalb ist es egal.
+        correct: false
+        why: Es ist nicht egal – mit eigener Statistik würde z. B. ein Testsatz mit lauter großen Werten auf Mittelwert 0 verschoben.
+      - text: Damit der Testfehler kleiner ausfällt.
+        correct: false
+        why: Es geht um eine konsistente Abbildung, nicht um geschönte Zahlen.
+      - text: Weil `X_test.std()` in NumPy nicht funktioniert.
+        correct: false
+        why: Technisch funktioniert es; inhaltlich ist es falsch.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `standardize(X_train, X_test)`. Berechne Mittelwert und Standardabweichung **pro Spalte** aus `X_train` und gib beide Matrizen standardisiert zurück.
+    starter: |
+      import numpy as np
+
+      def standardize(X_train, X_test):
+          # mu = ...
+          # sigma = ...
+          return X_train, X_test
+    solution: |
+      import numpy as np
+
+      def standardize(X_train, X_test):
+          mu = X_train.mean(axis=0)
+          sigma = X_train.std(axis=0)
+          return (X_train - mu) / sigma, (X_test - mu) / sigma
+    tests:
+      - name: Trainingsdaten haben Mittelwert 0 und Std 1 pro Spalte
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(2)
+          Xtr = np.column_stack([rng.normal(5, 2, 30), rng.normal(-300, 50, 30), rng.uniform(0, 1, 30)])
+          a, _ = standardize(Xtr, Xtr[:2])
+          assert np.shape(a) == (30, 3), f"Shape sollte (30, 3) bleiben, ist {np.shape(a)}"
+          assert close(a.mean(axis=0), np.zeros(3), 1e-9), f"Spaltenmittel sollten 0 sein, sind {a.mean(axis=0).round(3)}"
+          assert close(a.std(axis=0), np.ones(3), 1e-9), f"Spalten-Std sollten 1 sein, sind {a.std(axis=0).round(3)}"
+      - name: Testdaten mit Trainingsstatistik
+        code: |
+          import numpy as np
+          Xtr = np.array([[0.0, 10.0], [2.0, 30.0]])      # mu = [1, 20], sigma = [1, 10]
+          Xte = np.array([[3.0, 20.0]])
+          _, b = standardize(Xtr, Xte)
+          assert close(b, [[2.0, 0.0]]), f"Für [3, 20] erwartet [[2, 0]], bekommen {b}"
+    mutants:
+      - |
+        import numpy as np
+        def standardize(X_train, X_test):
+            f = lambda X: (X - X.mean(axis=0)) / X.std(axis=0)
+            return f(X_train), f(X_test)
+      - |
+        import numpy as np
+        def standardize(X_train, X_test):
+            mu, sigma = X_train.mean(axis=1), X_train.std(axis=1)
+            return (X_train - mu[:, None]) / sigma[:, None], (X_test - mu[:len(X_test), None]) / sigma[:len(X_test), None]
+      - |
+        import numpy as np
+        def standardize(X_train, X_test):
+            mu, sigma = X_train.mean(), X_train.std()
+            return (X_train - mu) / sigma, (X_test - mu) / sigma
+      - |
+        import numpy as np
+        def standardize(X_train, X_test):
+            mu = X_train.mean(axis=0)
+            return X_train - mu, X_test - mu
+    hints:
+      - "Teilziel: Statistik nur aus den Trainingsdaten, dann auf beide anwenden."
+      - "Pro Spalte heißt `axis=0` (über die Beispiele)."
+      - "`mu = X_train.mean(axis=0)` und `sigma = X_train.std(axis=0)`"
+      - "`return (X_train - mu) / sigma, (X_test - mu) / sigma`"
+  - type: example
+    intro: |
+      **Adam** (Kingma & Ba, 2015) führt pro Parameter zwei gleitende Mittel: $m$ für den Gradienten (Richtung, wie ein Schwung) und $v$ für sein Quadrat (Größe):
+
+      $$m \leftarrow \beta_1 m + (1-\beta_1) g,\quad v \leftarrow \beta_2 v + (1-\beta_2) g^2$$
+      $$\hat m = \frac{m}{1-\beta_1^t},\quad \hat v = \frac{v}{1-\beta_2^t},\quad w \leftarrow w - \alpha \frac{\hat m}{\sqrt{\hat v} + \varepsilon}$$
+
+      Die Division durch $1 - \beta^t$ (**Bias-Korrektur**) gleicht aus, dass $m$ und $v$ bei 0 starten. Typisch: $\beta_1 = 0{,}9$, $\beta_2 = 0{,}999$.
+    code: |
+      import numpy as np
+      import lab
+
+      def forward(X, P):
+          H = np.tanh(X @ P["W1"] + P["b1"])
+          return H @ P["W2"] + P["b2"], H
+
+      def backward(X, Y, P, out, H):
+          d_out = 2 * (out - Y) / len(X)
+          dZ1 = (d_out @ P["W2"].T) * (1 - H ** 2)
+          return {"W1": X.T @ dZ1, "b1": dZ1.sum(axis=0), "W2": H.T @ d_out, "b2": d_out.sum(axis=0)}
+
+      data_rng = np.random.default_rng(0)
+      X = np.linspace(-3, 3, 40).reshape(-1, 1)
+      Y = np.sin(X) + data_rng.normal(0, 0.05, X.shape)
+
+      def train(use_adam, lr, epochs=150, B=8):
+          rng = np.random.default_rng(1)
+          P = {"W1": rng.normal(0, 1, (1, 16)), "b1": np.zeros(16),
+               "W2": rng.normal(0, 0.25, (16, 1)), "b2": np.zeros(1)}
+          m = {k: np.zeros_like(p) for k, p in P.items()}
+          v = {k: np.zeros_like(p) for k, p in P.items()}
+          t, curve = 0, []
+          for epoch in range(epochs):
+              perm = rng.permutation(len(X))
+              for i in range(0, len(X), B):
+                  idx = perm[i:i + B]
+                  out, H = forward(X[idx], P)
+                  G = backward(X[idx], Y[idx], P, out, H)
+                  t += 1
+                  for k in P:
+                      if use_adam:
+                          m[k] = 0.9 * m[k] + 0.1 * G[k]
+                          v[k] = 0.999 * v[k] + 0.001 * G[k] ** 2
+                          m_hat = m[k] / (1 - 0.9 ** t)
+                          v_hat = v[k] / (1 - 0.999 ** t)
+                          P[k] -= lr * m_hat / (np.sqrt(v_hat) + 1e-8)
+                      else:
+                          P[k] -= lr * G[k]
+              curve.append(np.mean((forward(X, P)[0] - Y) ** 2))
+          return curve
+
+      sgd = train(False, lr=0.05)
+      adam = train(True, lr=0.02)
+      print(f"MSE nach 150 Epochen: SGD {sgd[-1]:.4f}, Adam {adam[-1]:.4f}")
+      fig = lab.Figure(title="Minibatch-SGD gegen Adam", xlabel="Epoche", ylabel="MSE (alle Daten)", logy=True)
+      fig.line(sgd, label="SGD, lr = 0.05")
+      fig.line(adam, label="Adam, lr = 0.02")
+      fig.show()
+    heavy: true
+    subgoals:
+      - lines: [17, 22]
+        label: Parameter und Adam-Zustand anlegen
+      - lines: [24, 29]
+        label: Pro Epoche mischen, pro Batch Gradient
+      - lines: [31, 37]
+        label: Adam-Update
+      - lines: [40, 41]
+        label: Lernkurve über Epochen
+    after: |
+      Für beide Verfahren wurde eine gute Lernrate ausprobiert (SGD wird mit 0,1 schlechter). Adam erreicht hier einen kleineren Fehler, weil jeder Parameter seine eigene, an die Gradientengröße angepasste Schrittweite bekommt. Adam ist ein robuster Standard, aber kein Wundermittel – die Lernrate bleibt der wichtigste Hyperparameter.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Bias-Korrektur und den Nenner in einem Adam-Schritt.
+    code: |
+      import numpy as np
+
+      def adam_step(w, g, m, v, t, lr=0.1, b1=0.9, b2=0.999, eps=1e-8):
+          m = b1 * m + (1 - b1) * g
+          v = b2 * v + (1 - b2) * g ** 2
+          m_hat = m / (1 - b1 ** ___)
+          v_hat = v / (1 - b2 ** t)
+          w = w - lr * m_hat / (np.sqrt(___) + eps)
+          return w, m, v
+    blanks:
+      - answer: t
+        options: [t, "2", t + 1]
+      - answer: v_hat
+        options: [v_hat, v, m_hat, v_hat ** 2]
+    tests:
+      - name: Fünf Schritte auf f(w) = w²
+        code: |
+          import numpy as np
+          w, m, v = np.array([5.0, -1.0]), np.zeros(2), np.zeros(2)
+          wr, mr, vr = w.copy(), m.copy(), v.copy()
+          for t in range(1, 6):
+              w, m, v = adam_step(w, 2 * w, m, v, t)
+              g = 2 * wr
+              mr = 0.9 * mr + 0.1 * g
+              vr = 0.999 * vr + 0.001 * g ** 2
+              wr = wr - 0.1 * (mr / (1 - 0.9 ** t)) / (np.sqrt(vr / (1 - 0.999 ** t)) + 1e-8)
+          assert close(w, wr, 1e-9), f"Nach 5 Schritten erwartet {wr.round(5)}, bekommen {np.round(w, 5)}"
+    explanation: |
+      Im ersten Schritt ist $\hat m = g$ und $\sqrt{\hat v} = |g|$ – der Schritt hat also genau die Länge `lr`, unabhängig davon, wie groß der Gradient ist.
+  - type: quiz
+    question: |
+      1000 Trainingsbeispiele, Batchgröße 50. Wie viele Parameter-Updates macht man in 3 Epochen?
+    options:
+      - text: "60"
+        correct: true
+        why: 1000 / 50 = 20 Updates pro Epoche, mal 3.
+      - text: "3"
+        correct: false
+        why: Das wäre ein Update pro Epoche – voller Batch.
+      - text: "3000"
+        correct: false
+        why: Das wäre ein Update pro Beispiel (Batchgröße 1).
+      - text: "150"
+        correct: false
+        why: 50 ist die Batchgröße, nicht die Zahl der Batches.
+cards:
+  - id: m12-c-batches
+    concept: ml-minibatch
+    variants:
+      - type: predict
+        code: |
+          idx = list(range(10))
+          print([len(idx[i:i + 3]) for i in range(0, 10, 3)])
+        options: ["[3, 3, 3, 1]", "[3, 3, 3]", "[3, 3, 4]", "[3, 3, 3, 3]"]
+        answer: "[3, 3, 3, 1]"
+        explanation: Startindizes 0, 3, 6, 9; der letzte Batch hat nur ein Element.
+      - type: quiz
+        question: |
+          Warum mischt man die Daten vor jeder Epoche neu?
+        options:
+          - text: Damit die Minibatches nicht in jeder Epoche dieselben Gruppen sind und die Gradientenschätzung unverzerrt bleibt.
+            correct: true
+            why: Bei sortierten Daten (z. B. erst alle Klasse 0) würde jeder Batch systematisch in eine Richtung ziehen.
+          - text: Damit das Training deterministisch wird.
+            correct: false
+            why: Mischen fügt Zufall hinzu; Determinismus kommt vom festen Seed.
+          - text: Weil `X[perm]` schneller ist als `X`.
+            correct: false
+            why: Fancy Indexing kopiert sogar Daten – es geht um die Statistik der Batches.
+  - id: m12-c-norm-stats
+    concept: ml-normalisierung
+    variants:
+      - type: quiz
+        question: |
+          Trainingsdaten einer Spalte: Mittelwert 20, Std 5. Ein Testbeispiel hat den Wert 30. Welcher Wert geht ins Modell?
+        options:
+          - text: "2"
+            correct: true
+            why: "$(30 - 20)/5 = 2$ – mit der Statistik der Trainingsdaten."
+          - text: "0"
+            correct: false
+            why: Das käme heraus, wenn man das einzelne Testbeispiel mit seinem eigenen Mittelwert normalisiert.
+          - text: "6"
+            correct: false
+            why: "$30/5$ – der Mittelwert wurde nicht abgezogen."
+      - type: predict
+        code: |
+          import numpy as np
+          X = np.array([[1.0, 100.0], [3.0, 300.0]])
+          print(X.mean(axis=0), X.std(axis=0))
+        options: ["[  2. 200.] [  1. 100.]", "[ 50.5 151.5] [49.5 148.5]", "[  2. 200.] [  2. 200.]"]
+        answer: "[  2. 200.] [  1. 100.]"
+        explanation: "`axis=0` rechnet pro Spalte über die Beispiele."
+  - id: m12-c-adam
+    concept: ml-adam
+    variants:
+      - type: quiz
+        question: |
+          Wozu dient bei Adam die Division durch $1 - \beta_1^t$?
+        options:
+          - text: Sie gleicht aus, dass $m$ bei 0 startet und in den ersten Schritten zu klein wäre.
+            correct: true
+            why: Für $t = 1$ ist $m = (1-\beta_1) g$; geteilt durch $1-\beta_1$ ergibt das genau $g$.
+          - text: Sie verkleinert die Schrittweite mit der Zeit.
+            correct: false
+            why: Der Faktor geht gegen 1, er ändert späte Schritte kaum.
+          - text: Sie verhindert Division durch null.
+            correct: false
+            why: Dafür ist $\varepsilon$ im Nenner da.
+      - type: quiz
+        question: |
+          Welche Größe bestimmt bei Adam, wie groß der Schritt für einen bestimmten Parameter ist?
+        options:
+          - text: Das Verhältnis $\hat m / \sqrt{\hat v}$ mal Lernrate – große Gradienten werden heruntergeteilt.
+            correct: true
+            why: Darum hat Adam pro Parameter eine angepasste Schrittweite.
+          - text: Nur die Lernrate, der Gradient ist egal.
+            correct: false
+            why: Das Vorzeichen und die Konsistenz des Gradienten über die Zeit (in $\hat m$) zählen.
+          - text: Der Gradient direkt, wie bei SGD.
+            correct: false
+            why: Bei SGD ist der Schritt proportional zum Gradienten; Adam normiert ihn mit $\sqrt{\hat v}$.

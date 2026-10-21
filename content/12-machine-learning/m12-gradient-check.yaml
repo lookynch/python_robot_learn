@@ -1,0 +1,361 @@
+id: m12-gradient-check
+title: Gradient-Check
+minutes: 10
+goals:
+  - Einen numerischen Gradienten mit zentraler Differenz für beliebige Arrays berechnen
+  - Analytische und numerische Gradienten mit dem relativen Fehler vergleichen
+  - Mit dem Gradient-Check einen Backprop-Fehler lokalisieren
+concepts: [ml-gradient-check]
+steps:
+  - type: text
+    body: |
+      ## Vertrauen ist gut, Kontrolle ist besser
+
+      Ein Fehler im Backprop ist tückisch: Das Training läuft oft trotzdem, nur schlechter. Darum prüft man den analytischen Gradienten gegen die **zentrale Differenz** (Modul 7), Eintrag für Eintrag:
+
+      $$\frac{\partial L}{\partial w_i} \approx \frac{L(w + h e_i) - L(w - h e_i)}{2h}$$
+
+      Verglichen wird mit dem **relativen Fehler**
+
+      $$\text{rel} = \frac{|a - n|}{\max(10^{-8},\ |a| + |n|)}$$
+
+      Faustregel bei `float64` und $h \approx 10^{-5}$: um $10^{-7}$ oder kleiner ist gut, ab etwa $10^{-3}$ liegt fast sicher ein Fehler vor.
+  - type: predict
+    code: |
+      x, h = 2.0, 1e-3
+      zentral = ((x + h) ** 3 - (x - h) ** 3) / (2 * h)
+      vorwaerts = ((x + h) ** 3 - x ** 3) / h
+      print(round(zentral, 6), round(vorwaerts, 6))
+    options:
+      - "12.000001 12.006001"
+      - "12.0 12.0"
+      - "12.006001 12.000001"
+      - "12.000001 12.000001"
+    answer: "12.000001 12.006001"
+    explanation: |
+      Die exakte Ableitung ist $3x^2 = 12$. Der Fehler der Vorwärtsdifferenz ist $\mathcal O(h)$ (hier $6 \cdot 10^{-3}$), der zentralen $\mathcal O(h^2)$ (hier $10^{-6}$).
+  - type: explain
+    question: |
+      Warum nimmt man für den Gradient-Check nicht einfach $h = 10^{-12}$, um den Abbruchfehler zu minimieren?
+    options:
+      - text: Dann subtrahiert man zwei fast gleiche Zahlen; die Rundungsfehler von `float64` (≈ 1e-16 relativ) werden durch das winzige $h$ riesig verstärkt.
+        correct: true
+        why: Der Gesamtfehler ist Abbruchfehler + Rundungsfehler/h. Für die zentrale Differenz liegt das Optimum grob bei $h \approx 10^{-5}$ bis $10^{-6}$.
+      - text: Python kann keine Zahlen kleiner als 1e-10 darstellen.
+        correct: false
+        why: "`float64` reicht bis etwa 1e-308."
+      - text: Weil die Rechnung dann zu lange dauert.
+        correct: false
+        why: Die Rechenzeit hängt nicht von $h$ ab.
+      - text: Bei kleinem $h$ wird die zentrale Differenz zur Vorwärtsdifferenz.
+        correct: false
+        why: Die Formel bleibt dieselbe; das Problem ist die Auslöschung.
+  - type: example
+    intro: |
+      Allgemein für ein Array beliebiger Shape: `W.flat[i]` greift auf den i-ten Eintrag zu, egal ob `W` 1D oder 2D ist. Getestet am Gradienten der logistischen Regression.
+    code: |
+      import numpy as np
+
+      def num_grad(f, W, h=1e-5):
+          g = np.zeros_like(W)
+          for i in range(W.size):
+              old = W.flat[i]
+              W.flat[i] = old + h
+              fp = f(W)
+              W.flat[i] = old - h
+              fm = f(W)
+              W.flat[i] = old                 # wiederherstellen!
+              g.flat[i] = (fp - fm) / (2 * h)
+          return g
+
+      def rel_error(a, b):
+          return np.max(np.abs(a - b) / np.maximum(1e-8, np.abs(a) + np.abs(b)))
+
+      rng = np.random.default_rng(0)
+      X, y = rng.normal(size=(20, 3)), rng.integers(0, 2, 20)
+      w = rng.normal(size=3)
+
+      def loss(w):
+          p = 1 / (1 + np.exp(-(X @ w)))
+          return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+
+      analytisch = X.T @ (1 / (1 + np.exp(-(X @ w))) - y) / len(y)
+      numerisch = num_grad(loss, w)
+      print(f"relativer Fehler: {rel_error(analytisch, numerisch):.1e}")
+    subgoals:
+      - lines: [3, 13]
+        label: Jeden Eintrag einzeln stören
+      - lines: [15, 16]
+        label: Relativen Fehler messen
+      - lines: [18, 24]
+        label: Testproblem aufsetzen
+      - lines: [26, 28]
+        label: Analytisch gegen numerisch vergleichen
+    after: |
+      Der Fehler liegt weit unter $10^{-7}$ – der Gradient $X^\top(p - y)/N$ stimmt. Kosten: 2 Verlustauswertungen **pro Parameter**. Deshalb prüft man nur an kleinen Netzen und wenigen Beispielen und trainiert dann mit Backprop.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze das Wiederherstellen und den Nenner. Geprüft wird an $f(W) = \sum W^3$ mit bekannter Ableitung $3W^2$.
+    code: |
+      import numpy as np
+
+      def num_grad(f, W, h=1e-5):
+          g = np.zeros_like(W)
+          for i in range(W.size):
+              old = W.flat[i]
+              W.flat[i] = old + h
+              fp = f(W)
+              W.flat[i] = old - h
+              fm = f(W)
+              W.flat[i] = ___
+              g.flat[i] = (fp - fm) / (___)
+          return g
+    blanks:
+      - answer: old
+        options: [old, old + h, "0.0"]
+      - answer: 2 * h
+        options: [2 * h, h, h ** 2]
+    tests:
+      - name: Ableitung von sum(W³)
+        code: |
+          import numpy as np
+          Wt = np.array([[1.0, -2.0], [0.5, 3.0]])
+          W0 = Wt.copy()
+          g = num_grad(lambda W: np.sum(W ** 3), Wt)
+          assert close(g, 3 * W0 ** 2, 1e-6), f"Erwartet {3 * W0 ** 2}, bekommen {g}"
+          assert close(Wt, W0, 0), f"W wurde verändert: {Wt}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `num_grad(f, W, h=1e-5)` selbst: Für jeden Eintrag von `W` (beliebige Shape) die zentrale Differenz von `f(W)` bilden. `W` muss nach dem Aufruf **unverändert** sein.
+    starter: |
+      import numpy as np
+
+      def num_grad(f, W, h=1e-5):
+          g = np.zeros_like(W)
+          for i in range(W.size):
+              # Eintrag i stören, f auswerten, wiederherstellen
+              pass
+          return g
+    solution: |
+      import numpy as np
+
+      def num_grad(f, W, h=1e-5):
+          g = np.zeros_like(W)
+          for i in range(W.size):
+              old = W.flat[i]
+              W.flat[i] = old + h
+              fp = f(W)
+              W.flat[i] = old - h
+              fm = f(W)
+              W.flat[i] = old
+              g.flat[i] = (fp - fm) / (2 * h)
+          return g
+    tests:
+      - name: Quadratsumme
+        code: |
+          import numpy as np
+          Wt = np.array([[1.0, -2.0, 0.5], [3.0, 0.0, -1.5]])
+          g = num_grad(lambda W: np.sum(W ** 2), Wt.copy())
+          assert np.shape(g) == (2, 3), f"Ergebnis sollte Shape (2, 3) haben, hat {np.shape(g)}"
+          assert close(g, 2 * Wt, 1e-7), f"Erwartet {2 * Wt}, bekommen {np.round(g, 6)}"
+      - name: Nichtlineare Funktion
+        code: |
+          import numpy as np
+          A = np.array([1.0, 2.0, -3.0, 0.5])
+          Wt = np.array([0.3, -1.2, 2.0, 0.0])
+          g = num_grad(lambda W: np.sum(np.sin(W) * A), Wt.copy())
+          assert close(g, np.cos(Wt) * A, 1e-7), f"Erwartet {np.round(np.cos(Wt) * A, 5)}, bekommen {np.round(g, 5)}"
+      - name: W bleibt unverändert
+        code: |
+          import numpy as np
+          Wt = np.array([[1.0, 2.0], [3.0, 4.0]])
+          num_grad(lambda W: np.sum(W ** 2), Wt)
+          assert close(Wt, [[1.0, 2.0], [3.0, 4.0]], 0), f"W wurde verändert: {Wt}"
+    mutants:
+      - |
+        import numpy as np
+        def num_grad(f, W, h=1e-5):
+            g = np.zeros_like(W)
+            for i in range(W.size):
+                old = W.flat[i]
+                f0 = f(W)
+                W.flat[i] = old + h
+                fp = f(W)
+                W.flat[i] = old
+                g.flat[i] = (fp - f0) / h
+            return g
+      - |
+        import numpy as np
+        def num_grad(f, W, h=1e-5):
+            g = np.zeros_like(W)
+            for i in range(W.size):
+                old = W.flat[i]
+                W.flat[i] = old + h
+                fp = f(W)
+                W.flat[i] = old - h
+                fm = f(W)
+                g.flat[i] = (fp - fm) / (2 * h)
+            return g
+      - |
+        import numpy as np
+        def num_grad(f, W, h=1e-5):
+            g = np.zeros_like(W)
+            for i in range(W.size):
+                old = W.flat[i]
+                W.flat[i] = old + h
+                fp = f(W)
+                W.flat[i] = old - h
+                fm = f(W)
+                W.flat[i] = old
+                g.flat[i] = (fp - fm) / h
+            return g
+      - |
+        import numpy as np
+        def num_grad(f, W, h=1e-5):
+            g = np.zeros_like(W)
+            for i in range(W.size):
+                old = W.flat[i]
+                W.flat[i] = old + h
+                fp = f(W)
+                W.flat[i] = old - h
+                fm = f(W)
+                W.flat[i] = old
+                g.flat[i] = (fp - fm) / (2 * h)
+                return g
+            return g
+    hints:
+      - "Teilziel: jeden Eintrag einzeln stören, `f` zweimal auswerten, wiederherstellen."
+      - "`old = W.flat[i]` merken; dann `W.flat[i] = old + h` bzw. `old - h` setzen und jeweils `f(W)` aufrufen."
+      - "Am Ende `W.flat[i] = old` und `g.flat[i] = (fp - fm) / (2 * h)`."
+      - |
+        ```python
+        old = W.flat[i]
+        W.flat[i] = old + h
+        fp = f(W)
+        W.flat[i] = old - h
+        fm = f(W)
+        W.flat[i] = old
+        g.flat[i] = (fp - fm) / (2 * h)
+        ```
+    explanation: |
+      Die Vorwärtsdifferenz hat bei $h = 10^{-5}$ einen Fehler von etwa $10^{-5}$ – zu groß für einen sauberen Check. Vergessenes Wiederherstellen verfälscht alle folgenden Einträge und zerstört nebenbei die Parameter.
+  - type: example
+    intro: |
+      Fehlersuche: In `backward_buggy` fehlt die tanh-Ableitung. Der Check pro Parameter zeigt, **wo** der Fehler sitzt.
+    code: |
+      import numpy as np
+
+      def num_grad(f, W, h=1e-5):
+          g = np.zeros_like(W)
+          for i in range(W.size):
+              old = W.flat[i]
+              W.flat[i] = old + h
+              fp = f(W)
+              W.flat[i] = old - h
+              fm = f(W)
+              W.flat[i] = old
+              g.flat[i] = (fp - fm) / (2 * h)
+          return g
+
+      def rel_error(a, b):
+          return np.max(np.abs(a - b) / np.maximum(1e-8, np.abs(a) + np.abs(b)))
+
+      def forward(X, P):
+          H = np.tanh(X @ P["W1"] + P["b1"])
+          return H @ P["W2"] + P["b2"], H
+
+      def backward_buggy(X, Y, P):
+          out, H = forward(X, P)
+          d_out = 2 * (out - Y) / len(X)
+          dZ1 = d_out @ P["W2"].T              # tanh-Ableitung vergessen!
+          return {"W1": X.T @ dZ1, "b1": dZ1.sum(axis=0), "W2": H.T @ d_out, "b2": d_out.sum(axis=0)}
+
+      rng = np.random.default_rng(0)
+      X, Y = rng.normal(size=(8, 2)), rng.normal(size=(8, 1))
+      P = {"W1": rng.normal(size=(2, 5)), "b1": rng.normal(size=5),
+           "W2": rng.normal(size=(5, 1)), "b2": rng.normal(size=1)}
+      G = backward_buggy(X, Y, P)
+      for k in P:
+          num = num_grad(lambda W: np.mean((forward(X, P)[0] - Y) ** 2), P[k])
+          print(f"{k}: relativer Fehler {rel_error(G[k], num):.1e}")
+    subgoals:
+      - lines: [22, 26]
+        label: Verdächtiger Rückwärtsdurchlauf
+      - lines: [28, 32]
+        label: Kleines Testproblem
+      - lines: [33, 35]
+        label: Pro Parameter prüfen
+    after: |
+      `W2` und `b2` stimmen, `W1` und `b1` nicht. Der Fehler liegt also **zwischen** Ausgabeschicht und erster Schicht – genau dort, wo die Ableitung der Aktivierung fehlt. Die Funktion `f` braucht kein Argument zu nutzen: `num_grad` ändert `P[k]` direkt, und `forward` liest es aus `P`.
+  - type: quiz
+    question: |
+      Ein Gradient-Check meldet: `W2` 3e-10, `b2` 1e-10, `W1` 2e-10, `b1` 0.5. Wo suchst du zuerst?
+    options:
+      - text: In der Zeile für `db1`, z. B. `mean` statt `sum` oder falsche Achse.
+        correct: true
+        why: Nur `b1` ist falsch; `W1` nutzt dasselbe `dZ1` und stimmt – also ist `dZ1` korrekt, nur die Reduktion zu `db1` nicht.
+      - text: In der tanh-Ableitung.
+        correct: false
+        why: Dann wäre auch `W1` falsch, weil `dW1` aus demselben `dZ1` kommt.
+      - text: Im Verlust `d_out`.
+        correct: false
+        why: Dann wären alle vier Gradienten falsch.
+      - text: Nirgends – ein einzelner großer Wert ist Rundungsrauschen.
+        correct: false
+        why: 0,5 ist um Größenordnungen über der Faustregel-Schwelle von etwa 1e-3.
+cards:
+  - id: m12-c-rel-error
+    concept: ml-gradient-check
+    variants:
+      - type: quiz
+        question: |
+          Relativer Fehler zwischen analytischem und numerischem Gradienten: `2e-9`. Was bedeutet das?
+        options:
+          - text: Der analytische Gradient ist sehr wahrscheinlich korrekt.
+            correct: true
+            why: Das liegt im Bereich der numerischen Genauigkeit der zentralen Differenz.
+          - text: Es gibt einen kleinen Fehler im Backprop.
+            correct: false
+            why: Fehler im Backprop führen typischerweise zu Werten von 1e-3 bis 1.
+          - text: Das Netz ist fertig trainiert.
+            correct: false
+            why: Der Check sagt nichts über die Güte des Modells, nur über die Korrektheit der Ableitung.
+      - type: quiz
+        question: |
+          Relativer Fehler `0.3` für alle Parameter. Was ist am wahrscheinlichsten?
+        options:
+          - text: Ein Fehler ganz am Anfang des Rückwärtsdurchlaufs, z. B. in `d_out` (Faktor 2 oder 1/N vergessen).
+            correct: true
+            why: Ein Fehler am Ausgang pflanzt sich in alle Gradienten fort.
+          - text: "`h` ist zu groß gewählt."
+            correct: false
+            why: Mit $h = 10^{-5}$ ist der Abbruchfehler um $10^{-10}$, nicht 0,3.
+          - text: Nur der Bias der ersten Schicht ist falsch.
+            correct: false
+            why: Dann wäre nur dieser eine Wert groß.
+  - id: m12-c-zentral
+    concept: ml-gradient-check
+    variants:
+      - type: predict
+        code: |
+          f = lambda x: x ** 2
+          x, h = 3.0, 0.1
+          print(round((f(x + h) - f(x - h)) / (2 * h), 6), round((f(x + h) - f(x)) / h, 6))
+        options: ["6.0 6.1", "6.1 6.0", "6.0 6.0", "6.01 6.1"]
+        answer: "6.0 6.1"
+        explanation: Für Parabeln ist die zentrale Differenz exakt; die Vorwärtsdifferenz hat den Fehler $h$.
+      - type: quiz
+        question: |
+          Wie viele Auswertungen der Verlustfunktion braucht ein Gradient-Check mit zentraler Differenz für 1000 Parameter?
+        options:
+          - text: "2000"
+            correct: true
+            why: Zwei Auswertungen pro Parameter.
+          - text: "2"
+            correct: false
+            why: Jeder Parameter wird einzeln gestört.
+          - text: "1000"
+            correct: false
+            why: Das reicht nur für die Vorwärtsdifferenz (plus eine Basisauswertung).

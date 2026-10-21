@@ -1,0 +1,325 @@
+id: m04-plotten
+title: Diagramme und Animationen
+minutes: 10
+goals:
+  - Verläufe mit `lab.plot` und mehrere Kurven mit `lab.Figure` zeichnen
+  - Punktwolken mit `scatter` darstellen
+  - Eine einfache Animation mit `lab.Scene` bauen
+concepts: [lab-plot, lab-scene]
+steps:
+  - type: text
+    body: |
+      ## Sehen statt Zahlenkolonnen
+
+      Eine Trajektorie mit 200 Werten liest niemand als Zahlen. Im Browser gibt es kein matplotlib; stattdessen bringt die App das Modul `lab` mit:
+
+      | Aufruf | Zweck |
+      |---|---|
+      | `lab.plot(y, x=t, ...)` | eine Kurve |
+      | `lab.scatter(x, y, ...)` | eine Punktwolke |
+      | `lab.Figure(...)` | mehrere Kurven/Punktwolken in einem Diagramm |
+      | `lab.Scene(...)` | freie 2D-Zeichnung oder Animation |
+
+      Beschrifte Achsen immer mit Größe **und Einheit**, z. B. `xlabel="t [s]"`, `ylabel="q [rad]"`.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      t = np.linspace(0, 2, 200)             # Zeit in s
+      q = 0.5 * np.sin(2 * np.pi * t)        # Gelenkwinkel in rad
+      lab.plot(q, x=t, title="Gelenkwinkel", xlabel="t [s]", ylabel="q [rad]")
+    subgoals:
+      - lines: [1, 2]
+        label: Module importieren
+      - lines: [3, 4]
+        label: Daten als Arrays berechnen
+      - lines: 5
+        label: Kurve mit beschrifteten Achsen zeichnen
+    after: |
+      Zwei Schwingungen in zwei Sekunden – Frequenz 1 Hz, Amplitude 0.5 rad. Erst kommt `y`, dann optional `x=`.
+  - type: explain
+    question: |
+      Was passiert, wenn du `lab.plot(q)` **ohne** `x=t` aufrufst?
+    options:
+      - text: Die x-Achse zeigt dann die Indizes 0 bis 199 statt der Zeit in Sekunden.
+        correct: true
+        why: Ohne `x` nimmt `lab.plot` die Position im Array. Die Kurve sieht gleich aus, aber die Achse hat die falsche Einheit.
+      - text: Das Diagramm bleibt leer.
+        correct: false
+        why: "`x` ist optional; die Kurve wird gezeichnet."
+      - text: "`lab.plot` berechnet die Zeit automatisch aus `q`."
+        correct: false
+        why: Woher sollte es die Zeitschritte kennen? Ohne `x` gibt es nur die Indizes.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      rng = np.random.default_rng(0)
+      t = np.linspace(0, 2, 100)
+      soll = 0.5 * np.sin(2 * np.pi * t)
+      ist = soll + rng.normal(0.0, 0.05, size=t.shape)
+      fig = lab.Figure(title="Soll und Ist", xlabel="t [s]", ylabel="q [rad]")
+      fig.line(soll, x=t, label="Soll")
+      fig.line(ist, x=t, label="Ist (verrauscht)")
+      fig.hline(0.0)
+      fig.show()
+    subgoals:
+      - lines: [1, 6]
+        label: Soll- und Ist-Verlauf berechnen
+      - lines: 7
+        label: Diagramm anlegen
+      - lines: [8, 10]
+        label: Kurven und Nulllinie hinzufügen
+      - lines: 11
+        label: Diagramm anzeigen
+    after: |
+      `lab.Figure` sammelt Reihen, **gezeigt wird erst bei `fig.show()`**. Mit `label` bekommt jede Kurve einen Eintrag in der Legende.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      rng = np.random.default_rng(0)
+      p = rng.uniform(-1, 1, size=(400, 2))
+      innen = p[:, 0] ** 2 + p[:, 1] ** 2 < 1
+      fig = lab.Figure(title="Zufallspunkte und Einheitskreis", xlabel="x", ylabel="y")
+      fig.scatter(p[innen, 0], p[innen, 1], label="innen")
+      fig.scatter(p[~innen, 0], p[~innen, 1], label="außen")
+      fig.show()
+      print("Schätzung für pi:", innen.mean() * 4)
+    subgoals:
+      - lines: [1, 4]
+        label: Zufällige Punkte im Quadrat ziehen
+      - lines: 5
+        label: Maske „im Kreis“ bilden
+      - lines: [6, 9]
+        label: Beide Gruppen als Punktwolke zeichnen
+      - lines: 10
+        label: Anteil auswerten
+    after: |
+      `~innen` kehrt die Maske um. Der Anteil der Punkte im Kreis ist etwa $\pi/4$ (Fläche Kreis / Fläche Quadrat) – mal 4 ergibt eine grobe Schätzung für $\pi$. Mit nur 400 Punkten ist sie ungenau.
+  - type: quiz
+    question: |
+      Du hast `fig = lab.Figure(...)` und zweimal `fig.line(...)` geschrieben, siehst aber kein Diagramm. Woran liegt es am wahrscheinlichsten?
+    options:
+      - text: "`fig.show()` fehlt."
+        correct: true
+        why: "`Figure` sammelt nur; angezeigt wird erst mit `show()`."
+      - text: Zwei Kurven passen nicht in ein Diagramm.
+        correct: false
+        why: Genau dafür ist `Figure` da – beliebig viele Reihen.
+      - text: "`lab.plot` muss zusätzlich aufgerufen werden."
+        correct: false
+        why: "`lab.plot` ist die Kurzform für eine einzelne Kurve, kein zusätzlicher Schritt."
+  - type: text
+    body: |
+      ## Animationen mit `lab.Scene`
+
+      Eine `Scene` ist eine Zeichenfläche in Weltkoordinaten (y zeigt **nach oben**, wie in der Mathematik):
+
+      ```python
+      s = lab.Scene(title="...", bounds=[xmin, xmax, ymin, ymax])
+      ```
+
+      - Formen: `s.line(punkte)`, `s.circle(x, y, r)`, `s.arrow(x, y, dx, dy)`, `s.text(x, y, "...")`
+      - `static=True` zeichnet in den **Hintergrund**, der in jedem Frame zu sehen ist
+      - `s.next_frame()` beginnt den nächsten Frame, `s.caption("...")` beschriftet ihn
+      - `s.show()` am Ende zeigt die Animation
+
+      Das Muster: eine Schleife über die Zeit, pro Durchlauf einen Frame zeichnen.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+      s = lab.Scene(title="Ein Glied dreht sich", bounds=[-1.2, 1.2, -1.2, 1.2])
+      s.circle(0, 0, 0.05, color="muted", fill="muted", static=True)
+      for q in np.linspace(0, np.pi, 60):
+          x, y = np.cos(q), np.sin(q)
+          s.line([(0, 0), (x, y)], color="c1", width=6)
+          s.caption(f"q = {q:.2f} rad")
+          s.next_frame()
+      s.show()
+    subgoals:
+      - lines: [1, 4]
+        label: Szene und statischen Hintergrund anlegen
+      - lines: [5, 9]
+        label: Schleife über die Zeit – ein Frame pro Winkel
+      - lines: 10
+        label: Animation anzeigen
+    after: |
+      60 Frames, das Glied (Länge 1 m) dreht sich von 0 bis $\pi$ rad gegen den Uhrzeigersinn. Das Gelenk im Ursprung ist statisch und muss nur einmal gezeichnet werden.
+  - type: fill
+    fading: true
+    prompt: |
+      Zeichne die gedämpfte Schwingung `y` über der Zeit `t`.
+    code: |
+      import numpy as np
+      import lab
+      t = np.linspace(0, 5, 100)
+      y = np.exp(-t) * np.cos(2 * np.pi * t)
+      lab.plot(___, x=___, xlabel="t [s]", ylabel="y")
+    blanks:
+      - answer: "y"
+        options: ["y", "t", "len(t)"]
+      - answer: "t"
+        options: ["t", "y", "100"]
+    tests:
+      - name: Diagramm mit Zeit auf der x-Achse
+        code: |
+          import lab._core as core
+          plots = [s for s in core.scenes if s["kind"] == "plot"]
+          assert plots, "Es wurde kein Diagramm gezeigt."
+          serie = plots[0]["series"][0]
+          assert len(serie["x"]) == len(t), "x und y sollten je 100 Werte haben."
+          assert close(serie["x"], t, 1e-4), "Auf der x-Achse sollte die Zeit t liegen."
+          assert close(serie["y"], y, 1e-4), "Die Kurve sollte die Werte von y zeigen."
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein Ball wird mit $v_0 = 5$ m/s senkrecht nach oben geworfen. Seine Höhe ist $h(t) = v_0 t - \tfrac{1}{2} g t^2$ mit $g = 9.81$ m/s². Berechne `h` für die gegebenen Zeitpunkte und zeichne `h` über `t` mit beschrifteter x-Achse.
+    starter: |
+      import numpy as np
+      import lab
+      v0 = 5.0
+      g = 9.81
+      t = np.linspace(0, 1, 50)
+      # h = ...
+      # lab.plot(...)
+    solution: |
+      import numpy as np
+      import lab
+      v0 = 5.0
+      g = 9.81
+      t = np.linspace(0, 1, 50)
+      h = v0 * t - 0.5 * g * t ** 2
+      lab.plot(h, x=t, title="Wurf nach oben", xlabel="t [s]", ylabel="h [m]")
+    tests:
+      - name: Höhe berechnet
+        code: |
+          import numpy as np
+          tt = np.linspace(0, 1, 50)
+          assert close(h, 5.0 * tt - 0.5 * 9.81 * tt ** 2), f"h stimmt nicht; bei t = 1 s erwartet 0.095 m, bekommen {h[-1]:.3f}"
+      - name: Diagramm h über t
+        code: |
+          import lab._core as core
+          plots = [s for s in core.scenes if s["kind"] == "plot"]
+          assert plots, "Es wurde kein Diagramm gezeigt – rufe lab.plot(...) auf."
+          serie = plots[-1]["series"][0]
+          assert len(serie["x"]) == 50 and close(serie["x"], t, 1e-4), "Auf der x-Achse sollte die Zeit t liegen (x=t)."
+          assert close(serie["y"], h, 1e-4), "Die Kurve sollte h zeigen."
+      - name: x-Achse beschriftet
+        code: |
+          import lab._core as core
+          plots = [s for s in core.scenes if s["kind"] == "plot"]
+          assert plots and plots[-1]["xlabel"], "Beschrifte die x-Achse, z. B. xlabel=\"t [s]\"."
+    mutants:
+      - |
+        import numpy as np
+        import lab
+        v0 = 5.0
+        g = 9.81
+        t = np.linspace(0, 1, 50)
+        h = v0 * t - g * t ** 2
+        lab.plot(h, x=t, xlabel="t [s]")
+      - |
+        import numpy as np
+        import lab
+        v0 = 5.0
+        g = 9.81
+        t = np.linspace(0, 1, 50)
+        h = v0 * t - 0.5 * g * t ** 2
+        lab.plot(h, xlabel="t [s]")
+      - |
+        import numpy as np
+        import lab
+        v0 = 5.0
+        g = 9.81
+        t = np.linspace(0, 1, 50)
+        h = v0 * t - 0.5 * g * t ** 2
+        lab.plot(t, x=h, xlabel="t [s]")
+      - |
+        import numpy as np
+        import lab
+        v0 = 5.0
+        g = 9.81
+        t = np.linspace(0, 1, 50)
+        h = v0 * t - 0.5 * g * t ** 2
+        lab.plot(h, x=t)
+    hints:
+      - "Teilziel: erst `h` als Array berechnen, dann zeichnen."
+      - "Die Formel gilt elementweise: `t ** 2` quadriert jeden Zeitpunkt."
+      - "`h = v0 * t - 0.5 * g * t ** 2`"
+      - "`lab.plot(h, x=t, xlabel=\"t [s]\", ylabel=\"h [m]\")`"
+    explanation: |
+      Der Ball erreicht nach $v_0/g \approx 0.51$ s seine größte Höhe von etwa 1.27 m und ist nach 1 s fast wieder unten.
+  - type: quiz
+    question: |
+      In einer Animation soll der Boden in **jedem** Frame zu sehen sein, aber nur einmal gezeichnet werden. Wie?
+    options:
+      - text: "`s.line(boden, static=True)` vor der Schleife"
+        correct: true
+        why: Statische Formen liegen im Hintergrund aller Frames.
+      - text: "`s.line(boden)` vor der Schleife"
+        correct: false
+        why: Ohne `static=True` gehört die Linie nur zum ersten Frame.
+      - text: "`s.line(boden)` nach `s.show()`"
+        correct: false
+        why: Nach `show()` ist die Animation schon fertig – was danach kommt, wird nicht mehr gezeigt.
+cards:
+  - id: m04-c-plot-x
+    concept: lab-plot
+    variants:
+      - type: quiz
+        question: |
+          Du willst die Geschwindigkeit `v` (in m/s) über der Zeit `t` (in s) zeichnen. Welcher Aufruf ist richtig?
+        options:
+          - text: "`lab.plot(v, x=t, xlabel=\"t [s]\", ylabel=\"v [m/s]\")`"
+            correct: true
+            why: Zuerst die y-Werte, die Zeit über `x=`, Achsen mit Einheiten.
+          - text: "`lab.plot(t, x=v)`"
+            correct: false
+            why: Vertauscht – das zeigt die Zeit über der Geschwindigkeit.
+          - text: "`lab.plot(v)`"
+            correct: false
+            why: Funktioniert, aber die x-Achse zeigt Indizes statt Sekunden.
+      - type: quiz
+        question: |
+          Wie zeichnest du Soll- und Ist-Kurve in **ein** Diagramm?
+        options:
+          - text: "`fig = lab.Figure(...)`, zweimal `fig.line(...)`, dann `fig.show()`"
+            correct: true
+            why: "`Figure` sammelt mehrere Reihen und zeigt sie gemeinsam."
+          - text: Zweimal `lab.plot(...)` hintereinander
+            correct: false
+            why: Das ergibt zwei getrennte Diagramme.
+          - text: "`lab.plot(soll + ist)`"
+            correct: false
+            why: Das addiert die Werte elementweise und zeichnet eine einzige, sinnlose Kurve.
+  - id: m04-c-scene
+    concept: lab-scene
+    variants:
+      - type: quiz
+        question: |
+          Was bewirkt `s.next_frame()` in einer `lab.Scene`?
+        options:
+          - text: Alles, was danach gezeichnet wird, gehört zum nächsten Bild der Animation.
+            correct: true
+            why: Pro Zeitschritt ein Frame – `next_frame()` schließt den aktuellen ab.
+          - text: Es zeigt die Animation an.
+            correct: false
+            why: Das macht `s.show()`.
+          - text: Es löscht den statischen Hintergrund.
+            correct: false
+            why: Der Hintergrund (`static=True`) bleibt in allen Frames erhalten.
+      - type: quiz
+        question: |
+          In `lab.Scene` zeichnest du einen Kreis bei `(0, 1)`. Wo erscheint er relativ zum Ursprung?
+        options:
+          - text: Oberhalb des Ursprungs
+            correct: true
+            why: In `lab.Scene` zeigt y nach oben, wie im mathematischen Koordinatensystem.
+          - text: Unterhalb des Ursprungs
+            correct: false
+            why: So wäre es bei Bildschirmkoordinaten; `lab.Scene` nutzt Weltkoordinaten mit y nach oben.
+          - text: Rechts vom Ursprung
+            correct: false
+            why: Rechts wäre `(1, 0)` – die erste Koordinate ist x.

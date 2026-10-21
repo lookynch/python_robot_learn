@@ -1,0 +1,577 @@
+id: m16-dynamikmodell
+title: Das Dynamikmodell trainieren
+minutes: 10
+goals:
+  - Ein MLP die Änderung $\Delta s = s' - s$ vorhersagen lassen
+  - Ein- und Ausgaben normalisieren und beim Vorhersagen zurückrechnen
+  - Den Validierungsfehler mit einer einfachen Referenz („nichts ändert sich“) vergleichen
+concepts: [wm-delta-vorhersage, wm-normalisierung]
+steps:
+  - type: text
+    body: |
+      ## Δs statt s′
+
+      Der nächste Zustand liegt fast beim aktuellen: In 0,05 s ändert sich ein Winkel um höchstens 0,1 rad. Ein Netz, das $s'$ direkt ausgibt, müsste vor allem lernen, $s$ zu kopieren. Einfacher ist
+
+      $$\hat f(s, a) = s + g_\theta(s, a)$$
+
+      Das MLP $g_\theta$ (1 Hidden Layer, 32 tanh-Units) sagt nur die **Änderung** $\Delta s$ vorher.
+
+      **Normalisierung:** Eingaben (Winkel bis ±π rad, Aktionen bis ±2 rad/s) und Ziele ($\Delta q$ nur ±0,1 rad) haben sehr verschiedene Größen. Wir bringen beide mit Mittelwert $\mu$ und Standardabweichung $\sigma$ der **Trainingsdaten** auf Skala 1 – und rechnen die Ausgabe danach zurück:
+
+      $$\Delta s = \text{out} \cdot \sigma_y + \mu_y$$
+  - type: example
+    heavy: true
+    intro: |
+      Das komplette Training: Daten sammeln (wie in der letzten Lektion), Netz mit Adam trainieren, auf **neuen** Episoden prüfen. Die Bausteine – MLP, Backprop, Adam – kennst du aus Modul 12.
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          losses = []
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+              losses.append(np.sum((out - Y) ** 2) / len(X))
+          return p, losses
+
+      def fit_model(S, A, S2, rng, epochs=400):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p, losses = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy, epochs)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy, "losses": losses}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      Sv, Av, S2v = collect(10, 25, np.random.default_rng(99))
+      mse = np.mean(np.sum((predict(model, Sv, Av) - S2v) ** 2, axis=1))
+      mse_still = np.mean(np.sum((Sv - S2v) ** 2, axis=1))
+      print(f"Validierung: Modell {mse:.1e}, 'nichts ändert sich' {mse_still:.1e}")
+      lab.plot(model["losses"], title="Trainingsverlust (normalisiert)", xlabel="Epoche", ylabel="MSE", logy=True)
+    subgoals:
+      - lines: [10, 20]
+        label: Daten sammeln
+      - lines: [22, 44]
+        label: MLP und Adam bereitstellen
+      - lines: [46, 51]
+        label: Δs-Ziele bilden und normalisiert trainieren
+      - lines: [53, 56]
+        label: Zurückrechnen und s addieren
+      - lines: [58, 64]
+        label: Auf neuen Episoden validieren
+    after: |
+      1000 Übergänge, 400 Epochen. Das Modell ist auf ungesehenen Episoden etwa hundertmal genauer als die Referenz „$s' = s$“.
+  - type: explain
+    question: |
+      Warum vergleichen wir den Validierungsfehler mit der Referenz „nichts ändert sich“ ($s' = s$)?
+    options:
+      - text: Weil $\Delta s$ winzig ist – schon $s' = s$ hat einen kleinen absoluten Fehler. Erst der Vergleich zeigt, ob das Modell wirklich etwas gelernt hat.
+        correct: true
+        why: Ein MSE von 0,01 klingt gut, ist hier aber nicht besser als Raten „bleibt stehen“. Eine einfache Referenz macht die Zahl interpretierbar.
+      - text: Weil das Modell sonst nicht konvergiert.
+        correct: false
+        why: Die Referenz beeinflusst das Training nicht, sie dient nur der Bewertung.
+      - text: Weil $s' = s$ die wahre Dynamik des Reachers ist.
+        correct: false
+        why: Der Arm bewegt sich mit der Aktion – $s' = s$ gilt nur bei $a = 0$.
+  - type: predict
+    code: |
+      import numpy as np
+      X = np.array([[0.0, 10.0], [2.0, 30.0]])
+      mx, sx = X.mean(0), X.std(0)
+      print((X - mx) / sx)
+    options:
+      - |
+        [[-1. -1.]
+         [ 1.  1.]]
+      - |
+        [[ 0.  0.]
+         [ 1.  1.]]
+      - |
+        [[-1. -10.]
+         [ 1.  10.]]
+      - |
+        [[-0.5 -0.5]
+         [ 0.5  0.5]]
+    answer: |
+      [[-1. -1.]
+       [ 1.  1.]]
+    explanation: |
+      Jede **Spalte** wird für sich normalisiert (`axis 0`): Mittelwerte 1 und 20, Standardabweichungen 1 und 10. Danach haben beide Spalten Mittelwert 0 und Streuung 1 – egal, wie groß sie vorher waren.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze `predict` so, dass die normalisierte Netzausgabe in eine echte Änderung zurückgerechnet und zum Zustand addiert wird. (Das Netz ist hier absichtlich untrainiert: Es gibt konstant `b2 = [1, -1]` aus.)
+    code: |
+      import numpy as np
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return ___ + out * ___ + model["my"]
+
+      p = {"W1": np.zeros((3, 4)), "b1": np.zeros(4), "W2": np.zeros((4, 2)), "b2": np.array([1.0, -1.0])}
+      model = {"p": p, "mx": np.zeros(3), "sx": np.ones(3), "my": np.array([0.5, 0.0]), "sy": np.array([0.1, 0.2])}
+      print(predict(model, np.array([2.0, 3.0]), np.array([0.0])))
+    blanks:
+      - answer: s
+        options: [s, "0", "model[\"mx\"]"]
+      - answer: model["sy"]
+        options: ["model[\"sy\"]", "model[\"sx\"]", "model[\"my\"]"]
+    expect_output: "[2.6 2.8]"
+    explanation: |
+      $\Delta s = [1, -1] \cdot [0{,}1, 0{,}2] + [0{,}5, 0] = [0{,}6, -0{,}2]$, also $s' = [2{,}6,\ 2{,}8]$. Ohne `s +` hättest du nur die Änderung, mit `sx` die Statistik der **Eingaben** statt der Ziele.
+  - type: exercise
+    mode: make
+    heavy: true
+    prompt: |
+      Schreibe `fit_model(S, A, S2, rng)`:
+
+      1. Eingaben `X` = `S` und `A` nebeneinander, Ziele `Y = S2 - S`.
+      2. Mittelwert und Standardabweichung (`+ 1e-8`) von `X` und `Y` spaltenweise berechnen.
+      3. `train_mlp(init_mlp(6, 32, 4, rng), Xn, Yn)` mit den normalisierten Arrays aufrufen.
+      4. Ein Dict mit den Schlüsseln `"p"`, `"mx"`, `"sx"`, `"my"`, `"sy"` zurückgeben – genau das erwartet `predict`.
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          losses = []
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+              losses.append(np.sum((out - Y) ** 2) / len(X))
+          return p, losses
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def fit_model(S, A, S2, rng):
+          # dein Code
+          pass
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      Sv, Av, S2v = collect(10, 25, np.random.default_rng(99))
+      print("Validierungs-MSE:", np.mean(np.sum((predict(model, Sv, Av) - S2v) ** 2, axis=1)))
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def observe(env):
+          return np.concatenate([env.q, env.fk(env.q)])
+
+      def collect(n_episodes, steps, rng):
+          S, A, S2 = [], [], []
+          for _ in range(n_episodes):
+              env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+              s = observe(env)
+              for _ in range(steps):
+                  a = rng.uniform(-2, 2, 2)
+                  env.step(a)
+                  s2 = observe(env)
+                  S.append(s); A.append(a); S2.append(s2)
+                  s = s2
+          return np.array(S), np.array(A), np.array(S2)
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          losses = []
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+              losses.append(np.sum((out - Y) ** 2) / len(X))
+          return p, losses
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p, losses = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      rng = np.random.default_rng(0)
+      S, A, S2 = collect(40, 25, rng)
+      model = fit_model(S, A, S2, rng)
+      Sv, Av, S2v = collect(10, 25, np.random.default_rng(99))
+      print("Validierungs-MSE:", np.mean(np.sum((predict(model, Sv, Av) - S2v) ** 2, axis=1)))
+    tests:
+      - name: Modell hat die erwarteten Schlüssel
+        code: |
+          assert isinstance(model, dict), f"fit_model soll ein Dict zurückgeben, bekommen {type(model).__name__}"
+          missing = [k for k in ("p", "mx", "sx", "my", "sy") if k not in model]
+          assert not missing, f"Im Modell fehlen die Schlüssel {missing}"
+      - name: Vorhersage funktioniert für viele Zustände auf einmal
+        code: |
+          St, At, S2t = collect(4, 25, np.random.default_rng(123))
+          P = predict(model, St, At)
+          assert np.shape(P) == (100, 4), f"predict(model, S, A) sollte Form (100, 4) liefern, bekommen {np.shape(P)}"
+      - name: Validierungsfehler unter Schwelle
+        code: |
+          St, At, S2t = collect(10, 25, np.random.default_rng(123))
+          mse = np.mean(np.sum((predict(model, St, At) - S2t) ** 2, axis=1))
+          assert mse < 6e-4, f"Validierungs-MSE ist {mse:.2e}, sollte unter 6e-4 liegen. Werden die Ziele als Differenz S2 - S gebildet und normalisiert?"
+      - name: Deutlich besser als 'nichts ändert sich'
+        code: |
+          St, At, S2t = collect(10, 25, np.random.default_rng(321))
+          mse = np.mean(np.sum((predict(model, St, At) - S2t) ** 2, axis=1))
+          ref = np.mean(np.sum((St - S2t) ** 2, axis=1))
+          assert mse < 0.05 * ref, f"Modellfehler {mse:.2e} ist nicht mindestens 20-mal kleiner als die Referenz s' = s ({ref:.2e})."
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p, []
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            p, losses = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, Y)
+            return {"p": p, "mx": mx, "sx": sx, "my": np.zeros(4), "sy": np.ones(4)}
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(40, 25, rng)
+        model = fit_model(S, A, S2, rng)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p, []
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p, losses = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(40, 25, rng)
+        model = fit_model(S, A, S2, rng)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        env = Reacher2D(seed=0)
+        def observe(env):
+            return np.concatenate([env.q, env.fk(env.q)])
+        def collect(n_episodes, steps, rng):
+            S, A, S2 = [], [], []
+            for _ in range(n_episodes):
+                env.reset(q=rng.uniform(-np.pi, np.pi, 2), goal=(1.0, 1.0))
+                s = observe(env)
+                for _ in range(steps):
+                    a = rng.uniform(-2, 2, 2)
+                    env.step(a)
+                    s2 = observe(env)
+                    S.append(s); A.append(a); S2.append(s2)
+                    s = s2
+            return np.array(S), np.array(A), np.array(S2)
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p, []
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S - S2
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p, losses = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        rng = np.random.default_rng(0)
+        S, A, S2 = collect(40, 25, rng)
+        model = fit_model(S, A, S2, rng)
+    hints:
+      - "Teilziel: Δs-Ziele bilden und normalisiert trainieren – dann alles fürs Zurückrechnen im Dict speichern."
+      - "`np.hstack([S, A])` legt die Spalten nebeneinander (Form `(n, 6)`); Mittelwert und Streuung spaltenweise mit `axis=0` bzw. `.mean(0)`."
+      - |
+        ```python
+        X, Y = np.hstack([S, A]), S2 - S
+        mx, sx = X.mean(0), X.std(0) + 1e-8
+        my, sy = ...
+        ```
+      - |
+        ```python
+        p, losses = train_mlp(init_mlp(6, 32, 4, rng), (X - mx) / sx, (Y - my) / sy)
+        return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+        ```
+    explanation: |
+      Lässt du die **Ausgabe-Normalisierung** weg, wird der Validierungsfehler hier etwa 7-mal größer; sagt das Netz $s'$ statt $\Delta s$ vorher, etwa 40-mal. Die Eingaben liegen bei diesem Arm schon ungefähr auf Skala 1 – dort hilft Normalisierung weniger, schadet aber nie.
+  - type: quiz
+    question: |
+      Beim Vorhersagen für einen **neuen** Zustand: Mit welchem $\mu$ und $\sigma$ normalisierst du die Eingabe?
+    options:
+      - text: Mit $\mu$ und $\sigma$ der Trainingsdaten, die im Modell gespeichert sind.
+        correct: true
+        why: Das Netz hat gelernt, mit genau dieser Skalierung umzugehen. Andere Werte verschieben die Eingaben.
+      - text: Mit Mittelwert und Streuung der neuen Eingabe selbst.
+        correct: false
+        why: Ein einzelner Zustand hat Streuung 0 – und selbst bei einem Batch würde sich die Skala von Aufruf zu Aufruf ändern.
+      - text: Gar nicht – Normalisierung braucht man nur beim Training.
+        correct: false
+        why: Das Netz erwartet normalisierte Eingaben; rohe Werte liegen außerhalb dessen, was es gesehen hat.
+cards:
+  - id: m16-c-delta
+    concept: wm-delta-vorhersage
+    variants:
+      - type: quiz
+        question: Warum sagt das Netz $\Delta s = s' - s$ statt $s'$ vorher?
+        options:
+          - text: "$s'$ liegt fast bei $s$; das Netz muss so nur die kleine Änderung lernen statt den Zustand zu kopieren."
+            correct: true
+            why: Der Kopieranteil steckt im festen `s +` – das Netz modelliert nur die Physik des Schritts.
+          - text: Weil $\Delta s$ immer positiv ist.
+            correct: false
+            why: Änderungen haben beide Vorzeichen.
+          - text: Weil ein MLP keine Werte größer als 1 ausgeben kann.
+            correct: false
+            why: Die Ausgabeschicht ist linear und kann beliebige Werte liefern.
+      - type: predict
+        code: |
+          import numpy as np
+          s = np.array([1.0, 2.0])
+          delta = np.array([0.1, -0.2])
+          print(s + delta)
+        options: ["[1.1 1.8]", "[0.1 -0.2]", "[1.1 2.2]", "[0.9 1.8]"]
+        answer: "[1.1 1.8]"
+        explanation: Das Modell gibt $s + \Delta s$ zurück.
+  - id: m16-c-denorm
+    concept: wm-normalisierung
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          out = np.array([2.0, -1.0])
+          my, sy = np.array([0.0, 0.5]), np.array([0.1, 0.2])
+          print(out * sy + my)
+        options: ["[0.2 0.3]", "[2.1 -0.8]", "[0.2 -0.2]", "[20. -5.]"]
+        answer: "[0.2 0.3]"
+        explanation: Zurückrechnen = mit $\sigma$ multiplizieren, dann $\mu$ addieren.
+      - type: predict
+        code: |
+          import numpy as np
+          y = np.array([0.3, 0.5])
+          my, sy = np.array([0.1, 0.5]), np.array([0.1, 0.25])
+          print((y - my) / sy)
+        options: ["[2. 0.]", "[0.02 0.]", "[4. 2.]", "[0.2 0.]"]
+        answer: "[2. 0.]"
+        explanation: Normalisieren = $\mu$ abziehen, durch $\sigma$ teilen.
+  - id: m16-c-norm-stats
+    concept: wm-normalisierung
+    variants:
+      - type: quiz
+        question: Woher kommen $\mu_y$ und $\sigma_y$, mit denen du die Netzausgabe zurückrechnest?
+        options:
+          - text: Aus den Zielen $\Delta s$ des Trainingsdatensatzes.
+            correct: true
+            why: Das Netz wurde auf $(\Delta s - \mu_y)/\sigma_y$ trainiert – also muss die Rückrechnung dieselben Werte nutzen.
+          - text: Aus den Eingaben $[s, a]$.
+            correct: false
+            why: Das sind $\mu_x, \sigma_x$ – andere Spalten, andere Größen.
+          - text: Sie sind immer 0 und 1.
+            correct: false
+            why: Nur die **normalisierten** Ziele haben Mittelwert 0 und Streuung 1.
+      - type: quiz
+        question: Du vergisst, die Ziele $\Delta q \approx \pm 0{,}1$ rad zu normalisieren. Was passiert am ehesten?
+        options:
+          - text: Das Training funktioniert, aber deutlich schlechter – die winzigen Zielwerte passen nicht zur Skala von Initialisierung und Lernrate.
+            correct: true
+            why: Im Versuch dieser Lektion wurde der Fehler etwa 7-mal größer.
+          - text: Python wirft einen Fehler.
+            correct: false
+            why: Die Formen stimmen – es rechnet nur schlechter.
+          - text: Gar nichts, Adam gleicht alles aus.
+            correct: false
+            why: Adam skaliert die Schritte, aber nicht die Ausgabe der Initialisierung oder das Verhältnis der Ziele zueinander.

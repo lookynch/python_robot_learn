@@ -1,0 +1,707 @@
+id: m17-latente-dynamik
+title: Dynamik im latenten Raum
+minutes: 9
+goals:
+  - Ein Dynamikmodell $z' = z + g(z, a)$ auf latenten Vektoren trainieren
+  - Eine „Vorstellung“ (Dream) im latenten Raum rollen und decodieren
+  - Erklären, warum man im latenten Raum statt in Pixeln vorhersagt
+concepts: [lwm-latente-dynamik]
+steps:
+  - type: text
+    body: |
+      ## Modul 16, aber mit $z$ statt $s$
+
+      Der Encoder macht aus jedem Bild $o_t$ einen latenten Vektor $z_t$ (8 Zahlen). Dann lernen wir genau wie in Modul 16
+
+      $$\hat z_{t+1} = z_t + g_\theta(z_t, a_t)$$
+
+      mit denselben Funktionen `fit_model` und `predict` – nur mit 8 statt 4 Zustandszahlen.
+
+      Danach kann der Agent sich Zukünfte **vorstellen**: $z_0$ aus dem ersten Bild, dann nur noch das Modell. Der Decoder ist dafür gar nicht nötig – wir benutzen ihn nur, um zu **sehen**, was das Modell sich vorstellt.
+
+      Spielversion: Den linearen Encoder berechnen wir direkt per Singulärwertzerlegung (`np.linalg.svd`). Das ergibt denselben Unterraum, den ein linearer Autoencoder im Optimum lernt (PCA), spart aber das Training.
+  - type: example
+    heavy: true
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      N = 16
+      c = (np.arange(N) + 0.5) / N * 4.4 - 2.2
+      PX, PY = np.meshgrid(c, -c)
+      P = np.stack([PX.ravel(), PY.ravel()], axis=1)
+
+      def seg_dist(a, b):
+          ab = b - a
+          ap = P[None] - a[:, None]
+          t = np.clip((ap * ab[:, None]).sum(-1) / (ab * ab).sum(-1)[:, None], 0, 1)
+          return np.linalg.norm(ap - t[..., None] * ab[:, None], axis=-1)
+
+      def render(q):
+          p1 = np.stack([np.cos(q[:, 0]), np.sin(q[:, 0])], axis=1)
+          p2 = p1 + np.stack([np.cos(q[:, 0] + q[:, 1]), np.sin(q[:, 0] + q[:, 1])], axis=1)
+          d = np.minimum(seg_dist(0 * p1, p1), seg_dist(p1, p2))
+          return np.exp(-(d / 0.35) ** 2)
+
+      def fit_encoder(X, k):
+          mu = X.mean(0)
+          _, _, Vt = np.linalg.svd(X - mu, full_matrices=False)
+          return {"mu": mu, "W": Vt[:k].T}
+
+      def encode(enc, X):
+          return (X - enc["mu"]) @ enc["W"]
+
+      def decode(enc, Z):
+          return Z @ enc["W"].T + enc["mu"]
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=300, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(X.shape[1], 32, Y.shape[1], rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      env = Reacher2D(dt=0.1)
+      rng = np.random.default_rng(0)
+      Q = rng.uniform(-np.pi, np.pi, (800, 2))
+      A = rng.uniform(-2, 2, (800, 2))
+      X, X2 = render(Q), render(env.dynamics(Q, A))
+      enc = fit_encoder(X, 8)
+      Z, Z2 = encode(enc, X), encode(enc, X2)
+      model = fit_model(Z, A, Z2, rng)
+
+      q = np.array([[0.5, 0.8]])
+      actions = np.tile([1.5, -1.0], (6, 1))
+      z = encode(enc, render(q))
+      real, dream = [render(q)[0]], [decode(enc, z)[0]]
+      for a in actions:
+          q = env.dynamics(q, a)
+          z = predict(model, z, a[None])
+          real.append(render(q)[0])
+          dream.append(decode(enc, z)[0])
+      Qt = np.random.default_rng(5).uniform(-np.pi, np.pi, (200, 2))
+      At = np.random.default_rng(6).uniform(-2, 2, (200, 2))
+      Zt, Z2t = encode(enc, render(Qt)), encode(enc, render(env.dynamics(Qt, At)))
+      rel = np.mean((predict(model, Zt, At) - Z2t) ** 2) / np.mean((Zt - Z2t) ** 2)
+      print(f"Einschrittfehler im latenten Raum: {rel:.2f} (relativ zu 'z bleibt gleich')")
+      real, dream = np.array(real).reshape(-1, N, N), np.array(dream).reshape(-1, N, N)
+      lab.heatmap(np.vstack([np.hstack(list(real)), np.hstack(list(dream))]), title="oben: echt, unten: Vorstellung des Modells")
+    subgoals:
+      - lines: [5, 20]
+        label: Bilder rendern
+      - lines: [22, 31]
+        label: Linearen Encoder und Decoder bestimmen
+      - lines: [67, 74]
+        label: Übergänge als Bildpaare erzeugen, codieren, Modell trainieren
+      - lines: [76, 84]
+        label: Vorstellung im latenten Raum rollen und decodieren
+      - lines: [85, 91]
+        label: Qualität messen und zeigen
+    after: |
+      Die untere Reihe entsteht **ohne** weitere Bilder – nur aus $z_0$ und den Aktionen. Sie ist verwaschen (der lineare Decoder), aber der Arm dreht sich wie in der Realität.
+  - type: explain
+    question: |
+      Warum lernt man die Dynamik im latenten Raum statt direkt Bild → nächstes Bild?
+    options:
+      - text: Der latente Vektor ist klein und enthält das Wesentliche; das Modell bleibt klein, Vorstellen ist billig, und Planen kann ganz ohne Bilder auskommen.
+        correct: true
+        why: Statt 256 Pixeln pro Schritt werden 8 Zahlen vorhergesagt – bei echten Kamerabildern ist der Unterschied noch viel größer.
+      - text: Weil Bilder sich nicht vorhersagen lassen.
+        correct: false
+        why: Es gibt Video-Vorhersagemodelle – sie sind nur sehr viel teurer.
+      - text: Weil der Decoder sonst nicht trainiert werden kann.
+        correct: false
+        why: Der Decoder wird mit dem Rekonstruktionsfehler trainiert, unabhängig vom Dynamikmodell.
+  - type: predict
+    code: |
+      import numpy as np
+      Z = np.zeros((800, 8))
+      A = np.zeros((800, 2))
+      Z2 = np.ones((800, 8))
+      X, Y = np.hstack([Z, A]), Z2 - Z
+      print(X.shape, Y.shape)
+    options:
+      - "(800, 10) (800, 8)"
+      - "(800, 8) (800, 8)"
+      - "(1600, 8) (800, 8)"
+      - "(800, 10) (800, 10)"
+    answer: "(800, 10) (800, 8)"
+    explanation: |
+      Eingabe = latenter Zustand (8) plus Aktion (2). Ausgabe = Änderung des latenten Zustands (8). Das Netz in `fit_model` passt seine Größe daran an (`X.shape[1]`, `Y.shape[1]`).
+  - type: exercise
+    mode: make
+    heavy: true
+    prompt: |
+      Schreibe `dream(model, enc, x0, actions)`: Codiere das Startbild `x0` (Form `(1, 256)`), rolle dann mit `predict` durch alle Aktionen (jede als Form `(1, 2)`, also `a[None]`) und gib **alle** decodierten Bilder als Array der Form `(len(actions) + 1, 256)` zurück – das Startbild (decodiert) eingeschlossen.
+    starter: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      N = 16
+      c = (np.arange(N) + 0.5) / N * 4.4 - 2.2
+      PX, PY = np.meshgrid(c, -c)
+      P = np.stack([PX.ravel(), PY.ravel()], axis=1)
+
+      def seg_dist(a, b):
+          ab = b - a
+          ap = P[None] - a[:, None]
+          t = np.clip((ap * ab[:, None]).sum(-1) / (ab * ab).sum(-1)[:, None], 0, 1)
+          return np.linalg.norm(ap - t[..., None] * ab[:, None], axis=-1)
+
+      def render(q):
+          p1 = np.stack([np.cos(q[:, 0]), np.sin(q[:, 0])], axis=1)
+          p2 = p1 + np.stack([np.cos(q[:, 0] + q[:, 1]), np.sin(q[:, 0] + q[:, 1])], axis=1)
+          d = np.minimum(seg_dist(0 * p1, p1), seg_dist(p1, p2))
+          return np.exp(-(d / 0.35) ** 2)
+
+      def fit_encoder(X, k):
+          mu = X.mean(0)
+          _, _, Vt = np.linalg.svd(X - mu, full_matrices=False)
+          return {"mu": mu, "W": Vt[:k].T}
+
+      def encode(enc, X):
+          return (X - enc["mu"]) @ enc["W"]
+
+      def decode(enc, Z):
+          return Z @ enc["W"].T + enc["mu"]
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(X.shape[1], 32, Y.shape[1], rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      env = Reacher2D(dt=0.1)
+      rng = np.random.default_rng(0)
+      Q = rng.uniform(-np.pi, np.pi, (800, 2))
+      A = rng.uniform(-2, 2, (800, 2))
+      X, X2 = render(Q), render(env.dynamics(Q, A))
+      enc = fit_encoder(X, 8)
+      Z, Z2 = encode(enc, X), encode(enc, X2)
+      model = fit_model(Z, A, Z2, rng)
+
+      def dream(model, enc, x0, actions):
+          # dein Code
+          pass
+
+      x0 = render(np.array([[0.5, 0.8]]))
+      imgs = dream(model, enc, x0, np.tile([1.5, -1.0], (6, 1)))
+      print(np.shape(imgs))
+    solution: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      N = 16
+      c = (np.arange(N) + 0.5) / N * 4.4 - 2.2
+      PX, PY = np.meshgrid(c, -c)
+      P = np.stack([PX.ravel(), PY.ravel()], axis=1)
+
+      def seg_dist(a, b):
+          ab = b - a
+          ap = P[None] - a[:, None]
+          t = np.clip((ap * ab[:, None]).sum(-1) / (ab * ab).sum(-1)[:, None], 0, 1)
+          return np.linalg.norm(ap - t[..., None] * ab[:, None], axis=-1)
+
+      def render(q):
+          p1 = np.stack([np.cos(q[:, 0]), np.sin(q[:, 0])], axis=1)
+          p2 = p1 + np.stack([np.cos(q[:, 0] + q[:, 1]), np.sin(q[:, 0] + q[:, 1])], axis=1)
+          d = np.minimum(seg_dist(0 * p1, p1), seg_dist(p1, p2))
+          return np.exp(-(d / 0.35) ** 2)
+
+      def fit_encoder(X, k):
+          mu = X.mean(0)
+          _, _, Vt = np.linalg.svd(X - mu, full_matrices=False)
+          return {"mu": mu, "W": Vt[:k].T}
+
+      def encode(enc, X):
+          return (X - enc["mu"]) @ enc["W"]
+
+      def decode(enc, Z):
+          return Z @ enc["W"].T + enc["mu"]
+
+      def init_mlp(n_in, n_hidden, n_out, rng):
+          return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                  "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+      def forward(p, X):
+          H = np.tanh(X @ p["W1"] + p["b1"])
+          return H @ p["W2"] + p["b2"], H
+
+      def train_mlp(p, X, Y, epochs=400, lr=0.02):
+          m = {k: np.zeros_like(w) for k, w in p.items()}
+          v = {k: np.zeros_like(w) for k, w in p.items()}
+          for t in range(1, epochs + 1):
+              out, H = forward(p, X)
+              D = 2 * (out - Y) / len(X)
+              dH = (D @ p["W2"].T) * (1 - H ** 2)
+              g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+              for k in p:  # Adam
+                  m[k] = 0.9 * m[k] + 0.1 * g[k]
+                  v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                  p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+          return p
+
+      def fit_model(S, A, S2, rng):
+          X, Y = np.hstack([S, A]), S2 - S
+          mx, sx = X.mean(0), X.std(0) + 1e-8
+          my, sy = Y.mean(0), Y.std(0) + 1e-8
+          p = train_mlp(init_mlp(X.shape[1], 32, Y.shape[1], rng), (X - mx) / sx, (Y - my) / sy)
+          return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+      def predict(model, s, a):
+          X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+          out, _ = forward(model["p"], X)
+          return s + out * model["sy"] + model["my"]
+
+      env = Reacher2D(dt=0.1)
+      rng = np.random.default_rng(0)
+      Q = rng.uniform(-np.pi, np.pi, (800, 2))
+      A = rng.uniform(-2, 2, (800, 2))
+      X, X2 = render(Q), render(env.dynamics(Q, A))
+      enc = fit_encoder(X, 8)
+      Z, Z2 = encode(enc, X), encode(enc, X2)
+      model = fit_model(Z, A, Z2, rng)
+
+      def dream(model, enc, x0, actions):
+          z = encode(enc, x0)
+          frames = [decode(enc, z)[0]]
+          for a in actions:
+              z = predict(model, z, a[None])
+              frames.append(decode(enc, z)[0])
+          return np.array(frames)
+
+      x0 = render(np.array([[0.5, 0.8]]))
+      imgs = dream(model, enc, x0, np.tile([1.5, -1.0], (6, 1)))
+      print(np.shape(imgs))
+    tests:
+      - name: Form
+        code: |
+          out = np.asarray(dream(model, enc, render(np.array([[0.0, 0.5]])), np.zeros((4, 2))))
+          assert out.shape == (5, 256), f"Für 4 Aktionen erwartet Form (5, 256), bekommen {out.shape}"
+      - name: Erstes Bild ist das decodierte Startbild
+        code: |
+          x0 = render(np.array([[1.0, -0.5]]))
+          out = np.asarray(dream(model, enc, x0, np.ones((2, 2))))
+          assert close(out[0], decode(enc, encode(enc, x0))[0]), "Das erste Bild soll decode(enc, encode(enc, x0)) sein."
+      - name: Vorstellung stimmt mit Referenz
+        code: |
+          def _ref(x0, acts):
+              z = encode(enc, x0)
+              fr = [decode(enc, z)[0]]
+              for a in acts:
+                  z = predict(model, z, a[None])
+                  fr.append(decode(enc, z)[0])
+              return np.array(fr)
+          r = np.random.default_rng(8)
+          for _ in range(2):
+              x0 = render(r.uniform(-np.pi, np.pi, (1, 2)))
+              acts = r.uniform(-2, 2, (5, 2))
+              got = np.asarray(dream(model, enc, x0, acts), dtype=float)
+              assert got.shape == (6, 256) and close(got, _ref(x0, acts), 1e-6), "Die vorgestellten Bilder weichen ab – wird z in jedem Schritt mit predict weitergerollt (nicht immer vom Start aus)?"
+      - name: Vorstellung ähnelt der Realität
+        code: |
+          q = np.array([[0.3, 1.0]])
+          acts = np.tile([1.0, 1.0], (5, 1))
+          out = np.asarray(dream(model, enc, render(q), acts))
+          errs = []
+          for t, a in enumerate(acts):
+              q = env.dynamics(q, a)
+              real = render(q)[0]
+              errs.append(np.mean((out[t + 1] - real) ** 2) / np.mean((enc["mu"] - real) ** 2))
+          assert max(errs) < 0.7, f"Die Vorstellung sollte deutlich näher an der Realität liegen als das Durchschnittsbild, relative Fehler {np.round(errs, 2)}"
+    mutants:
+      - |
+        import numpy as np
+        import lab
+        from lab.envs import Reacher2D
+
+        N = 16
+        c = (np.arange(N) + 0.5) / N * 4.4 - 2.2
+        PX, PY = np.meshgrid(c, -c)
+        P = np.stack([PX.ravel(), PY.ravel()], axis=1)
+
+        def seg_dist(a, b):
+            ab = b - a
+            ap = P[None] - a[:, None]
+            t = np.clip((ap * ab[:, None]).sum(-1) / (ab * ab).sum(-1)[:, None], 0, 1)
+            return np.linalg.norm(ap - t[..., None] * ab[:, None], axis=-1)
+
+        def render(q):
+            p1 = np.stack([np.cos(q[:, 0]), np.sin(q[:, 0])], axis=1)
+            p2 = p1 + np.stack([np.cos(q[:, 0] + q[:, 1]), np.sin(q[:, 0] + q[:, 1])], axis=1)
+            d = np.minimum(seg_dist(0 * p1, p1), seg_dist(p1, p2))
+            return np.exp(-(d / 0.35) ** 2)
+
+        def fit_encoder(X, k):
+            mu = X.mean(0)
+            _, _, Vt = np.linalg.svd(X - mu, full_matrices=False)
+            return {"mu": mu, "W": Vt[:k].T}
+
+        def encode(enc, X):
+            return (X - enc["mu"]) @ enc["W"]
+
+        def decode(enc, Z):
+            return Z @ enc["W"].T + enc["mu"]
+
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:  # Adam
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(X.shape[1], 32, Y.shape[1], rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+
+        env = Reacher2D(dt=0.1)
+        rng = np.random.default_rng(0)
+        Q = rng.uniform(-np.pi, np.pi, (800, 2))
+        A = rng.uniform(-2, 2, (800, 2))
+        X, X2 = render(Q), render(env.dynamics(Q, A))
+        enc = fit_encoder(X, 8)
+        Z, Z2 = encode(enc, X), encode(enc, X2)
+        model = fit_model(Z, A, Z2, rng)
+        def dream(model, enc, x0, actions):
+            z = encode(enc, x0)
+            frames = []
+            for a in actions:
+                z = predict(model, z, a[None])
+                frames.append(decode(enc, z)[0])
+            return np.array(frames)
+      - |
+        import numpy as np
+        import lab
+        from lab.envs import Reacher2D
+
+        N = 16
+        c = (np.arange(N) + 0.5) / N * 4.4 - 2.2
+        PX, PY = np.meshgrid(c, -c)
+        P = np.stack([PX.ravel(), PY.ravel()], axis=1)
+
+        def seg_dist(a, b):
+            ab = b - a
+            ap = P[None] - a[:, None]
+            t = np.clip((ap * ab[:, None]).sum(-1) / (ab * ab).sum(-1)[:, None], 0, 1)
+            return np.linalg.norm(ap - t[..., None] * ab[:, None], axis=-1)
+
+        def render(q):
+            p1 = np.stack([np.cos(q[:, 0]), np.sin(q[:, 0])], axis=1)
+            p2 = p1 + np.stack([np.cos(q[:, 0] + q[:, 1]), np.sin(q[:, 0] + q[:, 1])], axis=1)
+            d = np.minimum(seg_dist(0 * p1, p1), seg_dist(p1, p2))
+            return np.exp(-(d / 0.35) ** 2)
+
+        def fit_encoder(X, k):
+            mu = X.mean(0)
+            _, _, Vt = np.linalg.svd(X - mu, full_matrices=False)
+            return {"mu": mu, "W": Vt[:k].T}
+
+        def encode(enc, X):
+            return (X - enc["mu"]) @ enc["W"]
+
+        def decode(enc, Z):
+            return Z @ enc["W"].T + enc["mu"]
+
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:  # Adam
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(X.shape[1], 32, Y.shape[1], rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+
+        env = Reacher2D(dt=0.1)
+        rng = np.random.default_rng(0)
+        Q = rng.uniform(-np.pi, np.pi, (800, 2))
+        A = rng.uniform(-2, 2, (800, 2))
+        X, X2 = render(Q), render(env.dynamics(Q, A))
+        enc = fit_encoder(X, 8)
+        Z, Z2 = encode(enc, X), encode(enc, X2)
+        model = fit_model(Z, A, Z2, rng)
+        def dream(model, enc, x0, actions):
+            z0 = encode(enc, x0)
+            frames = [decode(enc, z0)[0]]
+            for a in actions:
+                z = predict(model, z0, a[None])
+                frames.append(decode(enc, z)[0])
+            return np.array(frames)
+      - |
+        import numpy as np
+        import lab
+        from lab.envs import Reacher2D
+
+        N = 16
+        c = (np.arange(N) + 0.5) / N * 4.4 - 2.2
+        PX, PY = np.meshgrid(c, -c)
+        P = np.stack([PX.ravel(), PY.ravel()], axis=1)
+
+        def seg_dist(a, b):
+            ab = b - a
+            ap = P[None] - a[:, None]
+            t = np.clip((ap * ab[:, None]).sum(-1) / (ab * ab).sum(-1)[:, None], 0, 1)
+            return np.linalg.norm(ap - t[..., None] * ab[:, None], axis=-1)
+
+        def render(q):
+            p1 = np.stack([np.cos(q[:, 0]), np.sin(q[:, 0])], axis=1)
+            p2 = p1 + np.stack([np.cos(q[:, 0] + q[:, 1]), np.sin(q[:, 0] + q[:, 1])], axis=1)
+            d = np.minimum(seg_dist(0 * p1, p1), seg_dist(p1, p2))
+            return np.exp(-(d / 0.35) ** 2)
+
+        def fit_encoder(X, k):
+            mu = X.mean(0)
+            _, _, Vt = np.linalg.svd(X - mu, full_matrices=False)
+            return {"mu": mu, "W": Vt[:k].T}
+
+        def encode(enc, X):
+            return (X - enc["mu"]) @ enc["W"]
+
+        def decode(enc, Z):
+            return Z @ enc["W"].T + enc["mu"]
+
+        def init_mlp(n_in, n_hidden, n_out, rng):
+            return {"W1": rng.normal(0, n_in ** -0.5, (n_in, n_hidden)), "b1": np.zeros(n_hidden),
+                    "W2": rng.normal(0, n_hidden ** -0.5, (n_hidden, n_out)), "b2": np.zeros(n_out)}
+
+        def forward(p, X):
+            H = np.tanh(X @ p["W1"] + p["b1"])
+            return H @ p["W2"] + p["b2"], H
+
+        def train_mlp(p, X, Y, epochs=400, lr=0.02):
+            m = {k: np.zeros_like(w) for k, w in p.items()}
+            v = {k: np.zeros_like(w) for k, w in p.items()}
+            for t in range(1, epochs + 1):
+                out, H = forward(p, X)
+                D = 2 * (out - Y) / len(X)
+                dH = (D @ p["W2"].T) * (1 - H ** 2)
+                g = {"W1": X.T @ dH, "b1": dH.sum(0), "W2": H.T @ D, "b2": D.sum(0)}
+                for k in p:  # Adam
+                    m[k] = 0.9 * m[k] + 0.1 * g[k]
+                    v[k] = 0.999 * v[k] + 0.001 * g[k] ** 2
+                    p[k] -= lr * m[k] / (1 - 0.9 ** t) / (np.sqrt(v[k] / (1 - 0.999 ** t)) + 1e-8)
+            return p
+
+        def fit_model(S, A, S2, rng):
+            X, Y = np.hstack([S, A]), S2 - S
+            mx, sx = X.mean(0), X.std(0) + 1e-8
+            my, sy = Y.mean(0), Y.std(0) + 1e-8
+            p = train_mlp(init_mlp(X.shape[1], 32, Y.shape[1], rng), (X - mx) / sx, (Y - my) / sy)
+            return {"p": p, "mx": mx, "sx": sx, "my": my, "sy": sy}
+
+        def predict(model, s, a):
+            X = (np.concatenate([s, a], axis=-1) - model["mx"]) / model["sx"]
+            out, _ = forward(model["p"], X)
+            return s + out * model["sy"] + model["my"]
+
+        env = Reacher2D(dt=0.1)
+        rng = np.random.default_rng(0)
+        Q = rng.uniform(-np.pi, np.pi, (800, 2))
+        A = rng.uniform(-2, 2, (800, 2))
+        X, X2 = render(Q), render(env.dynamics(Q, A))
+        enc = fit_encoder(X, 8)
+        Z, Z2 = encode(enc, X), encode(enc, X2)
+        model = fit_model(Z, A, Z2, rng)
+        def dream(model, enc, x0, actions):
+            z = encode(enc, x0)
+            frames = [z[0]]
+            for a in actions:
+                z = predict(model, z, a[None])
+                frames.append(z[0])
+            return np.array(frames)
+    hints:
+      - "Teilziel: wie `rollout` in Modul 16 – nur mit Codieren am Anfang und Decodieren jedes Zwischenstands."
+      - "`encode` und `decode` arbeiten auf Zeilen: `z` hat die Form `(1, 8)`, `decode(enc, z)[0]` ist ein Bild mit 256 Pixeln."
+      - |
+        ```python
+        z = encode(enc, x0)
+        frames = [decode(enc, z)[0]]
+        for a in actions:
+            ...
+        ```
+      - |
+        ```python
+            z = predict(model, z, a[None])
+            frames.append(decode(enc, z)[0])
+        return np.array(frames)
+        ```
+  - type: quiz
+    question: |
+      Ein Roboter arbeitet vor einem bunten, sich bewegenden Hintergrund. Welches Problem bekommt ein World Model, dessen latenter Raum **nur** mit Rekonstruktionsfehler trainiert wird?
+    options:
+      - text: Es verwendet viel Kapazität darauf, den für die Aufgabe irrelevanten Hintergrund nachzubilden.
+        correct: true
+        why: Rekonstruktion belohnt jedes Pixel gleich. Deshalb verzichten TD-MPC und JEPA-artige Modelle auf den Decoder und lernen nur aufgabenrelevante oder vorhersagbare Merkmale.
+      - text: Es kann den Hintergrund nicht darstellen und stürzt ab.
+        correct: false
+        why: Es stellt ihn (unscharf) dar – das Problem ist verschwendete Kapazität, kein Absturz.
+      - text: Keines – Rekonstruktion lernt automatisch nur das Wichtige.
+        correct: false
+        why: Was „wichtig“ ist, weiß der Rekonstruktionsfehler nicht – er misst alle Pixel.
+  - type: quiz
+    question: |
+      Ein Agent plant mit CEM auf einem latenten Modell. Wofür braucht er den Decoder **während** des Planens?
+    options:
+      - text: Für nichts – Rollouts und Kosten können ganz im latenten Raum berechnet werden, wenn auch die Belohnung aus $z$ vorhergesagt wird.
+        correct: true
+        why: So plant PlaNet (mit CEM im latenten Raum), und auch Dreamer stellt sich Zukünfte ohne Bilder vor. Der Decoder dient nur dem Training (bzw. uns zum Anschauen).
+      - text: Er muss jedes vorgestellte Bild decodieren, um es mit dem Ziel zu vergleichen.
+        correct: false
+        why: Das wäre möglich, aber teuer und unnötig – Ziele lassen sich im latenten Raum oder über eine gelernte Belohnung ausdrücken.
+      - text: Er braucht ihn, um Aktionen zu codieren.
+        correct: false
+        why: Aktionen gehen direkt (ohne Codierung) ins Dynamikmodell.
+cards:
+  - id: m17-c-latente-dynamik
+    concept: lwm-latente-dynamik
+    variants:
+      - type: quiz
+        question: Was sagt ein latentes Dynamikmodell vorher?
+        options:
+          - text: Den nächsten latenten Vektor $z_{t+1}$ aus $z_t$ und $a_t$.
+            correct: true
+            why: Die Dynamik läuft komplett im komprimierten Raum.
+          - text: Das nächste Bild Pixel für Pixel.
+            correct: false
+            why: Das Bild entsteht – wenn überhaupt – erst durch den Decoder.
+          - text: Die Aktion, die zum Ziel führt.
+            correct: false
+            why: Das wäre eine Policy.
+      - type: quiz
+        question: Woher kommt beim „Träumen“ der Startpunkt $z_0$?
+        options:
+          - text: Aus dem Encoder, angewandt auf die letzte echte Beobachtung.
+            correct: true
+            why: Danach braucht die Vorstellung keine Bilder mehr.
+          - text: Aus dem Decoder.
+            correct: false
+            why: Der Decoder macht aus $z$ ein Bild, nicht umgekehrt.
+          - text: Er wird zufällig gezogen und hat mit der Realität nichts zu tun.
+            correct: false
+            why: Zum Planen muss die Vorstellung beim aktuellen echten Zustand beginnen.
+  - id: m17-c-latent-formen
+    concept: lwm-latente-dynamik
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          Z = np.zeros((100, 6))
+          A = np.zeros((100, 3))
+          print(np.hstack([Z, A]).shape)
+        options: ["(100, 9)", "(100, 6)", "(200, 9)", "(9, 100)"]
+        answer: "(100, 9)"
+        explanation: Latenter Zustand (6) und Aktion (3) nebeneinander.
+      - type: predict
+        code: |
+          import numpy as np
+          z = np.array([[1.0, 2.0]])
+          dz = np.array([[0.5, -1.0]])
+          print(z + dz)
+        options: ["[[1.5 1. ]]", "[[0.5 -1. ]]", "[[1.5 3. ]]", "[[1.  2. ]]"]
+        answer: "[[1.5 1. ]]"
+        explanation: Wie in Modul 16 sagt das Netz die Änderung vorher, $\hat z' = z + \Delta z$.

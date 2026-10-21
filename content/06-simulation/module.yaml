@@ -1,0 +1,48 @@
+id: m06
+number: 6
+title: Simulation
+summary: |
+  Zustand, Zeitschritt und Schritt-Funktion: Du simulierst freien Fall, Feder-Dämpfer und Pendel selbst, siehst Energiedrift und Schrittweiten-Effekte und lernst das Muster `step(state, action, dt)`, auf dem Regelung, Planen, RL und World Models aufbauen.
+depth: voll
+lessons:
+  - m06-zustand
+  - m06-euler
+  - m06-feder-daempfer
+  - m06-semi-implizit
+  - m06-step-funktion
+  - m06-pendel
+  - m06-checkpoint
+concepts:
+  - id: sim-zustand
+    name: Zustand eines Systems
+    description: Der Zustand enthält alle Größen, die zusammen mit den Eingaben die Zukunft festlegen (z. B. Position und Geschwindigkeit); Parameter wie Masse oder dt gehören nicht dazu.
+  - id: sim-schleife
+    name: Simulationsschleife und Trajektorie
+    description: In einer Schleife wird der Zustand Schritt für Schritt um dt weitergerechnet und jeder Zustand in einer Liste bzw. einem Array gespeichert (n Schritte → n+1 Zustände).
+  - id: euler-explizit
+    name: Expliziter Euler
+    description: "x_{k+1} = x_k + dt · f(x_k): die Ableitung am Anfang des Schritts wird für den ganzen Schritt verwendet."
+  - id: diskretisierungsfehler
+    name: Diskretisierungsfehler und Schrittweite
+    description: Der globale Fehler des Euler-Verfahrens ist proportional zu dt – halbe Schrittweite, etwa halber Fehler, doppelte Rechenzeit.
+  - id: ode-erste-ordnung
+    name: ODE 2. Ordnung als System 1. Ordnung
+    description: "m·x'' = F wird mit dem Zustand [x, v] zu x' = v, v' = F/m – so lässt sich jede mechanische Gleichung mit demselben Verfahren simulieren."
+  - id: feder-daempfer
+    name: Masse-Feder-Dämpfer
+    description: "m·x'' = −k·x − c·x' + F; c < 2√(km) schwingt, c = 2√(km) ist der aperiodische Grenzfall."
+  - id: energiedrift
+    name: Energiedrift
+    description: Expliziter Euler vergrößert beim ungedämpften Oszillator die Energie in jedem Schritt um den Faktor 1 + ω²·dt² – die Simulation erzeugt Energie aus dem Nichts.
+  - id: semi-implizit-euler
+    name: Semi-impliziter Euler
+    description: Erst v mit der alten Position aktualisieren, dann x mit dem neuen v. Gleicher Aufwand, aber die Energie bleibt beschränkt (stabil für ω·dt < 2).
+  - id: step-funktion
+    name: Schritt-Funktion step(state, action, dt)
+    description: Eine reine Funktion, die aus Zustand und Aktion den nächsten Zustand als neues Array berechnet – das gemeinsame Muster für Regelung, Planen, RL und World Models.
+  - id: rollout
+    name: Rollout
+    description: step wiederholt auf eine Aktionsfolge anwenden und die Zustände sammeln – Grundlage fürs Planen.
+  - id: pendel-ode
+    name: Pendel-Gleichung
+    description: "Mit θ = 0 oben, positiv gegen den Uhrzeigersinn: θ'' = (g/l)·sin θ + u/(m·l²); oben instabil, unten (θ = π) stabil."

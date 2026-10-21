@@ -1,0 +1,495 @@
+id: m03-roboter-klasse
+title: "Ein Roboter aus Gelenken: Komposition"
+minutes: 10
+goals:
+  - Eine Klasse `Joint` und eine Klasse `Robot` mit einer Liste von Gelenken bauen
+  - Aufgaben vom Roboter an seine Gelenke delegieren
+  - Erkennen, wann zwei Namen dasselbe Objekt bezeichnen
+concepts: [m03-komposition, m03-klasse-objekt, m03-methode-self]
+steps:
+  - type: text
+    body: |
+      ## Ein Roboter *hat* Gelenke
+
+      Ein Roboterarm besteht aus Gelenken. Jedes Gelenk kennt seinen Winkel und seine Grenze. Der Roboter selbst muss davon nichts im Detail wissen – er hält eine **Liste von `Joint`-Objekten** und bittet sie, sich zu bewegen.
+
+      Dieses Prinzip heißt **Komposition** (composition): Ein Objekt besteht aus anderen Objekten („hat ein“). Der Roboter **delegiert** Aufgaben an seine Teile – jede Klasse bleibt klein und verständlich.
+  - type: example
+    code: |
+      class Joint:
+          def __init__(self, name, angle=0.0, limit=3.0):
+              self.name = name
+              self.angle = angle
+              self.limit = limit
+
+          def move_to(self, target):
+              self.angle = max(-self.limit, min(target, self.limit))
+
+      class Robot:
+          def __init__(self, joints):
+              self.joints = joints
+
+          def pose(self):
+              return [j.angle for j in self.joints]
+
+      arm = Robot([Joint("schulter"), Joint("ellbogen", limit=2.0)])
+      arm.joints[1].move_to(2.5)
+      print(arm.pose())
+    subgoals:
+      - lines: [1, 5]
+        label: Teil-Klasse mit eigenen Daten
+      - lines: [7, 8]
+        label: Teil-Klasse prüft ihre eigene Grenze
+      - lines: [10, 12]
+        label: Ganzes hält eine Liste von Teilen
+      - lines: [14, 15]
+        label: Ganzes fragt seine Teile ab
+      - lines: [17, 19]
+        label: Zusammensetzen und benutzen
+    after: |
+      `max(-limit, min(target, limit))` begrenzt `target` auf das Intervall $[-\text{limit}, \text{limit}]$: `min` kappt nach oben, `max` nach unten. Das Ellbogengelenk landet deshalb bei 2.0 rad statt 2.5 rad.
+
+      `arm.joints[1]` ist ein `Joint`-Objekt – auf ihm kannst du direkt `move_to` aufrufen.
+  - type: explain
+    question: |
+      Warum steht die Begrenzung in `Joint.move_to` und nicht in `Robot`?
+    options:
+      - text: Jedes Gelenk kennt seine eigene Grenze; so gilt sie automatisch überall, wo das Gelenk bewegt wird.
+        correct: true
+        why: Daten und das Verhalten, das sie schützt, gehören zusammen. Der Roboter kann seine Gelenke nicht versehentlich über die Grenze schicken.
+      - text: Weil `Robot` keine Methoden mit `if` haben darf.
+        correct: false
+        why: Methoden dürfen beliebige Logik enthalten. Es geht um Zuständigkeit, nicht um ein Verbot.
+      - text: Weil Python sonst nicht weiß, welches Gelenk gemeint ist.
+        correct: false
+        why: Auch `Robot` könnte über seine Liste auf jedes Gelenk zugreifen – nur müsste es dann für jedes die Grenze kennen.
+  - type: predict
+    code: |
+      class Joint:
+          def __init__(self, angle=0.0):
+              self.angle = angle
+
+      j = Joint()
+      arm = [j, j]
+      arm[0].angle = 1.0
+      print(arm[1].angle)
+    options: ["1.0", "0.0", "[1.0, 0.0]"]
+    answer: "1.0"
+    explanation: |
+      Die Liste enthält **zweimal dasselbe** Objekt – wie beim Aliasing von Listen. Für zwei unabhängige Gelenke braucht es zwei Aufrufe: `[Joint(), Joint()]`.
+  - type: trace
+    intro: |
+      Verfolge, wie `total_angle` über die Gelenke läuft.
+    code: |
+      class Joint:
+          def __init__(self, angle):
+              self.angle = angle
+
+      class Robot:
+          def __init__(self, joints):
+              self.joints = joints
+
+          def total_angle(self):
+              total = 0.0
+              for j in self.joints:
+                  total = total + j.angle
+              return total
+
+      arm = Robot([Joint(0.5), Joint(-0.25), Joint(1.0)])
+      print(arm.total_angle())
+    questions:
+      - line: 12
+        hit: 2
+        var: total
+        prompt: Nach dem zweiten Gelenk – welchen Wert hat `total`?
+        answer: "0.25"
+      - line: 12
+        hit: 3
+        var: total
+        prompt: Nach dem dritten Gelenk?
+        answer: "1.25"
+    after: |
+      Die Methode des Roboters fragt jedes Gelenk nach seinem Attribut `angle`. Bei einem planaren Arm mit relativen Gelenkwinkeln ist diese Summe genau die Ausrichtung des letzten Glieds – das brauchst du in Modul 8.
+  - type: text
+    body: |
+      ## Eine Stellung auf alle Gelenke verteilen
+
+      Oft soll der Roboter eine ganze **Stellung** (pose) annehmen – eine Liste von Winkeln, einer pro Gelenk. `Robot.set_pose` läuft mit `zip` parallel über Gelenke und Winkel und delegiert an `Joint.move_to`.
+
+      Passt die Anzahl nicht, wäre `zip` still – es hört bei der kürzeren Liste auf. Deshalb lohnt sich hier ein `raise ValueError`.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze `set_pose`, sodass jedes Gelenk seinen Winkel bekommt – mit Begrenzung. Erwartet: `[1.0, -0.5]`.
+    code: |
+      class Joint:
+          def __init__(self, limit):
+              self.limit = limit
+              self.angle = 0.0
+
+          def move_to(self, target):
+              self.angle = max(-self.limit, min(target, self.limit))
+
+      class Robot:
+          def __init__(self, joints):
+              self.joints = joints
+
+          def set_pose(self, angles):
+              for joint, q in ___(self.joints, angles):
+                  joint.___(q)
+
+      arm = Robot([Joint(1.0), Joint(2.0)])
+      arm.set_pose([1.5, -0.5])
+      print([j.angle for j in arm.joints])
+    blanks:
+      - answer: zip
+        options: [zip, enumerate, range]
+      - answer: move_to
+        options: [move_to, angle, limit]
+    expect_output: "[1.0, -0.5]"
+  - type: parsons
+    fading: true
+    prompt: |
+      Der Roboter soll seine Gelenke aus einer Liste von Namen selbst erzeugen. Ausgabe: `['basis', 'schulter']`.
+    lines:
+      - "class Joint:"
+      - "    def __init__(self, name):"
+      - "        self.name = name"
+      - "class Robot:"
+      - "    def __init__(self, names):"
+      - "        self.joints = []"
+      - "        for n in names:"
+      - "            self.joints.append(Joint(n))"
+      - "    def names(self):"
+      - "        return [j.name for j in self.joints]"
+      - 'arm = Robot(["basis", "schulter"])'
+      - "print(arm.names())"
+    expect_output: "['basis', 'schulter']"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ergänze die Klasse `Robot` um eine Methode `reset(self)`, die **alle** Gelenkwinkel auf `0.0` setzt. Die Gelenke selbst sollen erhalten bleiben (dieselben `Joint`-Objekte mit ihren Namen).
+    starter: |
+      class Joint:
+          def __init__(self, name, angle=0.0):
+              self.name = name
+              self.angle = angle
+
+      class Robot:
+          def __init__(self, joints):
+              self.joints = joints
+
+          def pose(self):
+              return [j.angle for j in self.joints]
+    solution: |
+      class Joint:
+          def __init__(self, name, angle=0.0):
+              self.name = name
+              self.angle = angle
+
+      class Robot:
+          def __init__(self, joints):
+              self.joints = joints
+
+          def pose(self):
+              return [j.angle for j in self.joints]
+
+          def reset(self):
+              for j in self.joints:
+                  j.angle = 0.0
+    tests:
+      - name: Alle Winkel null
+        code: |
+          r = Robot([Joint("a", 0.5), Joint("b", -1.2), Joint("c", 2.0)])
+          r.reset()
+          assert r.pose() == [0.0, 0.0, 0.0], f"Nach reset() erwartet [0.0, 0.0, 0.0], bekommen {r.pose()}"
+      - name: Gelenke bleiben erhalten
+        code: |
+          a = Joint("a", 0.5)
+          r = Robot([a, Joint("b", 1.0)])
+          r.reset()
+          assert len(r.joints) == 2, f"reset() darf keine Gelenke entfernen – es sind noch {len(r.joints)}"
+          assert r.joints[0] is a and a.angle == 0.0, "reset() soll die vorhandenen Joint-Objekte zurücksetzen, nicht ersetzen"
+    mutants:
+      - |
+        class Joint:
+            def __init__(self, name, angle=0.0):
+                self.name = name
+                self.angle = angle
+
+        class Robot:
+            def __init__(self, joints):
+                self.joints = joints
+
+            def pose(self):
+                return [j.angle for j in self.joints]
+
+            def reset(self):
+                for j in self.joints:
+                    j = 0.0
+      - |
+        class Joint:
+            def __init__(self, name, angle=0.0):
+                self.name = name
+                self.angle = angle
+
+        class Robot:
+            def __init__(self, joints):
+                self.joints = joints
+
+            def pose(self):
+                return [j.angle for j in self.joints]
+
+            def reset(self):
+                self.joints = []
+      - |
+        class Joint:
+            def __init__(self, name, angle=0.0):
+                self.name = name
+                self.angle = angle
+
+        class Robot:
+            def __init__(self, joints):
+                self.joints = joints
+
+            def pose(self):
+                return [j.angle for j in self.joints]
+
+            def reset(self):
+                for j in self.joints:
+                    j.angle = 0.0
+                    return
+    hints:
+      - "Teilziel: über alle Gelenke laufen und bei jedem das Attribut ändern."
+      - "`j = 0.0` würde nur die Schleifenvariable überschreiben. Ändern musst du das **Attribut** des Gelenks."
+      - |
+        ```python
+        def reset(self):
+            for j in self.joints:
+                j.angle = 0.0
+        ```
+  - type: exercise
+    mode: make
+    prompt: |
+      `Joint` ist vorgegeben. Schreibe die Klasse `Robot` mit
+
+      - `__init__(self, joints)` – speichert die Liste als Attribut `joints`,
+      - `pose(self)` – liefert die Liste der Gelenkwinkel,
+      - `set_pose(self, angles)` – löst einen `ValueError` aus, wenn die Anzahl der Winkel nicht zur Anzahl der Gelenke passt; sonst bewegt sie jedes Gelenk mit `move_to` (das begrenzt automatisch).
+    starter: |
+      class Joint:
+          def __init__(self, limit=3.0):
+              self.limit = limit
+              self.angle = 0.0
+
+          def move_to(self, target):
+              self.angle = max(-self.limit, min(target, self.limit))
+
+      class Robot:
+          # dein Code
+          pass
+    solution: |
+      class Joint:
+          def __init__(self, limit=3.0):
+              self.limit = limit
+              self.angle = 0.0
+
+          def move_to(self, target):
+              self.angle = max(-self.limit, min(target, self.limit))
+
+      class Robot:
+          def __init__(self, joints):
+              self.joints = joints
+
+          def pose(self):
+              return [j.angle for j in self.joints]
+
+          def set_pose(self, angles):
+              if len(angles) != len(self.joints):
+                  raise ValueError("Anzahl der Winkel passt nicht zur Anzahl der Gelenke")
+              for joint, q in zip(self.joints, angles):
+                  joint.move_to(q)
+    tests:
+      - name: Stellung setzen
+        code: |
+          r = Robot([Joint(), Joint()])
+          r.set_pose([0.5, -1.0])
+          assert r.pose() == [0.5, -1.0], f"Erwartet [0.5, -1.0], bekommen {r.pose()}"
+      - name: Begrenzung über move_to
+        code: |
+          r = Robot([Joint(1.0), Joint(2.0)])
+          r.set_pose([1.5, -2.5])
+          assert r.pose() == [1.0, -2.0], f"Die Gelenke begrenzen auf ±limit – erwartet [1.0, -2.0], bekommen {r.pose()}"
+      - name: Falsche Anzahl
+        code: |
+          r = Robot([Joint(), Joint()])
+          try:
+              r.set_pose([0.1])
+              assert False, "set_pose mit 1 Winkel für 2 Gelenke sollte einen ValueError auslösen"
+          except ValueError:
+              pass
+          try:
+              r.set_pose([0.1, 0.2, 0.3])
+              assert False, "set_pose mit 3 Winkeln für 2 Gelenke sollte einen ValueError auslösen"
+          except ValueError:
+              pass
+    mutants:
+      - |
+        class Joint:
+            def __init__(self, limit=3.0):
+                self.limit = limit
+                self.angle = 0.0
+
+            def move_to(self, target):
+                self.angle = max(-self.limit, min(target, self.limit))
+
+        class Robot:
+            def __init__(self, joints):
+                self.joints = joints
+
+            def pose(self):
+                return [j.angle for j in self.joints]
+
+            def set_pose(self, angles):
+                for joint, q in zip(self.joints, angles):
+                    joint.move_to(q)
+      - |
+        class Joint:
+            def __init__(self, limit=3.0):
+                self.limit = limit
+                self.angle = 0.0
+
+            def move_to(self, target):
+                self.angle = max(-self.limit, min(target, self.limit))
+
+        class Robot:
+            def __init__(self, joints):
+                self.joints = joints
+
+            def pose(self):
+                return [j.angle for j in self.joints]
+
+            def set_pose(self, angles):
+                if len(angles) != len(self.joints):
+                    raise ValueError("falsche Anzahl")
+                for joint, q in zip(self.joints, angles):
+                    joint.angle = q
+      - |
+        class Joint:
+            def __init__(self, limit=3.0):
+                self.limit = limit
+                self.angle = 0.0
+
+            def move_to(self, target):
+                self.angle = max(-self.limit, min(target, self.limit))
+
+        class Robot:
+            def __init__(self, joints):
+                self.joints = joints
+
+            def pose(self):
+                return [j.angle for j in self.joints]
+
+            def set_pose(self, angles):
+                if len(angles) < len(self.joints):
+                    raise ValueError("zu wenige Winkel")
+                for joint, q in zip(self.joints, angles):
+                    joint.move_to(q)
+    hints:
+      - "Teilziel: Attribut anlegen, Winkel abfragen, Anzahl prüfen, dann an jedes Gelenk delegieren."
+      - Für `pose` reicht eine List-Comprehension über `self.joints`. In `set_pose` erst die Längen vergleichen, dann mit `zip` laufen.
+      - |
+        ```python
+        def set_pose(self, angles):
+            if len(angles) != len(self.joints):
+                raise ValueError("...")
+            for joint, q in zip(self.joints, angles):
+                ...
+        ```
+  - type: quiz
+    question: Welche Beziehung beschreibt Komposition?
+    options:
+      - text: Ein Roboter **hat** Gelenke – er speichert Joint-Objekte als Attribut und nutzt deren Methoden.
+        correct: true
+        why: Komposition = „hat ein“. Das Ganze besteht aus Teilen und delegiert an sie.
+      - text: Ein Roboter **ist** ein Gelenk.
+        correct: false
+        why: Ein Roboter ist kein spezielles Gelenk; er besteht aus mehreren.
+      - text: Zwei Klassen, die in derselben Datei stehen.
+        correct: false
+        why: Wo der Code steht, ist egal. Entscheidend ist, dass ein Objekt andere Objekte enthält.
+cards:
+  - id: m03-c-komposition-alias
+    concept: m03-komposition
+    variants:
+      - type: predict
+        code: |
+          class Joint:
+              def __init__(self):
+                  self.angle = 0.0
+
+          joints = [Joint(), Joint()]
+          joints[0].angle = 0.7
+          print(joints[0].angle, joints[1].angle)
+        options: ["0.7 0.0", "0.7 0.7", "0.0 0.0"]
+        answer: "0.7 0.0"
+        explanation: Zwei Aufrufe `Joint()` erzeugen zwei unabhängige Objekte.
+      - type: predict
+        code: |
+          class Joint:
+              def __init__(self):
+                  self.angle = 0.0
+
+          j = Joint()
+          joints = [j] * 3
+          j.angle = 0.2
+          print([x.angle for x in joints])
+        options: ["[0.2, 0.2, 0.2]", "[0.2, 0.0, 0.0]", "[0.0, 0.0, 0.0]"]
+        answer: "[0.2, 0.2, 0.2]"
+        explanation: "`[j] * 3` enthält dreimal **dasselbe** Objekt."
+  - id: m03-c-delegation
+    concept: m03-komposition
+    variants:
+      - type: predict
+        code: |
+          class Joint:
+              def __init__(self, limit):
+                  self.limit = limit
+                  self.angle = 0.0
+
+              def move_to(self, q):
+                  self.angle = min(q, self.limit)
+
+          class Robot:
+              def __init__(self):
+                  self.joints = [Joint(1.0), Joint(0.5)]
+
+              def move_all(self, q):
+                  for j in self.joints:
+                      j.move_to(q)
+
+          r = Robot()
+          r.move_all(0.8)
+          print([j.angle for j in r.joints])
+        options: ["[0.8, 0.5]", "[0.8, 0.8]", "[1.0, 0.5]"]
+        answer: "[0.8, 0.5]"
+        explanation: Jedes Gelenk begrenzt selbst – das zweite auf 0.5.
+      - type: predict
+        code: |
+          class Motor:
+              def __init__(self):
+                  self.on = False
+
+          class Robot:
+              def __init__(self):
+                  self.motors = [Motor(), Motor()]
+
+              def start(self):
+                  self.motors[0].on = True
+
+          r = Robot()
+          r.start()
+          print([m.on for m in r.motors])
+        options: ["[True, False]", "[True, True]", "[False, False]"]
+        answer: "[True, False]"
+        explanation: "`start` schaltet nur den ersten Motor ein."

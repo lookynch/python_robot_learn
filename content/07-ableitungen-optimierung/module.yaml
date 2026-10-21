@@ -1,0 +1,38 @@
+id: m07
+number: 7
+title: Ableitungen & Optimierung
+summary: |
+  Ableitungen numerisch berechnen, Gradienten bilden und mit Gradientenabstieg minimieren – inklusive der numerischen Fallstricke (Rundungsfehler, Schrittweite) und der Kettenregel als Vorstufe zu Backpropagation.
+depth: voll
+lessons:
+  - m07-numerische-ableitung
+  - m07-gradient
+  - m07-gradientenabstieg
+  - m07-schrittweite
+  - m07-kettenregel
+  - m07-checkpoint
+concepts:
+  - id: vorwaertsdifferenz
+    name: Vorwärtsdifferenz
+    description: "(f(x+h) − f(x))/h nähert f'(x) mit einem Fehler proportional zu h (1. Ordnung)."
+  - id: zentraldifferenz
+    name: Zentrale Differenz
+    description: "(f(x+h) − f(x−h))/(2h) nähert f'(x) mit einem Fehler proportional zu h² (2. Ordnung); für Polynome 2. Grades exakt."
+  - id: rundungsfehler-h
+    name: Rundungsfehler bei zu kleinem h
+    description: Floats haben etwa 16 Stellen; bei sehr kleinem h löscht f(x+h) − f(x) fast alle aus. Gute Werte sind h ≈ 1e-8 (vorwärts) bzw. h ≈ 1e-5 (zentral).
+  - id: gradient-numerisch
+    name: Numerischer Gradient
+    description: Der Gradient ist der Vektor der partiellen Ableitungen; numerisch wird jede Komponente einzeln mit einem Einheitsvektor gestört (2n Funktionsauswertungen zentral).
+  - id: gradientenabstieg
+    name: Gradientenabstieg
+    description: "x ← x − η·∇f(x): kleine Schritte entgegen dem Gradienten verringern f."
+  - id: lernrate
+    name: Lernrate und Konvergenz
+    description: "Für f = a/2·x² konvergiert Gradientenabstieg genau für 0 < η < 2/a; die größte Krümmung begrenzt η, flache Richtungen konvergieren dann langsam."
+  - id: kettenregel
+    name: Kettenregel im Code
+    description: "Die Ableitung einer Verkettung ist das Produkt der lokalen Ableitungen; wird eine Variable mehrfach benutzt, werden die Beiträge addiert."
+  - id: rechengraph
+    name: Rechengraph, Vorwärts- und Rückwärtsdurchlauf
+    description: Vorwärts werden Zwischenwerte berechnet und gespeichert, rückwärts werden die Ableitungen vom Ergebnis her mit den lokalen Ableitungen multipliziert – das Prinzip von Backpropagation.

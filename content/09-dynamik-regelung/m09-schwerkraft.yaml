@@ -1,0 +1,293 @@
+id: m09-schwerkraft
+title: Schwerkraftkompensation
+minutes: 9
+goals:
+  - Das Schwerkraftmoment eines Glieds berechnen
+  - Erklären, warum ein PD-Regler unter Schwerkraft durchhängt
+  - Ein Modell der Schwerkraft zum Regler addieren (Kompensation)
+concepts: [schwerkraftkompensation]
+steps:
+  - type: text
+    body: |
+      ## Der Arm hängt durch
+
+      Ein Glied (Stab, Masse $m$, Länge $l$, Schwerpunkt bei $l_c = l/2$) dreht um ein Gelenk, $q$ von der Waagerechten gemessen. Die Schwerkraft zieht nach unten, das Moment um das Gelenk ist
+
+      $$G(q) = m\,g\,l_c\cos q$$
+
+      – maximal waagerecht, null senkrecht. Dynamik mit Trägheit $I = m l^2/3$ und Reibung $b$:
+
+      $$I\,\ddot q = \tau - b\,\dot q - G(q)$$
+
+      Ein PD-Regler muss $G(q)$ im Stillstand mit $K_p e$ tragen – also bleibt ein Fehler $e = G(q)/K_p$.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      m, l, g, b = 1.0, 1.0, 9.81, 0.1
+      lc, I = l / 2, m * l**2 / 3
+
+      def link_step(state, tau, dt=0.01):
+          q, qd = state
+          qdd = (tau - b * qd - m * g * lc * np.cos(q)) / I
+          qd = qd + dt * qdd
+          return np.array([q + dt * qd, qd])
+
+      q_ref, Kp, Kd = np.pi / 4, 20.0, 3.0
+      state, qs = np.array([0.0, 0.0]), [0.0]
+      for k in range(300):
+          tau = Kp * (q_ref - state[0]) - Kd * state[1]
+          state = link_step(state, tau)
+          qs.append(state[0])
+
+      print("bleibender Fehler:", round(q_ref - qs[-1], 3), "rad")
+      fig = lab.Figure(title="PD unter Schwerkraft", xlabel="Schritt (0.01 s)", ylabel="q (rad)")
+      fig.line(qs, label="Ist")
+      fig.hline(q_ref, label="Soll")
+      fig.show()
+      lab.arm([[q] for q in qs[::4]], links=(1.0,), target=(np.cos(q_ref), np.sin(q_ref)), title="Der Arm hängt durch")
+    subgoals:
+      - lines: [4, 11]
+        label: Glied mit Schwerkraft modellieren
+      - lines: [13, 18]
+        label: PD-Regelschleife
+      - lines: [20, 25]
+        label: Fehler ausgeben, plotten, animieren
+    after: |
+      Rund 0.2 rad (etwa 12°) zu tief. Das Moment des PD-Reglers entsteht ja nur **durch** den Fehler.
+  - type: predict
+    intro: |
+      Gleicher PD-Regler, aber Sollwert $q_{\text{ref}} = \pi/2$ (senkrecht nach oben).
+    code: |
+      import numpy as np
+
+      m, g, lc, I, b = 1.0, 9.81, 0.5, 1.0 / 3, 0.1
+
+      def link_step(state, tau, dt=0.01):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd - m * g * lc * np.cos(q)) / I
+          return np.array([q + dt * qd, qd])
+
+      q_ref = np.pi / 2
+      state = np.array([0.0, 0.0])
+      for k in range(300):
+          state = link_step(state, 20.0 * (q_ref - state[0]) - 3.0 * state[1])
+      print(abs(round(q_ref - state[0], 2)))
+    options: ["0.0", "0.25", "0.2", "0.49"]
+    answer: "0.0"
+    explanation: |
+      Senkrecht ist $\cos q = 0$: Die Schwerkraft wirkt durch das Gelenk hindurch und erzeugt kein Moment – nichts hängt durch. Die bleibende Abweichung hängt also von der **Stellung** ab ($e = G(q)/K_p$).
+  - type: explain
+    question: |
+      Man könnte das Durchhängen auch mit einem I-Anteil beseitigen. Warum ist Schwerkraftkompensation meist besser?
+    options:
+      - text: Die Schwerkraft ist bekannt und hängt von $q$ ab – ein Modell gleicht sie sofort in jeder Stellung aus, der I-Anteil muss sie nach jeder Bewegung erst langsam „lernen“.
+        correct: true
+        why: Die Kompensation liefert das nötige Moment direkt aus dem Modell; das Integral reagiert erst auf entstandene Fehler und neigt zu Überschwingen.
+      - text: Der I-Anteil funktioniert bei Schwerkraft grundsätzlich nicht.
+        correct: false
+        why: Er funktioniert schon – nur langsam, und bei wechselnden Stellungen hinkt er hinterher.
+      - text: Kompensation macht den D-Anteil überflüssig.
+        correct: false
+        why: Gedämpft werden muss weiterhin; Kompensation entfernt nur die Last.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Schwerkraftkompensation, sodass das Glied ohne bleibenden Fehler auf $q_{\text{ref}} = 0.5$ rad steht.
+    code: |
+      import numpy as np
+
+      m, g, lc, I, b = 1.0, 9.81, 0.5, 1.0 / 3, 0.1
+
+      def link_step(state, tau, dt=0.01):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd - m * g * lc * np.cos(q)) / I
+          return np.array([q + dt * qd, qd])
+
+      q_ref = 0.5
+      state = np.array([0.0, 0.0])
+      for k in range(400):
+          q, qd = state
+          tau = 20.0 * (q_ref - q) - 3.0 * qd + ___
+          state = link_step(state, tau)
+      print(round(q_ref - state[0], 3))
+    blanks:
+      - answer: "m * g * lc * np.cos(q)"
+        options: ["m * g * lc * np.cos(q)", "m * g * lc * np.sin(q)", "-m * g * lc * np.cos(q)", "m * g * np.cos(q)"]
+    expect_output: "0.0"
+    explanation: |
+      Der Regler addiert genau das Moment, das die Schwerkraft abzieht – dann bleibt für den PD-Anteil nur noch die eigentliche Regelaufgabe. Mit dem falschen Vorzeichen verdoppelt sich das Durchhängen ungefähr.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `controller(q, qd, q_ref)` mit $K_p = 20$, $K_d = 3$ **plus** Schwerkraftkompensation. Der Code fährt damit nacheinander mehrere Sollwerte an und animiert den Arm.
+    starter: |
+      import numpy as np
+      import lab
+
+      m, l, g, b = 1.0, 1.0, 9.81, 0.1
+      lc, I = l / 2, m * l**2 / 3
+
+      def link_step(state, tau, dt=0.01):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd - m * g * lc * np.cos(q)) / I
+          return np.array([q + dt * qd, qd])
+
+      def controller(q, qd, q_ref):
+          pass
+
+      state, qs, caps = np.array([0.0, 0.0]), [], []
+      for q_ref in [0.5, 1.5, -0.6, 0.0]:
+          for k in range(100):
+              state = link_step(state, controller(state[0], state[1], q_ref))
+              qs.append([state[0]])
+              caps.append(f"Soll {q_ref} rad")
+      lab.arm(qs[::3], links=(1.0,), title="Kompensiert", captions=caps[::3])
+    solution: |
+      import numpy as np
+      import lab
+
+      m, l, g, b = 1.0, 1.0, 9.81, 0.1
+      lc, I = l / 2, m * l**2 / 3
+
+      def link_step(state, tau, dt=0.01):
+          q, qd = state
+          qd = qd + dt * (tau - b * qd - m * g * lc * np.cos(q)) / I
+          return np.array([q + dt * qd, qd])
+
+      def controller(q, qd, q_ref):
+          return 20.0 * (q_ref - q) - 3.0 * qd + m * g * lc * np.cos(q)
+
+      state, qs, caps = np.array([0.0, 0.0]), [], []
+      for q_ref in [0.5, 1.5, -0.6, 0.0]:
+          for k in range(100):
+              state = link_step(state, controller(state[0], state[1], q_ref))
+              qs.append([state[0]])
+              caps.append(f"Soll {q_ref} rad")
+      lab.arm(qs[::3], links=(1.0,), title="Kompensiert", captions=caps[::3])
+    tests:
+      - name: In Ruhe am Sollwert genau das Haltemoment
+        code: |
+          import numpy as np
+          for qr in (0.0, 0.7, -1.0):
+              tau = float(controller(qr, 0.0, qr))
+              assert close(tau, 9.81 * 0.5 * np.cos(qr), tol=1e-6), f"Bei q = q_ref = {qr} und qd = 0 sollte der Regler genau G(q) = {9.81 * 0.5 * np.cos(qr):.3f} N·m liefern, liefert {tau:.3f}"
+      - name: Kein bleibender Fehler
+        code: |
+          import numpy as np
+          def _step(s, tau, dt=0.01):
+              q, qd = s
+              qd = qd + dt * (tau - 0.1 * qd - 9.81 * 0.5 * np.cos(q)) * 3.0
+              return np.array([q + dt * qd, qd])
+          for qr in (0.0, np.pi / 4, -np.pi / 3, 2.0):
+              s = np.array([0.5, 0.0])
+              for k in range(400):
+                  s = _step(s, controller(s[0], s[1], qr))
+              assert abs(s[0] - qr) < 0.005, f"Soll {qr:.2f}: nach 4 s ist q = {s[0]:.3f}"
+      - name: Gedämpft
+        code: |
+          import numpy as np
+          t1 = float(controller(0.3, 1.0, 0.3))
+          t0 = float(controller(0.3, 0.0, 0.3))
+          assert close(t1 - t0, -3.0), f"Der D-Anteil sollte bei qd = 1 rad/s genau -3 N·m beitragen, trägt {t1 - t0:.3f} bei"
+    mutants:
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 20.0 * (q_ref - q) - 3.0 * qd
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 20.0 * (q_ref - q) - 3.0 * qd + 9.81 * 0.5 * np.sin(q)
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 20.0 * (q_ref - q) - 3.0 * qd - 9.81 * 0.5 * np.cos(q)
+      - |
+        import numpy as np
+        def controller(q, qd, q_ref):
+            return 20.0 * (q_ref - q) + 9.81 * 0.5 * np.cos(q)
+    hints:
+      - "Teilziel: PD-Moment berechnen und das Schwerkraftmodell dazuaddieren."
+      - "PD: `20.0 * (q_ref - q) - 3.0 * qd`. Kompensation: genau das Moment, das die Schwerkraft am Gelenk erzeugt."
+      - "$G(q) = m g l_c \\cos q$ – im Code `m * g * lc * np.cos(q)`."
+      - "`return 20.0 * (q_ref - q) - 3.0 * qd + m * g * lc * np.cos(q)`"
+    explanation: |
+      Statt $G(q)$ kann man auch $G(q_{\text{ref}})$ addieren (reine Vorsteuerung) – im Stillstand am Sollwert ist es dasselbe. Wichtig ist: Die Kompensation ist nur so gut wie das Modell. Falsche Masse → wieder ein kleiner Restfehler.
+  - type: quiz
+    question: |
+      In welcher Stellung muss ein Motor das **größte** Haltemoment gegen die Schwerkraft liefern?
+    options:
+      - text: Glied waagerecht ($q = 0$ oder $\pi$)
+        correct: true
+        why: $|\cos q| = 1$ – der Hebelarm des Schwerpunkts ist maximal.
+      - text: Glied senkrecht nach oben ($q = \pi/2$)
+        correct: false
+        why: Dort ist $\cos q = 0$ – der Schwerpunkt liegt genau über dem Gelenk.
+      - text: Bei $q = \pi/4$
+        correct: false
+        why: $\cos(\pi/4) \approx 0.71$ – weniger als waagerecht.
+cards:
+  - id: m09-c-gravitationsmoment
+    concept: schwerkraftkompensation
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          m, g, lc = 2.0, 9.81, 0.5
+          for q in [0.0, np.pi / 3, np.pi / 2]:
+              print(f"{m * g * lc * np.cos(q):.2f}")
+        options:
+          - |
+            9.81
+            4.91
+            0.00
+          - |
+            0.00
+            8.50
+            9.81
+          - |
+            9.81
+            8.50
+            0.00
+        answer: |
+          9.81
+          4.91
+          0.00
+        explanation: $G = m g l_c \cos q$; $\cos(\pi/3) = 0.5$.
+      - type: predict
+        code: |
+          import numpy as np
+          m, g, lc, Kp = 1.0, 9.81, 0.5, 49.05
+          print(round(m * g * lc * np.cos(0.0) / Kp, 2))
+        options: ["0.1", "0.0", "4.91", "0.2"]
+        answer: "0.1"
+        explanation: Ohne Kompensation hängt ein PD-Regler waagerecht um $G/K_p = 4.905/49.05 = 0.1$ rad durch.
+  - id: m09-c-kompensation
+    concept: schwerkraftkompensation
+    variants:
+      - type: quiz
+        question: Was addiert man bei Schwerkraftkompensation zum PD-Moment?
+        options:
+          - text: Das Modell-Schwerkraftmoment $G(q)$
+            correct: true
+            why: Damit trägt das Modell die Last, nicht der Fehler.
+          - text: Einen größeren $K_p$-Wert
+            correct: false
+            why: Das verkleinert das Durchhängen nur, beseitigt es nicht.
+          - text: $-G(q)$
+            correct: false
+            why: Das zieht in dieselbe Richtung wie die Schwerkraft – doppeltes Durchhängen.
+      - type: quiz
+        question: Ein schwerkraftkompensierter Arm hängt trotzdem leicht durch. Wahrscheinlichste Ursache?
+        options:
+          - text: Das Modell (Masse, Schwerpunkt) stimmt nicht genau
+            correct: true
+            why: Die Kompensation ist nur so gut wie das Modell; den Rest muss $K_p$ (oder ein I-Anteil) tragen.
+          - text: $K_d$ ist zu klein
+            correct: false
+            why: In Ruhe trägt der D-Anteil nichts bei.
+          - text: Der Zeitschritt ist zu klein
+            correct: false
+            why: Ein kleinerer Zeitschritt macht die Simulation nur genauer.

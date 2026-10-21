@@ -1,0 +1,55 @@
+id: m11
+number: 11
+title: Planen mit Modell
+summary: |
+  Mit einem bekannten Modell vorausrechnen statt ausprobieren: Kostenfunktion, Rollouts, Random Shooting, MPC, CEM und MPPI – selbst implementiert und vektorisiert. Höhepunkt: Das Pendel schwingt sich auf und der Arm fährt zum Ziel.
+depth: voll
+lessons:
+  - m11-kostenfunktion
+  - m11-random-shooting
+  - m11-mpc
+  - m11-cem
+  - m11-mppi
+  - m11-swing-up
+  - m11-reacher
+  - m11-checkpoint
+concepts:
+  - id: plan-kosten
+    name: Ziel als Kostenfunktion
+    description: Das Ziel wird als Kosten pro Schritt c(s, u) formuliert; die Gesamtkosten J = Σ c(s_t, u_t) bewerten eine ganze Aktionsfolge.
+  - id: plan-rollout
+    name: Rollout mit Modell
+    description: Eine Aktionsfolge wird mit s_{t+1} = f(s_t, u_t) im Modell vorausgerechnet, ohne den echten Roboter zu bewegen.
+  - id: plan-batch-rollout
+    name: Vektorisierte Rollouts
+    description: N Aktionsfolgen als Array (N, H) bzw. (N, H, m) gleichzeitig simulieren – eine Schleife über die Zeit, NumPy über die Samples.
+  - id: plan-random-shooting
+    name: Random Shooting
+    description: N zufällige Aktionsfolgen simulieren und die mit den kleinsten Gesamtkosten nehmen.
+  - id: plan-mpc
+    name: Model Predictive Control (Receding Horizon)
+    description: In jedem Zeitschritt über H Schritte planen, nur die erste Aktion ausführen, den neuen Zustand messen und neu planen.
+  - id: plan-modellfehler
+    name: Rückkopplung gegen Modellfehler
+    description: Weil MPC vom gemessenen Zustand aus neu plant, wirken sich Modellfehler nur kurzfristig aus – eine offen ausgeführte Folge driftet weg.
+  - id: plan-cem
+    name: Cross-Entropy-Method (CEM)
+    description: Aktionsfolgen aus N(μ, σ²) sampeln, die besten K (Elite) behalten, μ und σ auf deren Mittelwert und Streuung setzen, wiederholen.
+  - id: plan-elite
+    name: Elite-Auswahl mit argsort
+    description: np.argsort(kosten)[:K] liefert die Indizes der K billigsten Samples; mean/std über Achse 0 ergeben die neue Verteilung.
+  - id: plan-mppi
+    name: MPPI – gewichtete Mittelung
+    description: Alle Samples werden mit w_i ∝ exp(−(c_i − c_min)/λ) gewichtet gemittelt statt hart ausgewählt.
+  - id: plan-temperatur
+    name: Temperatur λ in MPPI
+    description: Kleines λ → fast nur das beste Sample (wie Random Shooting), großes λ → fast der ungewichtete Mittelwert.
+  - id: plan-warmstart
+    name: Warmstart durch Verschieben des Plans
+    description: Der Plan des letzten Schritts wird um einen Schritt verschoben (np.append(mu[1:], 0)) und als Startverteilung genutzt.
+  - id: plan-unteraktuiert
+    name: Schwung holen bei schwachem Motor
+    description: Reicht das Motormoment nicht, um direkt hochzudrücken, findet ein Planer mit genügend langem Horizont Pendelbewegungen, die Energie aufbauen.
+  - id: plan-mehrdim-aktion
+    name: Mehrdimensionale Aktionen
+    description: Beim 2-Gelenk-Arm ist jede Aktion ein Vektor (q̇1, q̇2); Aktionsfolgen haben Form (H, 2), Samples (N, H, 2) – der Planer-Code bleibt gleich.

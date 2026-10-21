@@ -1,0 +1,38 @@
+id: m19
+number: 19
+title: Brücke nach draußen
+summary: |
+  Konkrete nächste Schritte außerhalb des Browsers: PyTorch in Colab, Gymnasium und MuJoCo, der LeRobot-Workflow, ein SO-101-Arm und wann ROS 2 nötig ist – mit ehrlicher Einordnung, was mit Hobby-Hardware heute realistisch ist. Alle aktuellen Angaben mit Quelle, Stand: Oktober 2026.
+depth: konzept
+lessons:
+  - m19-pytorch
+  - m19-gymnasium-mujoco
+  - m19-lerobot
+  - m19-hardware
+  - m19-ros2
+  - m19-checkpoint
+concepts:
+  - id: pytorch-autograd
+    name: Autograd statt Backprop von Hand
+    description: PyTorch zeichnet die Rechnung als Graph auf; loss.backward() wendet die Kettenregel rückwärts an und legt Gradienten in .grad ab.
+  - id: pytorch-trainingsschleife
+    name: Trainingsschleife in PyTorch
+    description: Vorwärtsrechnung, Verlust, optimizer.zero_grad(), loss.backward(), optimizer.step(); ohne zero_grad summieren sich Gradienten.
+  - id: pytorch-nn-module
+    name: Schichten als nn.Module
+    description: nn.Linear und nn.Sequential kapseln Gewichte; nn.Linear(n_in, n_out) speichert das Gewicht in der Form (n_out, n_in).
+  - id: gymnasium-api
+    name: Gymnasium-Schnittstelle
+    description: reset(seed=...) liefert (obs, info), step(action) liefert (obs, reward, terminated, truncated, info).
+  - id: terminated-truncated
+    name: terminated vs. truncated
+    description: terminated = echtes Episodenende (Ziel/Fehler), truncated = künstlicher Abbruch (Zeitlimit); nur bei terminated wird nicht gebootstrappt.
+  - id: lerobot-workflow
+    name: LeRobot-Workflow
+    description: Motoren einrichten und kalibrieren, teleoperieren, Episoden aufnehmen, Policy trainieren, Policy auf dem Roboter ausführen.
+  - id: hobby-arm-einordnung
+    name: Realistische Wege für Hobby-Arme
+    description: Günstige Arme wie der SO-101 werden heute meist per Imitation Learning (ACT) oder feinjustierten kleinen VLAs gesteuert; modellbasiertes RL auf echter Hardware ist Forschung.
+  - id: ros2-middleware
+    name: ROS 2 als Middleware
+    description: Nodes tauschen über Topics, Services und Actions Nachrichten aus; ROS 2 lohnt sich bei mehreren Komponenten, Rechnern und vorhandenen Treibern.

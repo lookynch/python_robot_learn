@@ -1,0 +1,303 @@
+id: m16-idee
+title: Was ist ein World Model?
+minutes: 8
+goals:
+  - Ein World Model als gelernte Funktion $f(s, a) \to s'$ verstehen
+  - Modellbasiertes und modellfreies Lernen vergleichen (Sample-Effizienz, Risiken)
+  - Einen Rollout mit einer beliebigen Schritt-Funktion schreiben
+concepts: [wm-world-model, wm-modellbasiert]
+steps:
+  - type: text
+    body: |
+      ## Ein Simulator im Kopf
+
+      In Modul 11 hast du mit CEM geplant – mit der **wahren** Dynamik `env.dynamics`. In Modul 13–15 hast du Policies gelernt, ganz ohne Modell, nur aus Belohnungen.
+
+      Ein **World Model** verbindet beides: Der Agent **lernt** aus seinen Erfahrungen eine Funktion
+
+      $$\hat f(s, a) \approx s'$$
+
+      und benutzt sie wie einen Simulator. Mit ihr kann er Aktionsfolgen „im Kopf“ durchspielen (**Rollout**), bevor er sie echt ausführt.
+
+      In diesem Modul baust du genau das für den Reacher-Arm: Daten sammeln → Modell trainieren → mit CEM auf dem gelernten Modell planen.
+  - type: text
+    body: |
+      ## Modellfrei vs. modellbasiert
+
+      | | modellfrei (Q-Learning, Actor-Critic) | modellbasiert (World Model) |
+      |---|---|---|
+      | lernt | Policy / Wertfunktion | Dynamik $\hat f$ (+ ggf. Belohnung) |
+      | Lernsignal pro Übergang | eine Zahl (Belohnung) | ganzer nächster Zustand |
+      | echte Interaktionen | viele | meist deutlich weniger |
+      | Rechenaufwand beim Handeln | gering | hoch (Planen) |
+      | Hauptrisiko | langsames Lernen | Modellfehler |
+
+      Beispiel: Chua et al. (2018, **PETS**) berichten auf der Simulationsaufgabe HalfCheetah etwa 8-mal weniger Interaktionen als SAC und 125-mal weniger als PPO bei vergleichbarer Endleistung.
+  - type: example
+    intro: |
+      Ein Modell ist nur eine Funktion. Hier eine **selbst gebaute**, leicht falsche: Sie nimmt an, der Zeitschritt sei 0,04 s statt 0,05 s.
+    code: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def my_model(q, a):
+          return q + np.clip(a, -2, 2) * 0.04
+
+      actions = np.tile([1.0, -0.5], (20, 1))
+      q_model = np.zeros(2)
+      env.reset(q=(0.0, 0.0), goal=(1.0, 1.0))
+      for a in actions:
+          q_model = my_model(q_model, a)
+          env.step(a)
+      print("Modell:  ", np.round(env.fk(q_model), 3))
+      print("Realität:", np.round(env.fk(env.q), 3))
+    subgoals:
+      - lines: [6, 7]
+        label: Modell als Funktion f(s, a)
+      - lines: [9, 11]
+        label: Startzustand und Aktionsfolge festlegen
+      - lines: [12, 14]
+        label: Modell und Realität parallel rollen
+      - lines: [15, 16]
+        label: Vorhersage mit Realität vergleichen
+    after: |
+      Nach 20 Schritten (1 s) liegen Modell und Realität sichtbar auseinander. Ab der nächsten Lektion **lernst** du das Modell aus Daten, statt es zu raten.
+  - type: explain
+    question: |
+      Warum braucht modellbasiertes Lernen oft weniger echte Interaktionen?
+    options:
+      - text: Jeder Übergang liefert einen ganzen Zielvektor $s'$ zum Lernen, und das Modell lässt sich danach beliebig oft für Planung abfragen.
+        correct: true
+        why: Genau. Überwachtes Lernen auf $(s, a, s')$ nutzt jeden Übergang intensiv; die teure Suche passiert dann im Modell statt in der echten Welt.
+      - text: Weil ein Modell keine Fehler macht.
+        correct: false
+        why: Gelernte Modelle sind immer ungenau – damit beschäftigen sich die Lektionen zu Compounding Error und Ensembles.
+      - text: Weil modellbasierte Verfahren keine Belohnung oder Kosten brauchen.
+        correct: false
+        why: Zum Planen braucht man weiterhin ein Ziel – hier die Kostenfunktion „Abstand der Spitze zum Ziel“.
+      - text: Weil Planen weniger Rechenzeit kostet als eine Policy auszuwerten.
+        correct: false
+        why: Umgekehrt – Planen ist rechenintensiv. Gespart werden echte Interaktionen, nicht Rechenzeit.
+  - type: predict
+    code: |
+      def model(s, a):
+          return s + 2 * a
+
+      s = 1
+      states = [s]
+      for a in [1, 0, -1]:
+          s = model(s, a)
+          states.append(s)
+      print(states)
+    options: ["[1, 3, 3, 1]", "[3, 3, 1]", "[1, 3, 1]", "[1, 2, 2, 1]"]
+    answer: "[1, 3, 3, 1]"
+    explanation: |
+      Ein **Rollout** speichert den Startzustand und dann nach jeder Aktion den neuen Zustand: 1 → 3 → 3 → 1. Drei Aktionen ergeben vier Zustände.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `rollout(step_fn, s0, actions)`. Die Funktion wendet `step_fn(s, a)` nacheinander auf alle Aktionen an und gibt **alle** Zustände als NumPy-Array zurück – den Startzustand eingeschlossen (also `len(actions) + 1` Zeilen).
+
+      `step_fn` kann jede Funktion sein: die wahre Dynamik oder später dein gelerntes Modell.
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def rollout(step_fn, s0, actions):
+          # dein Code
+          pass
+
+      states = rollout(env.dynamics, np.zeros(2), np.tile([2.0, 0.0], (10, 1)))
+      print(states[-1])
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D(seed=0)
+
+      def rollout(step_fn, s0, actions):
+          s = np.array(s0, dtype=float)
+          states = [s]
+          for a in actions:
+              s = step_fn(s, a)
+              states.append(s)
+          return np.array(states)
+
+      states = rollout(env.dynamics, np.zeros(2), np.tile([2.0, 0.0], (10, 1)))
+      print(states[-1])
+    tests:
+      - name: Einfaches Modell s + a
+        code: |
+          def add(s, a):
+              return s + a
+          r = np.asarray(rollout(add, np.array([0.0]), np.array([[1.0], [2.0], [3.0]])))
+          assert r.shape == (4, 1), f"Erwartet Form (4, 1) – Startzustand plus 3 Schritte –, bekommen {r.shape}"
+          assert close(r[:, 0], [0, 1, 3, 6]), f"Erwartet Zustände [0, 1, 3, 6], bekommen {r[:, 0]}"
+      - name: Wahre Arm-Dynamik
+        code: |
+          r = np.asarray(rollout(env.dynamics, np.zeros(2), np.tile([2.0, 0.0], (10, 1))))
+          assert r.shape == (11, 2), f"Erwartet Form (11, 2), bekommen {r.shape}"
+          assert close(r[-1], [1.0, 0.0]), f"Nach 10 Schritten mit 2 rad/s · 0,05 s sollte q = [1, 0] sein, ist {r[-1]}"
+      - name: Zustände hängen voneinander ab
+        code: |
+          def double(s, a):
+              return 2 * s + a
+          r = np.asarray(rollout(double, np.array([1.0]), np.zeros((3, 1))))
+          assert close(r[:, 0], [1, 2, 4, 8]), f"Jeder Schritt muss vom vorherigen Zustand ausgehen: erwartet [1, 2, 4, 8], bekommen {r[:, 0]}"
+    mutants:
+      - |
+        import numpy as np
+        def rollout(step_fn, s0, actions):
+            s = np.array(s0, dtype=float)
+            states = []
+            for a in actions:
+                s = step_fn(s, a)
+                states.append(s)
+            return np.array(states)
+      - |
+        import numpy as np
+        def rollout(step_fn, s0, actions):
+            states = [np.array(s0, dtype=float)]
+            for a in actions:
+                states.append(step_fn(s0, a))
+            return np.array(states)
+      - |
+        import numpy as np
+        def rollout(step_fn, s0, actions):
+            s = np.array(s0, dtype=float)
+            for a in actions:
+                s = step_fn(s, a)
+            return s
+    hints:
+      - "Teilziel: Liste mit dem Startzustand anlegen, dann Schleife über alle Aktionen."
+      - In jedem Schritt wird der **aktuelle** Zustand an `step_fn` übergeben und durch das Ergebnis ersetzt.
+      - |
+        ```python
+        s = np.array(s0, dtype=float)
+        states = [s]
+        for a in actions:
+            ...
+        ```
+      - |
+        ```python
+        for a in actions:
+            s = step_fn(s, a)
+            states.append(s)
+        return np.array(states)
+        ```
+  - type: quiz
+    question: |
+      Ein Agent hat 200 echte Übergänge $(s, a, s')$ gesammelt. Was macht ein **modellbasierter** Agent damit, was ein modellfreier nicht tut?
+    options:
+      - text: Er trainiert daraus $\hat f(s, a) \approx s'$ und spielt damit neue Aktionsfolgen durch, die er nie echt ausprobiert hat.
+        correct: true
+        why: Das Modell verallgemeinert auf neue Aktionsfolgen – Planen oder Lernen „in der Vorstellung“.
+      - text: Er speichert die Übergänge in einer Q-Tabelle.
+        correct: false
+        why: Das ist modellfreies, tabellarisches Lernen (Modul 14).
+      - text: Er braucht keine weiteren Daten mehr, weil das Modell perfekt ist.
+        correct: false
+        why: Mit 200 Übergängen ist das Modell nur dort gut, wo Daten liegen. Mehr Daten aus neuen Regionen bleiben nötig.
+  - type: quiz
+    question: |
+      Was ist das **Hauptrisiko** beim Planen mit einem gelernten Modell?
+    options:
+      - text: Der Planer vertraut Vorhersagen, die falsch sind, und wählt Aktionen, die nur im Modell gut aussehen.
+        correct: true
+        why: Das nennt man Modellausnutzung (Model Exploitation). Gegenmittel – Ensembles und Neuplanen – kommen in diesem Modul.
+      - text: Das Modell lernt zu langsam, weil es nur Belohnungen sieht.
+        correct: false
+        why: Das Modell lernt überwacht aus ganzen Zustandsvektoren $s'$ – das ist gerade sein Vorteil.
+      - text: Planen funktioniert nur mit diskreten Aktionen.
+        correct: false
+        why: CEM und MPPI aus Modul 11 arbeiten mit kontinuierlichen Aktionen.
+cards:
+  - id: m16-c-world-model-def
+    concept: wm-world-model
+    variants:
+      - type: quiz
+        question: Was berechnet ein World Model für einen Roboterarm?
+        options:
+          - text: Aus Zustand und Aktion den vorhergesagten nächsten Zustand.
+            correct: true
+            why: "$\\hat f(s, a) \\approx s'$ – ein gelernter Simulator."
+          - text: Aus dem Zustand direkt die beste Aktion.
+            correct: false
+            why: Das ist eine Policy, kein Modell der Welt.
+          - text: Aus dem Zustand den erwarteten Return.
+            correct: false
+            why: Das ist eine Wertfunktion $V(s)$.
+      - type: quiz
+        question: Welche Funktion ist ein (einfaches) World Model?
+        options:
+          - text: "`def f(s, a): return s + 0.05 * a`"
+            correct: true
+            why: Sie sagt aus Zustand und Aktion den nächsten Zustand voraus.
+          - text: "`def pi(s): return -0.5 * s`"
+            correct: false
+            why: Das ist eine Policy – Zustand rein, Aktion raus.
+          - text: "`def V(s): return -abs(s)`"
+            correct: false
+            why: Das ist eine Wertfunktion – sie bewertet Zustände, sagt aber nichts über Übergänge.
+  - id: m16-c-rollout
+    concept: wm-world-model
+    variants:
+      - type: predict
+        code: |
+          def f(s, a):
+              return 2 * s + a
+
+          s = 0
+          out = [s]
+          for a in [1, 1]:
+              s = f(s, a)
+              out.append(s)
+          print(out)
+        options: ["[0, 1, 3]", "[1, 3]", "[0, 1, 1]", "[0, 2, 4]"]
+        answer: "[0, 1, 3]"
+        explanation: 0 → 2·0+1 = 1 → 2·1+1 = 3. Der Startzustand gehört dazu.
+      - type: predict
+        code: |
+          def f(s, a):
+              return s - a
+
+          s = 5
+          out = [s]
+          for a in [2, 2, 2]:
+              s = f(s, a)
+              out.append(s)
+          print(len(out), out[-1])
+        options: ["4 -1", "3 -1", "4 3", "3 1"]
+        answer: "4 -1"
+        explanation: Drei Aktionen ergeben vier Zustände (mit Start); 5 → 3 → 1 → −1.
+  - id: m16-c-sample-effizienz
+    concept: wm-modellbasiert
+    variants:
+      - type: quiz
+        question: Was ist typischerweise **teurer** bei modellbasierten Verfahren als bei modellfreien?
+        options:
+          - text: Rechenzeit beim Handeln, weil vor jeder Aktion geplant wird.
+            correct: true
+            why: MPC rollt in jedem Schritt Hunderte Aktionsfolgen im Modell aus.
+          - text: Die Anzahl echter Interaktionen.
+            correct: false
+            why: Die ist meist deutlich kleiner – das ist der Hauptvorteil.
+          - text: Speicher für eine Q-Tabelle.
+            correct: false
+            why: Modellbasierte Verfahren brauchen keine Q-Tabelle.
+      - type: quiz
+        question: Warum ist Sample-Effizienz bei **echten** Robotern so wichtig?
+        options:
+          - text: Jede echte Interaktion kostet Zeit, Verschleiß und birgt Risiko – Rechenzeit ist vergleichsweise billig.
+            correct: true
+            why: In der Simulation sind Millionen Schritte möglich, am echten Arm nicht.
+          - text: Echte Roboter können nur diskrete Aktionen ausführen.
+            correct: false
+            why: Motoren werden kontinuierlich angesteuert.
+          - text: Weil echte Roboter keine Belohnung messen können.
+            correct: false
+            why: Kosten wie „Abstand zum Ziel“ lassen sich messen – das ist nicht der Engpass.

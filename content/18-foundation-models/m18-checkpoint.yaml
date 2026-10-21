@@ -1,0 +1,178 @@
+id: m18-checkpoint
+title: "Checkpoint: Moderne World Models & Foundation Models"
+kind: checkpoint
+minutes: 15
+goals:
+  - JEPA, latentes Planen, Video-World-Models, VLAs und Imitation Learning sicher unterscheiden
+  - Kernrechnungen (EMA, CEM-Elite, Aktions-Tokens, Behavior Cloning) ausführen
+concepts: [jepa-latente-vorhersage, ssl-kollaps-ema, latentes-zielplanen, video-weltmodell, vla-modell, aktions-diskretisierung, behavior-cloning, multimodale-demos, sim-to-real]
+steps:
+  - type: quiz
+    question: |
+      Ein Roboter soll aus Videos einer Küche lernen. Im Hintergrund läuft ständig ein Fernseher. Was spricht dafür, im latenten Raum statt in Pixeln vorherzusagen?
+    options:
+      - text: Der Encoder kann das unvorhersagbare Fernsehbild weglassen; bewertet wird nur Vorhersagbares.
+        correct: true
+        why: Das ist der Kernvorteil von JEPA gegenüber Pixel-Vorhersage.
+      - text: Im latenten Raum gibt es keinen Kollaps.
+        correct: false
+        why: Im Gegenteil – Kollaps ist gerade ein Problem latenter Vorhersage und braucht Gegenmittel.
+      - text: Pixel-Modelle können keine Videos verarbeiten.
+        correct: false
+        why: Generative Video-Modelle wie Cosmos tun genau das.
+  - type: predict
+    code: |
+      ziel, online, tau = 2.0, 0.0, 0.75
+      for _ in range(2):
+          ziel = tau * ziel + (1 - tau) * online
+      print(round(ziel, 3))
+    options: ["1.125", "1.5", "0.5", "0.0"]
+    answer: "1.125"
+    explanation: "2 → 0,75 · 2 = 1,5 → 0,75 · 1,5 = 1,125. Das EMA-Ziel folgt dem Online-Wert nur langsam."
+  - type: quiz
+    question: |
+      Warum ist bei JEPA-Training ein Verlust von exakt 0 eher ein Alarmsignal?
+    options:
+      - text: Ein konstanter Encoder erreicht Verlust 0, ohne irgendetwas über die Eingaben zu wissen.
+        correct: true
+        why: Das ist Repräsentationskollaps; man muss zusätzlich prüfen, ob die Embeddings streuen.
+      - text: Verlust 0 ist mathematisch unmöglich.
+        correct: false
+        why: Er ist sehr wohl möglich – nämlich durch die triviale konstante Lösung.
+      - text: Er zeigt, dass die Lernrate zu groß war.
+        correct: false
+        why: Eine zu große Lernrate führt eher zu Divergenz, nicht zu Verlust 0.
+  - type: exercise
+    mode: make
+    prompt: |
+      Ein CEM-Schritt beim latenten Planen: Schreibe `elite(A, energien, k)`. `A` hat die Form `(n, H, 2)` (n Aktionsfolgen), `energien` die Form `(n,)`. Gib die `k` Aktionsfolgen mit der **kleinsten** Energie zurück (Form `(k, H, 2)`).
+    starter: |
+      import numpy as np
+
+      def elite(A, energien, k):
+          # die k Folgen mit der kleinsten Energie
+          pass
+    solution: |
+      import numpy as np
+
+      def elite(A, energien, k):
+          return A[np.argsort(energien)[:k]]
+    tests:
+      - name: Form
+        code: |
+          A = np.arange(5 * 3 * 2, dtype=float).reshape(5, 3, 2)
+          r = elite(A, np.array([4.0, 1.0, 3.0, 0.5, 2.0]), 2)
+          assert r is not None, "elite gibt nichts zurück."
+          assert np.shape(r) == (2, 3, 2), f"Erwartet Form (2, 3, 2), bekommen {np.shape(r)}"
+      - name: Kleinste Energien
+        code: |
+          A = np.arange(5 * 3 * 2, dtype=float).reshape(5, 3, 2)
+          r = elite(A, np.array([4.0, 1.0, 3.0, 0.5, 2.0]), 2)
+          erste = sorted(float(x) for x in r[:, 0, 0])
+          assert erste == [6.0, 18.0], f"Die Folgen 3 und 1 (Energie 0.5 und 1.0) gehören zur Elite; erste Einträge bekommen {erste}"
+      - name: Anderes k
+        code: |
+          A = np.arange(4 * 1 * 2, dtype=float).reshape(4, 1, 2)
+          r = elite(A, np.array([0.1, 0.9, 0.2, 0.3]), 3)
+          erste = sorted(float(x) for x in r[:, 0, 0])
+          assert erste == [0.0, 4.0, 6.0], f"Erwartet die Folgen 0, 2, 3; erste Einträge bekommen {erste}"
+    mutants:
+      - |
+        import numpy as np
+        def elite(A, energien, k):
+            return A[np.argsort(energien)[-k:]]
+      - |
+        import numpy as np
+        def elite(A, energien, k):
+            return A[:k]
+      - |
+        import numpy as np
+        def elite(A, energien, k):
+            return A[np.argsort(energien)[:k + 1]]
+      - |
+        import numpy as np
+        def elite(A, energien, k):
+            return np.sort(energien)[:k]
+    hints:
+      - "Teilziel: Indizes nach Energie sortieren, die ersten `k` nehmen, damit `A` indizieren."
+      - "`np.argsort` liefert die Indizes, die ein Array aufsteigend sortieren."
+      - "`A[np.argsort(energien)[:k]]`"
+  - type: predict
+    code: |
+      def zu_token(a, low=-1.0, high=1.0, n=256):
+          b = int((a - low) / (high - low) * n)
+          return min(max(b, 0), n - 1)
+      print(zu_token(-0.5), zu_token(2.0))
+    options: ["64 255", "64 256", "-64 255", "63 255"]
+    answer: "64 255"
+    explanation: "(−0,5 + 1) / 2 · 256 = 64. Werte außerhalb des Bereichs werden auf den letzten Bin 255 begrenzt."
+  - type: quiz
+    question: |
+      Welche Aussage beschreibt ein VLA wie OpenVLA oder SmolVLA richtig?
+    options:
+      - text: Eine durch Imitation gelernte Policy, die aus Bild und Sprachbefehl direkt Aktionen ausgibt
+        correct: true
+        why: VLAs sind Policies auf Basis eines vortrainierten Vision-Language-Modells.
+      - text: Ein World Model, das Videos erzeugt und mit CEM durchsucht wird
+        correct: false
+        why: Das beschreibt eher den Vergleichsaufbau mit Cosmos im V-JEPA-2-Paper.
+      - text: Ein Physik-Simulator für Roboterarme
+        correct: false
+        why: Simulatoren wie MuJoCo rechnen Physik; ein VLA ist ein gelerntes Netz.
+  - type: fill
+    prompt: |
+      Behavior Cloning mit Bias: Die Demonstrationen folgen $a = 2x + 1$. Ergänze so, dass Steigung und Bias `[2. 1.]` ausgegeben werden.
+    code: |
+      import numpy as np
+      X = np.array([[0.0], [1.0], [2.0]])
+      A = np.array([[1.0], [3.0], [5.0]])
+      Xb = np.hstack([X, np.___((3, 1))])
+      W, *_ = np.linalg.___(Xb, A, rcond=None)
+      print(np.round(W.ravel(), 2))
+    blanks:
+      - answer: ones
+        options: [ones, zeros]
+      - answer: lstsq
+        options: [lstsq, solve, inv]
+    expect_output: "[2. 1.]"
+    explanation: |
+      Die Einsen-Spalte liefert den Bias; `lstsq` löst das überbestimmte System (3 Gleichungen, 2 Unbekannte). `solve` verlangt eine quadratische Matrix.
+  - type: quiz
+    question: |
+      In den Demonstrationen greift der Mensch einen Becher mal von links, mal von rechts. Eine MSE-BC-Policy greift danach ins Leere – mittig. Was hilft am gezieltesten?
+    options:
+      - text: Eine Policy, die eine Verteilung über Aktionen modelliert, z. B. Diffusion Policy
+        correct: true
+        why: Sie kann einen der beiden Modi erzeugen statt ihres Mittelwerts.
+      - text: Die Lernrate erhöhen
+        correct: false
+        why: Die MSE-Lösung bleibt der Mittelwert, egal wie schnell man ihn erreicht.
+      - text: Die Hälfte der Demonstrationen zufällig löschen
+        correct: false
+        why: Das kann zufällig helfen, verschwendet aber Daten; das Grundproblem bleibt.
+  - type: quiz
+    question: |
+      Eine in der Simulation trainierte Policy funktioniert dort perfekt, am echten Arm aber kaum. Welche Erklärung und Maßnahme passen zusammen?
+    options:
+      - text: Realitätslücke – mit Domain Randomization die Simulation stark variieren und neu trainieren
+        correct: true
+        why: So wird die echte Welt für die Policy zu einer weiteren Variante.
+      - text: Kollaps – einen EMA-Ziel-Encoder einbauen
+        correct: false
+        why: Kollaps betrifft selbstüberwachtes Repräsentationslernen, nicht den Transfer aus der Simulation.
+      - text: Quantisierungsfehler – mehr Aktions-Bins verwenden
+        correct: false
+        why: Das erklärt nicht, warum es in der Simulation perfekt klappt.
+  - type: quiz
+    question: |
+      Wofür ist ein generatives Video-World-Model wie Genie 3 oder Cosmos realistischerweise geeignet?
+    options:
+      - text: Vielfältige Szenen und Testwelten erzeugen, z. B. für Trainingsdaten oder zum Erproben von Agenten
+        correct: true
+        why: So beschreiben es die Anbieter; für Echtzeit-Regelung sind die Modelle zu langsam und physikalisch nicht garantiert.
+      - text: Als exakter Ersatz für die Physik-Simulation beim Sim-to-Real-Transfer
+        correct: false
+        why: Gelernte Videos sind nicht physikalisch garantiert.
+      - text: Als schneller Planer mit Tausenden Rollouts pro Regelschritt
+        correct: false
+        why: Pixel-Generierung ist dafür viel zu teuer – im V-JEPA-2-Paper ca. 4 min pro Aktion mit Cosmos.

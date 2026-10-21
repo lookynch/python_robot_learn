@@ -1,0 +1,55 @@
+id: m05
+number: 5
+title: Lineare Algebra in Code
+summary: |
+  Vektoren, Skalarprodukt, Matrizen, Rotationen und homogene Transformationen mit NumPy – die Sprache, in der Roboter rechnen. Dazu Gleichungssysteme, Ausgleichsrechnung und Eigenwerte als Werkzeug für Stabilität.
+depth: voll
+lessons:
+  - m05-vektoren
+  - m05-skalarprodukt
+  - m05-matrizen
+  - m05-rotation
+  - m05-homogen
+  - m05-gleichungssysteme
+  - m05-eigenwerte
+  - m05-checkpoint
+concepts:
+  - id: la-vektor
+    name: Vektoren als Arrays
+    description: Ein Vektor ist ein 1D-Array; Addition und Skalierung wirken elementweise, Positionen addieren sich wie Glied-Vektoren.
+  - id: la-norm
+    name: Norm und Einheitsvektor
+    description: np.linalg.norm(v) ist die Länge; v / norm(v) ist der Einheitsvektor; mit axis=1 die Normen vieler Vektoren.
+  - id: la-skalarprodukt
+    name: Skalarprodukt
+    description: a @ b = Summe a_i b_i = |a||b|cos(theta); 0 heißt orthogonal; Projektion (b·e) e.
+  - id: la-matmul
+    name: Matrixprodukt
+    description: A @ x und A @ B mit (m×n)(n×p) → m×p; nicht kommutativ; A * B ist elementweise.
+  - id: la-transponiert
+    name: Transponierte und Punktlisten
+    description: A.T vertauscht Zeilen und Spalten; Punkte als Zeilen transformiert man mit P @ A.T.
+  - id: la-rotation
+    name: 2D-Rotationsmatrix
+    description: R(theta) = [[cos, -sin], [sin, cos]] dreht gegen den Uhrzeigersinn; R(a) R(b) = R(a+b).
+  - id: la-rotation-inverse
+    name: Inverse einer Rotation
+    description: Rotationsmatrizen sind orthogonal, R^T R = I, also R^-1 = R^T = R(-theta).
+  - id: la-homogen
+    name: Homogene Transformation
+    description: 3×3-Matrix [[R, t], [0, 0, 1]] für Rotation plus Translation; Punkte mit 1, Richtungen mit 0 erweitern.
+  - id: la-kette
+    name: Transformationsketten
+    description: Hintereinander ausgeführte Gliedtransformationen multiplizieren sich von links nach rechts (Basis → Spitze); Grundlage der Vorwärtskinematik.
+  - id: la-solve
+    name: Lineare Gleichungssysteme lösen
+    description: np.linalg.solve(A, b) statt inv(A) @ b für quadratische, reguläre A.
+  - id: la-lstsq
+    name: Ausgleichsrechnung
+    description: np.linalg.lstsq(A, b, rcond=None)[0] minimiert |Ax - b|^2 für überbestimmte Systeme, z. B. Ausgleichsgerade.
+  - id: la-eigen
+    name: Eigenwerte und Eigenvektoren
+    description: A v = lambda v; np.linalg.eig liefert Werte und Vektoren (als Spalten).
+  - id: la-stabilitaet
+    name: Stabilität linearer Systeme
+    description: x_{k+1} = A x_k geht gegen 0, wenn alle Eigenwerte Betrag < 1 haben; ein Betrag > 1 lässt es wachsen.

@@ -1,0 +1,395 @@
+id: m02-funktionen
+title: Funktionen – Code mit Namen
+minutes: 9
+goals:
+  - Eine Funktion mit `def` definieren und mit Argumenten aufrufen
+  - Parameter und Argument unterscheiden
+  - "`return` (Wert zurückgeben) von `print` (anzeigen) unterscheiden"
+concepts: [m02-funktion-def, m02-return]
+steps:
+  - type: text
+    body: |
+      ## Eine Rechnung bekommt einen Namen
+
+      Ein Roboter rechnet ständig dasselbe: Drehzahl umrechnen, Winkel begrenzen, Abstände bestimmen. Statt die Formel jedes Mal neu zu tippen, packst du sie in eine **Funktion** (function). Fertige Funktionen wie `print`, `len` oder `int` kennst du schon – jetzt schreibst du eigene:
+
+      ```python
+      def rpm_zu_hz(rpm):
+          return rpm / 60
+      ```
+
+      - `def` leitet die Definition ein, danach Name, Klammern, Doppelpunkt.
+      - `rpm` ist ein **Parameter** – ein Platzhalter für den Wert, mit dem die Funktion später aufgerufen wird.
+      - Der eingerückte **Körper** beschreibt, was passiert. `return` gibt das Ergebnis zurück.
+
+      Aufruf: `rpm_zu_hz(120)`. Der Wert `120` heißt **Argument**.
+  - type: example
+    code: |
+      def rpm_zu_hz(rpm):
+          hz = rpm / 60
+          return hz
+
+      motor_a = rpm_zu_hz(120)
+      print(motor_a)
+      print(rpm_zu_hz(30))
+    subgoals:
+      - lines: 1
+        label: Funktion mit Parameter definieren
+      - lines: 2
+        label: Ergebnis berechnen
+      - lines: 3
+        label: Ergebnis zurückgeben
+      - lines: [5, 7]
+        label: Funktion aufrufen und Ergebnis nutzen
+    after: |
+      Beim Aufruf `rpm_zu_hz(120)` bekommt der Parameter `rpm` den Wert `120`, der Körper läuft, und der Aufruf **wird durch den zurückgegebenen Wert ersetzt**: `motor_a = 2.0`.
+
+      Die Leerzeile nach der Funktion ist nur zur Lesbarkeit da.
+  - type: explain
+    question: |
+      Zeilen 1–3 allein geben nichts aus und rechnen nichts. Warum?
+    options:
+      - text: "`def` speichert nur die Anleitung unter dem Namen `rpm_zu_hz`; ausgeführt wird der Körper erst bei einem Aufruf."
+        correct: true
+        why: Genau. Eine Definition ist wie ein Rezept im Regal – gekocht wird erst, wenn jemand es aufruft.
+      - text: Python führt Funktionen immer erst am Ende des Programms aus.
+        correct: false
+        why: Funktionen laufen genau dann, wenn sie aufgerufen werden – egal, an welcher Stelle im Programm.
+      - text: Weil `rpm` noch keinen Wert hat, überspringt Python die Zeilen mit einem stillen Fehler.
+        correct: false
+        why: Es gibt keinen Fehler. Der Parameter bekommt seinen Wert erst beim Aufruf – deshalb wird der Körper vorher gar nicht ausgeführt.
+  - type: predict
+    code: |
+      def melde(name):
+          print("Gelenk", name, "bereit")
+
+      print("Start")
+      melde("Schulter")
+      melde("Ellbogen")
+    options:
+      - |
+        Start
+        Gelenk Schulter bereit
+        Gelenk Ellbogen bereit
+      - |
+        Gelenk name bereit
+        Start
+      - |
+        Gelenk Schulter bereit
+        Gelenk Ellbogen bereit
+        Start
+      - |
+        Start
+        Gelenk name bereit
+        Gelenk name bereit
+    answer: |
+      Start
+      Gelenk Schulter bereit
+      Gelenk Ellbogen bereit
+    explanation: |
+      Die Definition gibt nichts aus. Zuerst läuft `print("Start")`, dann zweimal der Körper von `melde` – jeweils mit dem Wert, den `name` beim Aufruf bekommt. `name` ohne Anführungszeichen ist die Variable, nicht der Text „name“.
+  - type: text
+    body: |
+      ## `return` oder `print`?
+
+      | | `print(x)` | `return x` |
+      |---|---|---|
+      | Zweck | zeigt `x` **dir** im Terminal | gibt `x` an den **aufrufenden Code** zurück |
+      | Weiterrechnen möglich? | nein | ja: `y = f(3) + 1` |
+      | Funktion endet? | nein | ja, sofort |
+
+      Eine Funktion ohne `return` liefert den besonderen Wert `None` („nichts“). Faustregel: **Funktionen rechnen und geben zurück, ausgegeben wird außerhalb.**
+  - type: predict
+    code: |
+      def doppelt_print(x):
+          print(x * 2)
+
+      def doppelt_return(x):
+          return x * 2
+
+      a = doppelt_print(3)
+      b = doppelt_return(3)
+      print(a, b)
+    options:
+      - |
+        6
+        None 6
+      - |
+        6 6
+      - |
+        6
+        6 6
+      - |
+        None 6
+    answer: |
+      6
+      None 6
+    explanation: |
+      `doppelt_print(3)` zeigt `6` an, gibt aber nichts zurück – `a` ist `None`. `doppelt_return(3)` zeigt nichts an, liefert aber `6`, das in `b` landet.
+  - type: trace
+    intro: |
+      Verfolge, welche Werte Parameter und lokale Variable bei jedem Aufruf haben.
+    code: |
+      def quadrat(x):
+          y = x * x
+          return y
+
+      a = quadrat(3)
+      b = quadrat(a)
+      print(b)
+    questions:
+      - line: 2
+        hit: 1
+        var: y
+        prompt: Erster Aufruf, nach Zeile 2 – welchen Wert hat `y`?
+        answer: "9"
+      - line: 2
+        hit: 2
+        var: x
+        prompt: Zweiter Aufruf `quadrat(a)` – welchen Wert hat der Parameter `x`?
+        answer: "9"
+    after: |
+      Bei jedem Aufruf bekommt `x` den Wert des Arguments: erst `3`, dann den Wert von `a`, also `9`. Ergebnis: $9^2 = 81$.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze so, dass der Umfang eines Rades mit Radius 1 m berechnet und `6.28` ausgegeben wird.
+    code: |
+      ___ umfang(r):
+          return 2 * 3.14 * r
+
+      u = umfang(___)
+      print(u)
+    blanks:
+      - answer: def
+        options: [def, function, return]
+      - answer: "1"
+        options: ["1", r, "2"]
+    expect_output: "6.28"
+    explanation: |
+      Funktionen beginnen mit `def`. Beim Aufruf übergibst du einen **Wert** – `r` gibt es außerhalb der Funktion nicht (`NameError`).
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue eine Funktion `begrenze(wert, maximum)`, die zu große Werte auf `maximum` kappt. Ausgabe: `5`, dann `3`.
+    lines:
+      - "def begrenze(wert, maximum):"
+      - "    if wert > maximum:"
+      - "        return maximum"
+      - "    return wert"
+      - "print(begrenze(7, 5))"
+      - "print(begrenze(3, 5))"
+    expect_output: |
+      5
+      3
+    explanation: |
+      `return` beendet die Funktion sofort. Ist `wert` zu groß, wird `return wert` gar nicht mehr erreicht.
+  - type: exercise
+    mode: modify
+    prompt: |
+      `mittelwert` **zeigt** das Ergebnis nur an – deshalb steht unten `Mittelwert: None`. Ändere die Funktion so, dass sie den Mittelwert **zurückgibt**. Ausgabe danach:
+
+      ```
+      Mittelwert: 6.0
+      ```
+    starter: |
+      def mittelwert(a, b):
+          print((a + b) / 2)
+
+      m = mittelwert(4, 8)
+      print("Mittelwert:", m)
+    solution: |
+      def mittelwert(a, b):
+          return (a + b) / 2
+
+      m = mittelwert(4, 8)
+      print("Mittelwert:", m)
+    tests:
+      - name: Rückgabewert
+        code: |
+          assert mittelwert(4, 8) == 6.0, f"mittelwert(4, 8) sollte 6.0 zurückgeben, liefert {mittelwert(4, 8)}"
+          assert mittelwert(1, 2) == 1.5, f"mittelwert(1, 2) sollte 1.5 zurückgeben, liefert {mittelwert(1, 2)}"
+      - name: Ausgabe
+        code: |
+          assert lines() == ["Mittelwert: 6.0"], f"Erwartet ['Mittelwert: 6.0'], bekommen {lines()}"
+    mutants:
+      - |
+        def mittelwert(a, b):
+            return a + b / 2
+
+        m = mittelwert(4, 8)
+        print("Mittelwert:", m)
+      - |
+        def mittelwert(a, b):
+            print((a + b) / 2)
+            return (a + b) / 2
+
+        m = mittelwert(4, 8)
+        print("Mittelwert:", m)
+    hints:
+      - "Teilziel: Ergebnis zurückgeben statt anzeigen."
+      - Ersetze `print(...)` in der Funktion durch `return ...`.
+      - "`return (a + b) / 2` – die Klammern sind wegen Punkt-vor-Strich nötig."
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe eine Funktion `grad_zu_rad(grad)`, die einen Winkel von Grad in Radiant umrechnet und **zurückgibt**:
+
+      $$ \text{rad} = \text{grad} \cdot \frac{\pi}{180} $$
+
+      Nutze die vorgegebene Variable `pi`.
+    starter: |
+      pi = 3.141592653589793
+
+      def grad_zu_rad(grad):
+          # dein Code
+          pass
+    solution: |
+      pi = 3.141592653589793
+
+      def grad_zu_rad(grad):
+          return grad * pi / 180
+    tests:
+      - name: 180 Grad
+        code: |
+          assert close(grad_zu_rad(180), pi), f"grad_zu_rad(180) sollte pi sein, liefert {grad_zu_rad(180)}"
+      - name: 90 Grad und 0 Grad
+        code: |
+          assert close(grad_zu_rad(90), pi / 2), f"grad_zu_rad(90) sollte pi/2 ≈ 1.5708 sein, liefert {grad_zu_rad(90)}"
+          assert grad_zu_rad(0) == 0, f"grad_zu_rad(0) sollte 0 sein, liefert {grad_zu_rad(0)}"
+      - name: negative Winkel
+        code: |
+          assert close(grad_zu_rad(-45), -pi / 4), f"grad_zu_rad(-45) sollte -pi/4 sein, liefert {grad_zu_rad(-45)}"
+    mutants:
+      - |
+        pi = 3.141592653589793
+
+        def grad_zu_rad(grad):
+            return grad * 180 / pi
+      - |
+        pi = 3.141592653589793
+
+        def grad_zu_rad(grad):
+            print(grad * pi / 180)
+      - |
+        pi = 3.141592653589793
+
+        def grad_zu_rad(grad):
+            return pi / 180
+    hints:
+      - "Teilziel: Ergebnis berechnen und mit `return` zurückgeben."
+      - Multipliziere den Parameter mit $\pi/180$.
+      - "`return grad * pi / 180`"
+    explanation: |
+      Ab jetzt rechnest du Winkel fast immer in Radiant – alle Winkelfunktionen in Python erwarten Radiant.
+  - type: quiz
+    question: |
+      Welchen Wert hat `ergebnis`?
+    code: |
+      def f(x):
+          y = x + 1
+
+      ergebnis = f(4)
+    options:
+      - text: "`None`"
+        correct: true
+        why: "`f` berechnet `y`, gibt es aber nicht zurück. Ohne `return` liefert jede Funktion `None`."
+      - text: "`5`"
+        correct: false
+        why: "`5` steckt zwar in `y`, verlässt die Funktion aber nicht – dafür fehlt `return y`."
+      - text: "`4`"
+        correct: false
+        why: Der Aufruf liefert nicht sein Argument zurück, sondern das, was hinter `return` steht.
+cards:
+  - id: m02-c-return-vs-print
+    concept: m02-return
+    variants:
+      - type: predict
+        code: |
+          def f(x):
+              print(x + 1)
+
+          y = f(2)
+          print(y)
+        options:
+          - |
+            3
+            None
+          - |
+            3
+            3
+          - |
+            None
+        answer: |
+          3
+          None
+        explanation: "`f` zeigt 3 an, gibt aber nichts zurück – `y` ist `None`."
+      - type: predict
+        code: |
+          def g(x):
+              return x * 10
+
+          g(2)
+          print(g(3))
+        options:
+          - "30"
+          - |
+            20
+            30
+          - "None"
+        answer: "30"
+        explanation: "`g(2)` liefert 20, aber niemand gibt es aus. Nur `print(g(3))` erzeugt eine Ausgabe."
+      - type: predict
+        code: |
+          def h(x):
+              return x - 1
+              print("nach return")
+
+          print(h(5))
+        options:
+          - "4"
+          - |
+            nach return
+            4
+          - |
+            4
+            nach return
+        answer: "4"
+        explanation: "`return` beendet die Funktion sofort; die Zeile danach wird nie ausgeführt."
+  - id: m02-c-def-aufruf
+    concept: m02-funktion-def
+    variants:
+      - type: predict
+        code: |
+          def hallo():
+              print("B")
+
+          print("A")
+          hallo()
+          print("C")
+        options:
+          - |
+            A
+            B
+            C
+          - |
+            B
+            A
+            C
+          - |
+            A
+            C
+        answer: |
+          A
+          B
+          C
+        explanation: Der Körper läuft erst beim Aufruf – also zwischen `A` und `C`.
+      - type: predict
+        code: |
+          def plus(a, b):
+              return a + b
+
+          print(plus(2, 3) * plus(1, 1))
+        options: ["10", "7", "5"]
+        answer: "10"
+        explanation: Jeder Aufruf wird durch seinen Rückgabewert ersetzt – $5 \cdot 2 = 10$.

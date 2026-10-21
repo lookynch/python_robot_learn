@@ -1,0 +1,288 @@
+id: m12-mlp-forward
+title: "Neuronales Netz: Vorwärtsrechnung"
+minutes: 9
+goals:
+  - Eine vollverbundene Schicht als `X @ W + b` mit passenden Shapes schreiben
+  - Begründen, warum zwischen den Schichten eine Nichtlinearität nötig ist
+  - Den Vorwärtsdurchlauf eines MLP mit einer verborgenen Schicht implementieren
+concepts: [ml-dense-layer, ml-aktivierung]
+steps:
+  - type: text
+    body: |
+      ## Schichten stapeln
+
+      Eine Gerade kann keine Sinuskurve nachbilden. Ein **mehrschichtiges Perzeptron** (Multilayer Perceptron, MLP) baut flexible Funktionen aus einfachen Bausteinen:
+
+      $$H = \phi(X W_1 + \mathbf b_1), \qquad \hat Y = H W_2 + \mathbf b_2$$
+
+      - Eine **vollverbundene Schicht** (dense layer) ist `X @ W + b` mit `W.shape == (d_in, d_out)`.
+      - `b` hat Shape `(d_out,)` und wird per Broadcasting zu jeder Zeile addiert.
+      - $\phi$ ist eine **Aktivierungsfunktion** (activation), elementweise: ReLU $\max(0, z)$ oder $\tanh z$.
+      - $H$ heißt **verborgene Schicht** (hidden layer); ihre Breite wählst du.
+
+      Die Batch-Achse (Beispiele) bleibt immer vorne.
+  - type: example
+    code: |
+      import numpy as np
+
+      rng = np.random.default_rng(0)
+      X = rng.normal(size=(5, 2))                       # 5 Beispiele, 2 Merkmale
+      W1 = rng.normal(0, 1 / np.sqrt(2), size=(2, 8))   # 2 -> 8
+      b1 = np.zeros(8)
+      W2 = rng.normal(0, 1 / np.sqrt(8), size=(8, 1))   # 8 -> 1
+      b2 = np.zeros(1)
+
+      Z1 = X @ W1 + b1          # (5, 8)
+      H = np.maximum(0, Z1)     # ReLU, (5, 8)
+      out = H @ W2 + b2         # (5, 1)
+      print("Z1", Z1.shape, "H", H.shape, "out", out.shape)
+    subgoals:
+      - lines: [3, 4]
+        label: Eingaben bereitstellen
+      - lines: [5, 8]
+        label: Parameter initialisieren
+      - lines: [10, 11]
+        label: Verborgene Schicht berechnen
+      - lines: [12, 13]
+        label: Ausgabeschicht berechnen
+    after: |
+      Die Startgewichte sind zufällig mit Standardabweichung $1/\sqrt{d_\text{in}}$. So bleiben die Werte von Schicht zu Schicht etwa gleich groß. Mit lauter Nullen wären alle Neuronen identisch und würden identisch lernen.
+  - type: predict
+    code: |
+      import numpy as np
+      X = np.zeros((32, 3))
+      W1, b1 = np.zeros((3, 16)), np.zeros(16)
+      W2, b2 = np.zeros((16, 1)), np.zeros(1)
+      H = np.tanh(X @ W1 + b1)
+      out = H @ W2 + b2
+      print(H.shape, out.shape)
+    options:
+      - "(32, 16) (32, 1)"
+      - "(16, 32) (1, 32)"
+      - "(32, 3) (32, 1)"
+      - "(3, 16) (16, 1)"
+    answer: "(32, 16) (32, 1)"
+    explanation: |
+      `(32, 3) @ (3, 16)` → `(32, 16)`; die innere Dimension 3 verschwindet. Die Batch-Achse 32 bleibt in jeder Schicht vorne.
+  - type: explain
+    question: |
+      Warum braucht man die Aktivierungsfunktion zwischen den Schichten?
+    options:
+      - text: Ohne sie ist $(X W_1) W_2 = X (W_1 W_2)$ – zwei lineare Schichten sind zusammen wieder nur eine lineare Abbildung.
+        correct: true
+        why: Matrixprodukte sind assoziativ. Erst die Nichtlinearität macht das Netz flexibler als ein lineares Modell.
+      - text: Sie normiert die Ausgaben auf den Bereich 0 bis 1.
+        correct: false
+        why: ReLU ist nach oben unbeschränkt, tanh liegt zwischen −1 und 1. Normierung ist nicht der Zweck.
+      - text: Sie verhindert Shape-Fehler bei der Matrixmultiplikation.
+        correct: false
+        why: Aktivierungen wirken elementweise und ändern keine Shape.
+      - text: Sie macht die Rechnung schneller.
+        correct: false
+        why: Sie kostet zusätzliche Rechenzeit – aber sie ist der Grund, warum das Netz mehr als Geraden kann.
+  - type: example
+    intro: |
+      Wie sieht ein Netz mit zufälligen Gewichten aus? Eingabe ist ein 1D-Gitter, als Spalte `(200, 1)`.
+    code: |
+      import numpy as np
+      import lab
+
+      xs = np.linspace(-3, 3, 200).reshape(-1, 1)     # (200, 1)
+      fig = lab.Figure(title="Zufällige MLPs (ReLU, 20 Neuronen)", xlabel="x", ylabel="Ausgabe")
+      for seed in [0, 1, 2]:
+          rng = np.random.default_rng(seed)
+          W1, b1 = rng.normal(size=(1, 20)), rng.normal(size=20)
+          W2, b2 = rng.normal(0, 1 / np.sqrt(20), size=(20, 1)), np.zeros(1)
+          out = np.maximum(0, xs @ W1 + b1) @ W2 + b2  # (200, 1)
+          fig.line(out[:, 0], x=xs[:, 0], label=f"Seed {seed}")
+      fig.show()
+    after: |
+      Jede Kurve ist **stückweise linear**: Jedes ReLU-Neuron trägt einen Knick bei $z = 0$ bei. Mit genug Neuronen lässt sich so jede stetige Funktion auf einem beschränkten Bereich beliebig genau annähern – Training muss nur die richtigen Gewichte finden.
+  - type: predict
+    code: |
+      import numpy as np
+      print(np.maximum(0, np.array([-1.0, 0.5, 2.0])))
+    options:
+      - "[0.  0.5 2. ]"
+      - "2.0"
+      - "[1.  0.5 2. ]"
+      - "[-1.   0.5  2. ]"
+    answer: "[0.  0.5 2. ]"
+    explanation: |
+      `np.maximum` vergleicht **elementweise** mit 0 (Broadcasting). `np.max` würde dagegen das größte Element liefern.
+  - type: parsons
+    fading: true
+    prompt: |
+      Baue eine Vorwärtsfunktion mit ReLU und rufe sie für einen Batch aus 4 Beispielen auf. Ausgabe: `(4, 2) 15.0`.
+    lines:
+      - "import numpy as np"
+      - "def forward(X, W1, b1, W2, b2):"
+      - "    Z1 = X @ W1 + b1"
+      - "    H = np.maximum(0, Z1)"
+      - "    return H @ W2 + b2"
+      - "X = np.ones((4, 3))"
+      - "out = forward(X, np.ones((3, 5)), np.zeros(5), np.ones((5, 2)), np.zeros(2))"
+      - "print(out.shape, out[0, 0])"
+    distractors:
+      - "    Z1 = W1 @ X + b1"
+      - "    return W2 @ H + b2"
+    expect_output: "(4, 2) 15.0"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `forward(X, params)` für ein MLP mit **tanh** in der verborgenen Schicht und linearer Ausgabe. `params` ist ein Dict mit den Schlüsseln `"W1"`, `"b1"`, `"W2"`, `"b2"`.
+    starter: |
+      import numpy as np
+
+      def forward(X, params):
+          W1, b1 = params["W1"], params["b1"]
+          W2, b2 = params["W2"], params["b2"]
+          # dein Code
+    solution: |
+      import numpy as np
+
+      def forward(X, params):
+          W1, b1 = params["W1"], params["b1"]
+          W2, b2 = params["W2"], params["b2"]
+          H = np.tanh(X @ W1 + b1)
+          return H @ W2 + b2
+    tests:
+      - name: Shape der Ausgabe
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(7)
+          P = {"W1": rng.normal(size=(3, 6)), "b1": rng.normal(size=6), "W2": rng.normal(size=(6, 2)), "b2": rng.normal(size=2)}
+          out = forward(rng.normal(size=(10, 3)), P)
+          assert np.shape(out) == (10, 2), f"Erwartet Shape (10, 2), bekommen {np.shape(out)}"
+      - name: Werte
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(7)
+          P = {"W1": rng.normal(size=(3, 6)), "b1": rng.normal(size=6), "W2": rng.normal(size=(6, 2)), "b2": rng.normal(size=2)}
+          Xt = rng.normal(size=(10, 3))
+          ref = np.tanh(Xt @ P["W1"] + P["b1"]) @ P["W2"] + P["b2"]
+          out = forward(Xt, P)
+          assert close(out, ref), f"Erste Zeile erwartet {np.round(ref[0], 3)}, bekommen {np.round(np.asarray(out)[0], 3)}"
+      - name: Einzelnes Beispiel als (1, d)
+        code: |
+          import numpy as np
+          P = {"W1": np.ones((2, 3)), "b1": np.zeros(3), "W2": np.ones((3, 1)), "b2": np.array([0.5])}
+          out = forward(np.array([[1.0, -1.0]]), P)
+          assert close(out, [[0.5]]), f"Für x = [1, -1] erwartet [[0.5]], bekommen {out}"
+    mutants:
+      - |
+        import numpy as np
+        def forward(X, params):
+            H = np.maximum(0, X @ params["W1"] + params["b1"])
+            return H @ params["W2"] + params["b2"]
+      - |
+        import numpy as np
+        def forward(X, params):
+            H = np.tanh(X @ params["W1"])
+            return H @ params["W2"] + params["b2"]
+      - |
+        import numpy as np
+        def forward(X, params):
+            H = np.tanh(X @ params["W1"] + params["b1"])
+            return np.tanh(H @ params["W2"] + params["b2"])
+      - |
+        import numpy as np
+        def forward(X, params):
+            H = np.tanh(X @ params["W1"] + params["b1"])
+            return H @ params["W2"]
+    hints:
+      - "Teilziel: erst die verborgene Schicht, dann die Ausgabeschicht."
+      - "Verborgene Schicht: lineare Abbildung plus Bias, dann `np.tanh`. Die Ausgabeschicht bleibt linear."
+      - "`H = np.tanh(X @ W1 + b1)`"
+      - "`return H @ W2 + b2`"
+  - type: quiz
+    question: |
+      Wie viele Parameter hat ein MLP 3 → 16 → 1 (Gewichte und Biases)?
+    options:
+      - text: "81"
+        correct: true
+        why: "$3 \\cdot 16 + 16 + 16 \\cdot 1 + 1 = 48 + 16 + 16 + 1 = 81$."
+      - text: "64"
+        correct: false
+        why: Das sind nur die Gewichte $48 + 16$; die Biases fehlen.
+      - text: "20"
+        correct: false
+        why: Das ist die Summe der Schichtbreiten, nicht die Zahl der Parameter.
+      - text: "48"
+        correct: false
+        why: Das ist nur $W_1$.
+cards:
+  - id: m12-c-dense-shape
+    concept: ml-dense-layer
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          X = np.zeros((10, 4))
+          W = np.zeros((4, 7))
+          b = np.zeros(7)
+          print((X @ W + b).shape)
+        options: ["(10, 7)", "(4, 7)", "(7, 10)", "(10, 4)"]
+        answer: "(10, 7)"
+        explanation: Batch-Achse 10 bleibt, 4 Eingänge werden zu 7 Ausgängen.
+      - type: predict
+        code: |
+          import numpy as np
+          H = np.zeros((64, 32))
+          W2 = np.zeros((32, 3))
+          print((H @ W2).shape)
+        options: ["(64, 3)", "(32, 3)", "(3, 64)", "(64, 32)"]
+        answer: "(64, 3)"
+        explanation: Die gemeinsame Dimension 32 wird aufsummiert.
+  - id: m12-c-param-zahl
+    concept: ml-dense-layer
+    variants:
+      - type: quiz
+        question: |
+          Wie viele Parameter hat eine einzelne Schicht 10 → 5?
+        options:
+          - text: "55"
+            correct: true
+            why: "$10 \\cdot 5$ Gewichte + 5 Biases."
+          - text: "50"
+            correct: false
+            why: Die 5 Biases fehlen.
+          - text: "15"
+            correct: false
+            why: Das ist $10 + 5$, aber jede Eingabe ist mit jeder Ausgabe verbunden.
+      - type: quiz
+        question: |
+          Wie viele Parameter hat ein MLP 2 → 4 → 1?
+        options:
+          - text: "17"
+            correct: true
+            why: "$2 \\cdot 4 + 4 + 4 \\cdot 1 + 1 = 17$."
+          - text: "12"
+            correct: false
+            why: Das sind nur die Gewichte.
+          - text: "7"
+            correct: false
+            why: Das ist die Summe der Schichtbreiten.
+  - id: m12-c-nichtlinear
+    concept: ml-aktivierung
+    variants:
+      - type: quiz
+        question: |
+          Ein „MLP“ ohne Aktivierungsfunktionen mit 10 Schichten – was kann es darstellen?
+        options:
+          - text: Nur lineare (affine) Funktionen, wie ein einziges lineares Modell.
+            correct: true
+            why: Hintereinander ausgeführte affine Abbildungen sind wieder affin.
+          - text: Polynome bis Grad 10.
+            correct: false
+            why: Ohne Nichtlinearität entstehen keine Potenzen von $x$.
+          - text: Beliebige Funktionen, wenn die Schichten breit genug sind.
+            correct: false
+            why: Das gilt erst mit Nichtlinearitäten.
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.tanh(np.array([0.0])), np.maximum(0, np.array([-3.0])))
+        options: ["[0.] [0.]", "[1.] [-3.]", "[0.5] [0.]", "[0.] [3.]"]
+        answer: "[0.] [0.]"
+        explanation: "$\\tanh 0 = 0$; ReLU setzt negative Werte auf 0."

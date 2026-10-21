@@ -1,0 +1,448 @@
+id: m11-reacher
+title: "Höhepunkt: Der Arm plant seinen Weg"
+minutes: 12
+goals:
+  - Den Planer auf zweidimensionale Aktionen (Gelenkgeschwindigkeiten) übertragen
+  - Mit CEM-MPC den 2-Gelenk-Arm zu einem Zielpunkt fahren
+  - Verhalten bei wechselnden und unerreichbaren Zielen einschätzen
+concepts: [plan-mehrdim-aktion, plan-cem, plan-mpc, plan-warmstart]
+steps:
+  - type: text
+    body: |
+      ## Vom Pendel zum Arm
+
+      `Reacher2D` ist der 2-Gelenk-Arm aus Modul 8 als kinematisches Modell: Aktion $u = (\dot q_1, \dot q_2)$ in rad/s, begrenzt auf ±2 rad/s, Zeitschritt 0,05 s:
+
+      $$
+      q_{t+1} = q_t + \operatorname{clip}(u_t, -2, 2)\,\Delta t, \qquad c(q, u) = \lVert \mathrm{fk}(q) - \text{Ziel} \rVert + 0.01\,\lVert u \rVert^2
+      $$
+
+      Neu ist nur: Jede Aktion ist ein **Vektor**. Eine Folge hat die Form `(H, 2)`, ein Batch von Samples `(N, H, 2)`. Dank Broadcasting bleiben `rollout_costs`, `cem` und `mppi_update` **unverändert** – sie wurden nie für eine bestimmte Form geschrieben.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      env = Reacher2D()
+      obs = env.reset(q=(0.0, 0.0), goal=(-0.5, 1.2))
+      print("Beobachtung [q1, q2, gx, gy]:", obs)
+      q = obs[:2]
+      print("Spitze:", env.fk(q), " Kosten:", round(float(env.cost(q, np.zeros(2))), 3))
+
+      Q = np.zeros((5, 2))
+      U = np.zeros((5, 2))
+      print("Batch-Kosten:", env.cost(Q, U).shape)
+      print("Ein Schritt mit u = (5, -1):", env.dynamics(q, np.array([5.0, -1.0])))
+    subgoals:
+      - lines: [4, 6]
+        label: Arm und Ziel festlegen
+      - lines: [7, 8]
+        label: Vorwärtskinematik und Kosten
+      - lines: [10, 12]
+        label: Batch auswerten
+      - lines: 13
+        label: Geschwindigkeitsgrenze prüfen
+    after: |
+      Gestreckt zeigt der Arm auf $(2, 0)$, 2,77 m vom Ziel entfernt. `cost` liefert für 5 Zustände 5 Kosten. $u_1 = 5$ rad/s wird auf 2 begrenzt: $0 + 2 \cdot 0.05 = 0.1$ rad.
+  - type: predict
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      A = rng.standard_normal((100, 10, 2))
+      print(A[:, 0].shape, A.mean(axis=0).shape)
+    options: ["(100, 2) (10, 2)", "(10, 2) (100, 2)", "(100,) (10, 2)", "(100, 2) (2,)"]
+    answer: "(100, 2) (10, 2)"
+    explanation: |
+      `A[:, 0]`: erste Aktion aller 100 Folgen – je ein Vektor $(\dot q_1, \dot q_2)$. Gemittelt über die Samples (Achse 0) bleibt eine Folge der Form `(10, 2)`.
+  - type: explain
+    question: |
+      Warum funktioniert `rollout_costs` vom Pendel ohne Änderung für den Arm?
+    options:
+      - text: "`A[:, t]` hat jetzt die Form `(N, 2)` statt `(N,)` – genau das, was `Reacher2D.dynamics` und `cost` für N Zustände erwarten. Die Schleife über die Zeit bleibt gleich."
+        correct: true
+        why: Der Code indiziert nur die Zeitachse. Was dahinter kommt (Zahl oder Vektor), reicht er unverändert an das Modell weiter.
+      - text: Weil Reacher2D intern in ein Pendel umgerechnet wird
+        correct: false
+        why: Es sind verschiedene Modelle – gemeinsam ist nur die Schnittstelle `dynamics(s, u)` und `cost(s, u)`.
+      - text: Weil NumPy die zweite Aktionskomponente ignoriert
+        correct: false
+        why: Beide Komponenten gehen ein – `dynamics` addiert den Vektor `u * dt` zu `q`.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `reach(goal, T, rng)`: Arm von $q = (0, 0)$ aus `T` Schritte lang mit **CEM-MPC** zum Ziel fahren.
+
+      In jedem Schritt: `cem` (gegeben) mit 60 Samples, 6 Elite, 3 Iterationen und Start-`sigma` = Einsen der Form `(10, 2)` vom aktuellen `q` aus planen, die erste Aktion ausführen, den Plan um einen Schritt verschieben (Warmstart): `np.vstack([a, b])` stapelt Arrays untereinander – also `mu[1:]` und unten eine Nullzeile `np.zeros((1, 2))`.
+
+      Rückgabe: `(qs, actions)` mit Formen `(T + 1, 2)` und `(T, 2)`.
+    starter: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def cem(f, mu, sigma, N, n_elite, iters, rng):
+          for it in range(iters):
+              A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+              elite = A[np.argsort(f(A))[:n_elite]]
+              mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+          return mu, sigma
+
+      def reach(goal, T, rng):
+          env = Reacher2D()
+          q = env.reset(q=(0.0, 0.0), goal=goal)[:2]
+          mu = np.zeros((10, 2))
+          qs, actions = [q], []
+          # MPC-Schleife
+          return np.array(qs), np.array(actions)
+
+      qs, actions = reach((-0.5, 1.2), 50, np.random.default_rng(0))
+      env = Reacher2D()
+      env.reset(goal=(-0.5, 1.2))
+      env.render(qs, title="CEM-MPC fährt zum Ziel")
+    solution: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def cem(f, mu, sigma, N, n_elite, iters, rng):
+          for it in range(iters):
+              A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+              elite = A[np.argsort(f(A))[:n_elite]]
+              mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+          return mu, sigma
+
+      def reach(goal, T, rng):
+          env = Reacher2D()
+          q = env.reset(q=(0.0, 0.0), goal=goal)[:2]
+          mu = np.zeros((10, 2))
+          qs, actions = [q], []
+          for k in range(T):
+              def f(A):
+                  return rollout_costs(env.dynamics, env.cost, q, A)
+              mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)
+              u = mu[0]
+              q = env.dynamics(q, u)
+              qs.append(q)
+              actions.append(u)
+              mu = np.vstack([mu[1:], np.zeros((1, 2))])
+          return np.array(qs), np.array(actions)
+
+      qs, actions = reach((-0.5, 1.2), 50, np.random.default_rng(0))
+      env = Reacher2D()
+      env.reset(goal=(-0.5, 1.2))
+      env.render(qs, title="CEM-MPC fährt zum Ziel")
+    tests:
+      - name: Formen und Modell
+        code: |
+          qs_t, u_t = reach((1.0, 1.0), 5, np.random.default_rng(1))
+          assert np.shape(qs_t) == (6, 2) and np.shape(u_t) == (5, 2), f"Formen (6, 2) und (5, 2) erwartet, bekommen {np.shape(qs_t)} und {np.shape(u_t)}"
+          env_t = Reacher2D()
+          for k in range(5):
+              assert close(qs_t[k + 1], env_t.dynamics(qs_t[k], u_t[k])), f"qs[{k + 1}] passt nicht zu dynamics(qs[{k}], actions[{k}])"
+      - name: Erreicht Ziel oben links
+        code: |
+          env_t = Reacher2D()
+          qs_t, u_t = reach((-0.5, 1.2), 40, np.random.default_rng(0))
+          d = np.linalg.norm(env_t.fk(qs_t[-5:]) - np.array([-0.5, 1.2]), axis=-1)
+          assert d.max() < 0.1, f"In den letzten 5 Schritten sollte der Abstand < 0.1 m sein, maximal {d.max():.3f} m"
+      - name: Erreicht Ziel unten rechts
+        code: |
+          env_t = Reacher2D()
+          qs_t, u_t = reach((0.3, -1.4), 40, np.random.default_rng(2))
+          d = np.linalg.norm(env_t.fk(qs_t[-1]) - np.array([0.3, -1.4]))
+          assert d < 0.1, f"Am Ende sollte der Abstand < 0.1 m sein, ist {d:.3f} m"
+    mutants:
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                elite = A[np.argsort(f(A))[:n_elite]]
+                mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+            return mu, sigma
+        def reach(goal, T, rng):
+            env = Reacher2D()
+            q = env.reset(q=(0.0, 0.0), goal=goal)[:2]
+            mu = np.zeros((10, 2))
+            qs, actions = [q], []
+            for k in range(T):
+                def f(A):
+                    return rollout_costs(env.dynamics, env.cost, q, A)
+                mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)
+                u = mu[-1]
+                q = env.dynamics(q, u)
+                qs.append(q)
+                actions.append(u)
+                mu = np.vstack([mu[1:], np.zeros((1, 2))])
+            return np.array(qs), np.array(actions)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                elite = A[np.argsort(f(A))[:n_elite]]
+                mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+            return mu, sigma
+        def reach(goal, T, rng):
+            env = Reacher2D()
+            q = env.reset(q=(0.0, 0.0))[:2]
+            mu = np.zeros((10, 2))
+            qs, actions = [q], []
+            for k in range(T):
+                def f(A):
+                    return rollout_costs(env.dynamics, env.cost, q, A)
+                mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)
+                u = mu[0]
+                q = env.dynamics(q, u)
+                qs.append(q)
+                actions.append(u)
+                mu = np.vstack([mu[1:], np.zeros((1, 2))])
+            return np.array(qs), np.array(actions)
+      - |
+        import numpy as np
+        from lab.envs import Reacher2D
+        def rollout_costs(dynamics, cost, s0, A):
+            s = np.tile(s0, (A.shape[0], 1))
+            total = np.zeros(A.shape[0])
+            for t in range(A.shape[1]):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def cem(f, mu, sigma, N, n_elite, iters, rng):
+            for it in range(iters):
+                A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+                elite = A[np.argsort(f(A))[:n_elite]]
+                mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+            return mu, sigma
+        def reach(goal, T, rng):
+            env = Reacher2D()
+            q0 = env.reset(q=(0.0, 0.0), goal=goal)[:2]
+            q = q0
+            mu = np.zeros((10, 2))
+            qs, actions = [q], []
+            for k in range(T):
+                def f(A):
+                    return rollout_costs(env.dynamics, env.cost, q0, A)
+                mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)
+                u = mu[0]
+                q = env.dynamics(q, u)
+                qs.append(q)
+                actions.append(u)
+                mu = np.vstack([mu[1:], np.zeros((1, 2))])
+            return np.array(qs), np.array(actions)
+    hints:
+      - "Teilziel: wie beim Pendel – Batch-Kosten vom aktuellen `q`, planen, erste Aktion ausführen, speichern, Plan verschieben."
+      - "Die Kostenfunktion für `cem` ist `def f(A): return rollout_costs(env.dynamics, env.cost, q, A)` – in der Schleife, damit sie das aktuelle `q` benutzt."
+      - "`mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)` und `u = mu[0]`"
+      - "Danach `q = env.dynamics(q, u)`, beide Listen ergänzen und `mu = np.vstack([mu[1:], np.zeros((1, 2))])`"
+  - type: example
+    intro: |
+      MPC reagiert sofort, wenn sich das Ziel ändert – es plant ja jeden Schritt neu. Hier springt das Ziel alle 40 Schritte (2 s).
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import Reacher2D
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def cem(f, mu, sigma, N, n_elite, iters, rng):
+          for it in range(iters):
+              A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+              elite = A[np.argsort(f(A))[:n_elite]]
+              mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+          return mu, sigma
+
+      env = Reacher2D()
+      rng = np.random.default_rng(0)
+      q, mu = np.zeros(2), np.zeros((10, 2))
+      szene = lab.Scene(title="Wechselnde Ziele", bounds=[-2.3, 2.3, -2.3, 2.3], fps=20)
+      szene.circle(0, 0, 2.0, color="muted", width=1, static=True)
+      for i, ziel in enumerate([(-0.5, 1.2), (1.4, -0.6), (-1.2, -1.0)]):
+          env.reset(q=q, goal=ziel)
+          for k in range(40):
+              def f(A):
+                  return rollout_costs(env.dynamics, env.cost, q, A)
+              mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)
+              q = env.dynamics(q, mu[0])
+              mu = np.vstack([mu[1:], np.zeros((1, 2))])
+              szene.circle(ziel[0], ziel[1], 0.08, color="bad", fill="bad")
+              szene.line(lab.arm_points(q), color="c1", width=6)
+              szene.caption(f"Ziel {i + 1}, Abstand {np.linalg.norm(env.fk(q) - env.goal):.2f} m")
+              szene.next_frame()
+          print("Ziel", i + 1, "Abstand:", round(float(np.linalg.norm(env.fk(q) - env.goal)), 2))
+      szene.show()
+    subgoals:
+      - lines: [23, 24]
+        label: Szene vorbereiten
+      - lines: [25, 26]
+        label: Neues Ziel setzen
+      - lines: [27, 31]
+        label: CEM-MPC-Schritt
+      - lines: [32, 35]
+        label: Frame zeichnen
+    after: |
+      Nach jedem Zielwechsel dreht der Arm sofort um. Die Gelenkgeschwindigkeit ist auf 2 rad/s begrenzt, deshalb dauert ein großer Umweg sichtbar länger. Dasselbe Programm würde mit einem **gelernten** Modell statt `env.dynamics` funktionieren – genau das baust du in Modul 16.
+  - type: predict
+    intro: |
+      Das Ziel $(0, 3)$ liegt außerhalb der Reichweite (beide Glieder 1 m). Welcher Endabstand ist nach 40 Schritten CEM-MPC zu erwarten?
+    code: |
+      import numpy as np
+      from lab.envs import Reacher2D
+
+      def rollout_costs(dynamics, cost, s0, A):
+          s = np.tile(s0, (A.shape[0], 1))
+          total = np.zeros(A.shape[0])
+          for t in range(A.shape[1]):
+              total = total + cost(s, A[:, t])
+              s = dynamics(s, A[:, t])
+          return total
+
+      def cem(f, mu, sigma, N, n_elite, iters, rng):
+          for it in range(iters):
+              A = mu + sigma * rng.standard_normal((N,) + mu.shape)
+              elite = A[np.argsort(f(A))[:n_elite]]
+              mu, sigma = elite.mean(axis=0), elite.std(axis=0)
+          return mu, sigma
+
+      env = Reacher2D()
+      q = env.reset(q=(0.0, 0.0), goal=(0.0, 3.0))[:2]
+      rng = np.random.default_rng(0)
+      mu = np.zeros((10, 2))
+      for k in range(40):
+          def f(A):
+              return rollout_costs(env.dynamics, env.cost, q, A)
+          mu, _ = cem(f, mu, np.ones((10, 2)), 60, 6, 3, rng)
+          q = env.dynamics(q, mu[0])
+          mu = np.vstack([mu[1:], np.zeros((1, 2))])
+      print(round(float(np.linalg.norm(env.fk(q) - env.goal)), 1))
+    options: ["1.0", "0.0", "3.0", "2.0"]
+    answer: "1.0"
+    explanation: |
+      Der Planer minimiert den Abstand, so gut es geht: Er streckt den Arm ($q_2 \approx 0$) in Richtung Ziel ($q_1 \approx \pi/2$). Die Spitze steht dann bei $(0, 2)$ – 1 m vor dem Ziel. Ein Planer meldet keinen Fehler; ob ein Ziel erreichbar ist, muss man selbst prüfen.
+  - type: quiz
+    question: |
+      Ohne den Term $0.01\,\lVert u \rVert^2$ in den Kosten zittert der Arm am Ziel stärker. Warum?
+    options:
+      - text: Dann sind alle Geschwindigkeiten gleich teuer, und zufällige, große Ausgleichsbewegungen werden nicht bestraft.
+        correct: true
+        why: Der kleine Aufwandsterm macht unter fast gleich guten Folgen die ruhigere zur besseren – ein übliches Mittel gegen Zappeln.
+      - text: Weil das Modell ohne den Term instabil wird
+        correct: false
+        why: Das Modell ist unabhängig von der Kostenfunktion; nur die Bewertung der Folgen ändert sich.
+      - text: Weil der Arm sonst das Ziel nicht erreichen kann
+        correct: false
+        why: Erreichen kann er es weiterhin – der Term betrifft die Ruhe, nicht die Erreichbarkeit.
+cards:
+  - id: m11-c-aktion-form
+    concept: plan-mehrdim-aktion
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.zeros((60, 10, 2))
+          print(A[:, 0].shape, A[0].shape)
+        options: ["(60, 2) (10, 2)", "(10, 2) (60, 2)", "(60,) (10,)", "(60, 10) (10, 2)"]
+        answer: "(60, 2) (10, 2)"
+        explanation: "`A[:, 0]`: erste Aktion aller 60 Folgen. `A[0]`: die ganze erste Folge mit 10 Aktionsvektoren."
+      - type: quiz
+        question: Welche Form hat ein CEM-Mittelwert `mu` für den Arm mit Horizont 15?
+        options:
+          - text: "`(15, 2)`"
+            correct: true
+            why: 15 Zeitschritte, je 2 Gelenkgeschwindigkeiten.
+          - text: "`(2, 15)`"
+            correct: false
+            why: Konvention hier – Zeit zuerst, damit `mu[0]` die nächste Aktion ist.
+          - text: "`(15,)`"
+            correct: false
+            why: Das reicht nur für eine skalare Aktion wie beim Pendel.
+  - id: m11-c-unerreichbar
+    concept: plan-mehrdim-aktion
+    variants:
+      - type: quiz
+        question: Ein Ziel liegt 2,5 m von der Basis entfernt, der Arm reicht 2 m. Was macht ein Planer, der den Abstand minimiert?
+        options:
+          - text: Er streckt den Arm in Richtung Ziel; es bleibt ein Abstand von etwa 0,5 m.
+            correct: true
+            why: Das ist das Minimum der Kosten über den Arbeitsraum.
+          - text: Er meldet einen Fehler.
+            correct: false
+            why: Ein Sampling-Planer optimiert nur – er weiß nichts von Erreichbarkeit.
+          - text: Er bleibt in der Startstellung stehen.
+            correct: false
+            why: Jede Annäherung senkt die Kosten, also bewegt er sich.
+      - type: quiz
+        question: "Ziel $(3, 0)$, Arm mit $l_1 = l_2 = 1$ m startet gestreckt bei $q = (0, 0)$. Was passiert?"
+        options:
+          - text: Fast nichts – der Arm zeigt schon zum Ziel, der Abstand bleibt 1 m.
+            correct: true
+            why: Gestreckt entlang der x-Achse liegt die Spitze bei $(2, 0)$, näher geht es nicht.
+          - text: Der Arm dreht sich, bis der Abstand 0 ist.
+            correct: false
+            why: Das Ziel liegt außerhalb der Reichweite von 2 m.
+          - text: Der Arm knickt ein, um das Ziel zu erreichen.
+            correct: false
+            why: Einknicken verkürzt die Reichweite und erhöht den Abstand.
+  - id: m11-c-mpc-zielwechsel
+    concept: plan-mpc
+    variants:
+      - type: quiz
+        question: Warum reagiert der Arm im MPC sofort auf ein neues Ziel?
+        options:
+          - text: Weil in jedem Schritt mit der aktuellen Kostenfunktion neu geplant wird
+            correct: true
+            why: Das neue Ziel steckt sofort in den Kosten, also auch im nächsten Plan.
+          - text: Weil der Warmstart das neue Ziel kennt
+            correct: false
+            why: Der Warmstart enthält den **alten** Plan – er wird nach dem Zielwechsel schnell überschrieben.
+          - text: Weil die Gelenke keine Geschwindigkeitsgrenze haben
+            correct: false
+            why: Doch, ±2 rad/s – deshalb dauert ein großer Umweg sichtbar länger.
+      - type: quiz
+        question: Das Ziel springt plötzlich auf die andere Seite. Warum braucht der Arm trotz MPC ein, zwei Sekunden?
+        options:
+          - text: Die Gelenkgeschwindigkeit ist auf 2 rad/s begrenzt – ein halber Umlauf ($\pi$ rad) dauert mindestens etwa 1,6 s.
+            correct: true
+            why: Der Planer reagiert sofort, die Physik (hier die Geschwindigkeitsgrenze) bestimmt das Tempo.
+          - text: Weil MPC erst nach einigen Schritten neu plant
+            correct: false
+            why: MPC plant in jedem Schritt neu.
+          - text: Weil der Warmstart das alte Ziel dauerhaft festhält
+            correct: false
+            why: Der alte Plan ist nur der Startpunkt und wird nach wenigen Updates ersetzt.

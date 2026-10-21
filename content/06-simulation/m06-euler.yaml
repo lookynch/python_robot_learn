@@ -1,0 +1,281 @@
+id: m06-euler
+title: Expliziter Euler
+minutes: 9
+goals:
+  - Eine ODE $\dot x = f(x)$ mit dem expliziten Euler-Verfahren simulieren
+  - Die Simulation mit der analytischen Lösung vergleichen
+  - Erkennen, dass der Fehler proportional zur Schrittweite `dt` ist
+concepts: [euler-explizit, diskretisierungsfehler, sim-schleife]
+steps:
+  - type: text
+    body: |
+      ## Ableitung × Zeitschritt
+
+      Viele physikalische Modelle sind gewöhnliche Differentialgleichungen (ODE) der Form $\dot x = f(x)$: Die Funktion $f$ sagt, wie schnell sich der Zustand **gerade** ändert.
+
+      Das einfachste Verfahren nimmt diese Änderungsrate und tut so, als bliebe sie einen ganzen Zeitschritt konstant:
+
+      $$
+      x_{k+1} = x_k + dt \cdot f(x_k)
+      $$
+
+      Das ist der **explizite Euler** (explicit Euler): ein Stück entlang der Tangente gehen, neu ableiten, wieder ein Stück gehen.
+
+      Beispiel freier Fall mit Zustand $x = [y, v]$: $f(x) = [v,\ -g]$.
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      g = 9.81      # m/s²
+      dt = 0.1      # s
+
+      def f(state):
+          y, v = state
+          return np.array([v, -g])
+
+      state = np.array([10.0, 0.0])    # 10 m Höhe, in Ruhe
+      ys = [state[0]]
+      for k in range(10):
+          state = state + dt * f(state)
+          ys.append(state[0])
+
+      ts = np.arange(11) * dt
+      exact = 10.0 - 0.5 * g * ts**2
+      print(f"Euler: {ys[-1]:.4f} m, exakt: {exact[-1]:.4f} m")
+
+      fig = lab.Figure(title="Freier Fall, dt = 0.1 s", xlabel="t [s]", ylabel="y [m]")
+      fig.line(ys, x=ts, label="Euler")
+      fig.line(exact, x=ts, label="exakt")
+      fig.show()
+    subgoals:
+      - lines: [7, 9]
+        label: Rechte Seite f(x) definieren
+      - lines: [11, 15]
+        label: Euler-Schleife
+      - lines: [17, 19]
+        label: Mit analytischer Lösung vergleichen
+      - lines: [21, 24]
+        label: Beide Kurven plotten
+    after: |
+      Nach 1 s liegt Euler bei 5,5855 m, exakt wären $10 - \tfrac12 g t^2 = 5{,}095$ m. Die Simulation fällt **zu langsam**. Beachte: `state + dt * f(state)` rechnet mit dem ganzen Array auf einmal – dieselbe Zeile funktioniert für jeden Zustandsvektor.
+  - type: explain
+    question: |
+      Warum fällt der Euler-Ball zu langsam?
+    options:
+      - text: In jedem Schritt wird die Geschwindigkeit vom **Anfang** des Intervalls benutzt – beim Fallen ist das betragsmäßig die kleinste im Intervall.
+        correct: true
+        why: Genau. Im ersten Schritt ist $v = 0$, der Ball bewegt sich also gar nicht. Der Fehler entsteht, weil $f$ über den Schritt als konstant angenommen wird.
+      - text: Wegen Rundungsfehlern bei Kommazahlen.
+        correct: false
+        why: Rundungsfehler liegen bei etwa $10^{-16}$. Hier geht es um 0,49 m – das ist der Verfahrensfehler (Diskretisierungsfehler).
+      - text: Weil $g$ im Code negativ ist.
+        correct: false
+        why: Das Vorzeichen stimmt (y zeigt nach oben). Die exakte Lösung hat dasselbe Vorzeichen.
+      - text: Weil 10 Schritte zu wenige für 1 s sind – die Simulation endet zu früh.
+        correct: false
+        why: 10 · 0,1 s = 1 s. Die Zeit stimmt, nur die Position nicht.
+  - type: predict
+    intro: |
+      Wir halbieren die Schrittweite und vergleichen den Fehler nach 1 s. (`y, v = y + v * dt, v - g * dt` rechnet beide rechten Seiten mit den **alten** Werten aus – das ist genau der Euler-Schritt.)
+    code: |
+      def fall(dt, T=1.0, g=9.81):
+          y, v = 10.0, 0.0
+          for k in range(round(T / dt)):
+              y, v = y + v * dt, v - g * dt
+          return y
+
+      exact = 10.0 - 0.5 * 9.81 * 1.0**2
+      e1 = fall(0.1) - exact
+      e2 = fall(0.05) - exact
+      print(round(e1 / e2, 2))
+    question: Um welchen Faktor ist der Fehler mit `dt = 0.1` größer als mit `dt = 0.05`?
+    options: ["2.0", "4.0", "1.0", "0.5"]
+    answer: "2.0"
+    explanation: |
+      Der globale Fehler des Euler-Verfahrens ist proportional zu `dt` (Verfahren **1. Ordnung**). Halbe Schrittweite → halber Fehler, aber doppelt so viele Schritte. Für den freien Fall gilt sogar exakt: Fehler $= \tfrac12 g\, T\, dt$.
+  - type: fill
+    fading: true
+    prompt: |
+      Simuliere den Zerfall $\dot x = -k x$ mit $x(0) = 1$, $k = 1$ 1/s über 1 s. Ergänze die Lücken, sodass $0{,}3487$ herauskommt (exakt wäre $e^{-1} \approx 0{,}3679$).
+    code: |
+      k = 1.0
+      dt = 0.1
+
+      def f(x):
+          return -k * x
+
+      x = 1.0
+      for i in range(___):
+          x = x + ___ * f(___)
+      print(round(x, 4))
+    blanks:
+      - answer: "10"
+        options: ["10", "11", "9"]
+      - answer: dt
+        options: [dt, "1/dt", k]
+      - answer: x
+        options: [x, dt, "1.0"]
+    expect_output: "0.3487"
+    explanation: |
+      1 s / 0,1 s = 10 Schritte. Jeder Schritt multipliziert mit $(1 - k\,dt) = 0{,}9$, also $0{,}9^{10} = 0{,}3487$. `f` muss am **aktuellen** Zustand ausgewertet werden, nicht an einer Konstanten.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe eine allgemeine Funktion `euler(f, x0, dt, n_steps)`. Sie bekommt die rechte Seite `f` (eine Funktion), den Startzustand `x0` (Liste oder Array) und gibt die Trajektorie als Array der Form `(n_steps + 1, len(x0))` zurück.
+    starter: |
+      import numpy as np
+
+      def euler(f, x0, dt, n_steps):
+          x = np.array(x0, dtype=float)
+          traj = [x]
+          # n_steps Euler-Schritte, jeden neuen Zustand anhängen
+          return np.array(traj)
+    solution: |
+      import numpy as np
+
+      def euler(f, x0, dt, n_steps):
+          x = np.array(x0, dtype=float)
+          traj = [x]
+          for k in range(n_steps):
+              x = x + dt * f(x)
+              traj.append(x)
+          return np.array(traj)
+    tests:
+      - name: Zerfall x' = -x
+        code: |
+          def decay(x):
+              return -x
+          traj = euler(decay, [1.0], 0.1, 10)
+          assert np.shape(traj) == (11, 1), f"Erwartet Form (11, 1), bekommen {np.shape(traj)}"
+          assert close(traj[:, 0], 0.9 ** np.arange(11)), f"Erwartet 0.9**k, bekommen {np.round(traj[:, 0], 4)}"
+      - name: Freier Fall
+        code: |
+          def fall(s):
+              return np.array([s[1], -9.81])
+          traj = euler(fall, [10.0, 0.0], 0.1, 10)
+          assert np.shape(traj) == (11, 2), f"Erwartet Form (11, 2), bekommen {np.shape(traj)}"
+          assert close(traj[-1], [5.5855, -9.81]), f"Nach 1 s erwartet [5.5855, -9.81], bekommen {traj[-1]}"
+      - name: Startzustand bleibt erste Zeile
+        code: |
+          def zero(s):
+              return np.zeros(2)
+          traj = euler(zero, [3.0, -1.0], 0.5, 2)
+          assert close(traj, [[3.0, -1.0]] * 3), f"Bei f = 0 darf sich nichts ändern, bekommen {traj.tolist()}"
+    mutants:
+      - |
+        import numpy as np
+
+        def euler(f, x0, dt, n_steps):
+            x = np.array(x0, dtype=float)
+            traj = [x]
+            for k in range(n_steps):
+                x = x + f(x)
+                traj.append(x)
+            return np.array(traj)
+      - |
+        import numpy as np
+
+        def euler(f, x0, dt, n_steps):
+            x = np.array(x0, dtype=float)
+            traj = []
+            for k in range(n_steps):
+                x = x + dt * f(x)
+                traj.append(x)
+            return np.array(traj)
+      - |
+        import numpy as np
+
+        def euler(f, x0, dt, n_steps):
+            x = np.array(x0, dtype=float)
+            traj = [x]
+            for k in range(n_steps):
+                x = x + dt * f(np.array(x0))
+                traj.append(x)
+            return np.array(traj)
+    hints:
+      - "Teilziel: Euler-Schleife – in jedem Schritt neuen Zustand berechnen und anhängen."
+      - "Der Euler-Schritt ist $x_{k+1} = x_k + dt \\cdot f(x_k)$; `f` wird mit dem **aktuellen** `x` aufgerufen."
+      - |
+        ```python
+        for k in range(n_steps):
+            x = ...
+            traj.append(x)
+        ```
+      - "`x = x + dt * f(x)`"
+    explanation: |
+      Diese eine Funktion simuliert jedes System, dessen Ableitung du als `f(x)` hinschreiben kannst – Zerfall, freien Fall, Feder, Pendel.
+  - type: quiz
+    question: |
+      Eine Euler-Simulation hat nach 5 s einen Fehler von 4 cm. Du verkleinerst `dt` auf ein Zehntel. Was erwartest du?
+    options:
+      - text: Fehler etwa 4 mm, Rechenzeit etwa 10-mal so lang
+        correct: true
+        why: Euler ist 1. Ordnung – der Fehler skaliert linear mit `dt`, die Zahl der Schritte mit $1/dt$.
+      - text: Fehler etwa 0,4 mm
+        correct: false
+        why: Das wäre ein Verfahren 2. Ordnung (Fehler ~ $dt^2$). Euler ist 1. Ordnung.
+      - text: Fehler unverändert, nur mehr Zwischenpunkte
+        correct: false
+        why: Der Fehler kommt gerade aus der Annahme, $f$ sei über einen Schritt konstant – kleinere Schritte verringern ihn.
+      - text: Fehler 0, weil die Simulation jetzt exakt ist
+        correct: false
+        why: Mit endlichem `dt` bleibt ein Fehler; er wird nur kleiner.
+cards:
+  - id: m06-c-euler-schritt
+    concept: euler-explizit
+    variants:
+      - type: predict
+        code: |
+          x = 2.0
+          dt = 0.5
+          x = x + dt * (-x)
+          print(x)
+        options: ["1.0", "0.0", "3.0", "1.5"]
+        answer: "1.0"
+        explanation: "$f(2) = -2$, also $2 + 0{,}5 \\cdot (-2) = 1$."
+      - type: predict
+        code: |
+          y, v = 5.0, 2.0
+          dt = 0.5
+          y, v = y + dt * v, v + dt * (-10.0)
+          print(y, v)
+        options: ["6.0 -3.0", "3.5 -3.0", "6.0 -8.0", "5.0 -3.0"]
+        answer: "6.0 -3.0"
+        explanation: Beide rechten Seiten nutzen die **alten** Werte; $y$ ändert sich um $0{,}5 \cdot 2 = 1$, $v$ um $0{,}5 \cdot (-10) = -5$.
+      - type: predict
+        code: |
+          x = 4.0
+          for k in range(2):
+              x = x + 0.25 * (-2.0 * x)
+          print(x)
+        options: ["1.0", "2.0", "0.0", "3.0"]
+        answer: "1.0"
+        explanation: "Jeder Schritt multipliziert mit $1 - 0{,}25 \\cdot 2 = 0{,}5$: 4 → 2 → 1."
+  - id: m06-c-euler-ordnung
+    concept: diskretisierungsfehler
+    variants:
+      - type: quiz
+        question: Euler mit `dt = 0.02` s hat nach 2 s einen Fehler von 6 mm. Welcher Fehler ist mit `dt = 0.01` s zu erwarten?
+        options:
+          - text: etwa 3 mm
+            correct: true
+            why: Fehler ~ `dt` (1. Ordnung).
+          - text: etwa 1,5 mm
+            correct: false
+            why: Das wäre ein Verfahren 2. Ordnung.
+          - text: etwa 12 mm, weil doppelt so viele Schritte Fehler sammeln
+            correct: false
+            why: Es sind mehr Schritte, aber jeder hat einen viermal kleineren lokalen Fehler (~ $dt^2$). In Summe halbiert sich der Fehler.
+      - type: quiz
+        question: Wovon hängt der Verfahrensfehler des expliziten Euler hauptsächlich ab?
+        options:
+          - text: von der Schrittweite `dt`
+            correct: true
+            why: Der globale Fehler ist proportional zu `dt`.
+          - text: von der Anzahl der Nachkommastellen bei `print`
+            correct: false
+            why: "`print` ändert nur die Anzeige, nicht die Rechnung."
+          - text: davon, ob der Zustand als Liste oder Array gespeichert wird
+            correct: false
+            why: Die Datenstruktur ändert die Rechnung nicht.

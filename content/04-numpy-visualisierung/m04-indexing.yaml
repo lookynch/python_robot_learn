@@ -1,0 +1,354 @@
+id: m04-indexing
+title: Indizieren, Slicing und Masken
+minutes: 10
+goals:
+  - Einzelne Werte, Zeilen und Spalten eines 2D-Arrays auswählen
+  - Slices `start:stop:step` auf Arrays anwenden
+  - Mit booleschen Masken Werte auswählen und gezielt ändern
+concepts: [np-indexing, np-maske]
+steps:
+  - type: text
+    body: |
+      ## Zeilen und Spalten
+
+      Eine aufgezeichnete Bewegung (Trajektorie) speicherst du als 2D-Array: **eine Zeile pro Zeitschritt, eine Spalte pro Gelenk**.
+
+      | Ausdruck | Bedeutung |
+      |---|---|
+      | `traj[i, j]` | Zeile `i`, Spalte `j` (ab 0 gezählt) |
+      | `traj[i]` | ganze Zeile `i` – kurz für `traj[i, :]` |
+      | `traj[:, j]` | ganze Spalte `j` |
+      | `traj[1:3, :]` | Zeilen 1 und 2 (Stopp ausgeschlossen) |
+      | `traj[-1]` | letzte Zeile |
+
+      Der Doppelpunkt `:` allein heißt „alle“. Slices funktionieren wie bei Listen aus Modul 2 – nur eben pro Achse, durch Komma getrennt.
+  - type: example
+    code: |
+      import numpy as np
+      traj = np.array([[0.0, 0.1],
+                       [0.2, 0.3],
+                       [0.4, 0.5],
+                       [0.6, 0.7]])
+      print(traj.shape)
+      print(traj[1, 0])
+      print(traj[:, 1])
+      print(traj[-1])
+      print(traj[1:3, :])
+    subgoals:
+      - lines: [1, 5]
+        label: Trajektorie anlegen (4 Zeitschritte, 2 Gelenke)
+      - lines: [6, 7]
+        label: Einzelwert lesen
+      - lines: [8, 9]
+        label: Spalte und Zeile auswählen
+      - lines: 10
+        label: Bereich von Zeilen ausschneiden
+    after: |
+      `traj[:, 1]` ist der ganze Verlauf von Gelenk 2 – genau das, was du später plotten willst. Eine ausgewählte Spalte ist wieder ein 1D-Array.
+  - type: explain
+    question: |
+      Warum liefert `traj[:, 1]` den Verlauf von **Gelenk 2** über alle Zeitschritte?
+    options:
+      - text: "`:` wählt alle Zeilen (Zeitschritte), `1` die zweite Spalte (Gelenk 2, weil ab 0 gezählt)."
+        correct: true
+        why: Erst Zeilen, dann Spalten – und Indizes beginnen bei 0.
+      - text: "`:` bedeutet „ab Zeile 1“, also alles außer der ersten Zeile."
+        correct: false
+        why: Das wäre `traj[1:, ...]`. Ein `:` ohne Zahlen heißt „alle“.
+      - text: "`traj[:, 1]` liefert die zweite Zeile."
+        correct: false
+        why: Die zweite Zeile wäre `traj[1]` bzw. `traj[1, :]`. Die Position vor dem Komma ist die Zeile.
+  - type: predict
+    code: |
+      import numpy as np
+      M = np.array([[1, 2, 3, 4],
+                    [5, 6, 7, 8],
+                    [9, 10, 11, 12]])
+      print(M[1, 2])
+      print(M[:, 0])
+      print(M[2])
+    options:
+      - |
+        7
+        [1 5 9]
+        [ 9 10 11 12]
+      - |
+        10
+        [1 5 9]
+        [ 9 10 11 12]
+      - |
+        7
+        [1 2 3 4]
+        [ 3  7 11]
+    answer: |
+      7
+      [1 5 9]
+      [ 9 10 11 12]
+    explanation: |
+      `M[1, 2]`: Zeile 1 (die zweite), Spalte 2 (die dritte) → 7. `M[:, 0]` ist die erste Spalte, `M[2]` die dritte Zeile.
+  - type: text
+    body: |
+      ## Boolesche Masken
+
+      Ein Vergleich mit einem Array liefert ein Array aus `True`/`False` – eine **Maske**:
+
+      ```python
+      q = np.array([0.2, -1.8, 1.0])
+      q > 0.5            # [False False  True]
+      ```
+
+      Damit kannst du **auswählen** – `q[q > 0.5]` liefert nur die Werte, bei denen die Maske `True` ist – und **gezielt ändern**: `q[q > 1.5] = 1.5` setzt nur diese Werte.
+
+      Bedingungen verknüpfst du mit `&` (und), `|` (oder) und `~` (nicht), jeweils mit Klammern: `(q > 0) & (q < 1)`. Die Wörter `and`/`or` funktionieren mit Arrays **nicht**.
+  - type: example
+    code: |
+      import numpy as np
+      q = np.array([0.2, -1.8, 1.0, 2.5])
+      grenze = 1.5
+      zu_gross = np.abs(q) > grenze
+      print(zu_gross)
+      print(q[zu_gross])
+      q[q > grenze] = grenze
+      q[q < -grenze] = -grenze
+      print(q)
+    subgoals:
+      - lines: [1, 3]
+        label: Gelenkwinkel und Grenze festlegen
+      - lines: [4, 6]
+        label: Maske bilden und Werte auswählen
+      - lines: [7, 9]
+        label: Werte außerhalb der Grenze begrenzen
+    after: |
+      So begrenzt man Gelenkwinkel auf einen erlaubten Bereich (hier ±1.5 rad). Für genau diesen Fall gibt es auch die Kurzform `np.clip(q, -grenze, grenze)`.
+  - type: predict
+    code: |
+      import numpy as np
+      a = np.array([3, -1, 4, -1, 5])
+      print(a[a > 0])
+      print((a > 0).sum())
+    options:
+      - |
+        [3 4 5]
+        3
+      - |
+        [ True False  True False  True]
+        3
+      - |
+        [3 4 5]
+        12
+    answer: |
+      [3 4 5]
+      3
+    explanation: |
+      `a[a > 0]` wählt die positiven Werte aus. `(a > 0).sum()` zählt sie: `True` zählt als 1, `False` als 0. Das ist ein gängiger Trick zum Zählen.
+  - type: fill
+    fading: true
+    prompt: |
+      Wähle den Verlauf von Gelenk 1 (erste Spalte) und gib nur die Winkel aus, die größer als 0.3 rad sind.
+    code: |
+      import numpy as np
+      traj = np.array([[0.0, 0.1], [0.2, 0.3], [0.4, 0.5], [0.6, 0.7]])
+      q1 = traj[___, 0]
+      print(q1[q1 ___ 0.3])
+    blanks:
+      - answer: ":"
+        options: [":", "0", "1"]
+      - answer: ">"
+        options: [">", "<", "=="]
+    expect_output: "[0.4 0.6]"
+  - type: parsons
+    fading: true
+    prompt: |
+      Nimm die zweite Spalte von `M`, setze darin alle negativen Werte auf 0 und gib sie aus. Achtung: Es gibt überzählige Zeilen.
+    lines:
+      - "import numpy as np"
+      - "M = np.array([[1.0, -2.0], [-3.0, 4.0]])"
+      - "spalte = M[:, 1]"
+      - "spalte[spalte < 0] = 0.0"
+      - "print(spalte)"
+    distractors:
+      - "spalte = M[:, 0]"
+      - "spalte[spalte > 0] = 0.0"
+    expect_output: "[0. 4.]"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Das Programm soll alle Gelenkwinkel ausgeben, deren **Betrag** größer als 1.5 rad ist – also auch stark negative. Bisher fehlt `-2.0`. Ändere die Maske.
+    starter: |
+      import numpy as np
+      q = np.array([0.3, -2.0, 1.2, 1.9, -0.4])
+      print(q[q > 1.5])
+    solution: |
+      import numpy as np
+      q = np.array([0.3, -2.0, 1.2, 1.9, -0.4])
+      print(q[np.abs(q) > 1.5])
+    tests:
+      - name: Ausgabe
+        code: |
+          assert lines() == ["[-2.   1.9]"], f"Erwartet [-2.   1.9], bekommen {lines()}"
+    mutants:
+      - |
+        import numpy as np
+        q = np.array([0.3, -2.0, 1.2, 1.9, -0.4])
+        print(q[q < -1.5])
+      - |
+        import numpy as np
+        q = np.array([0.3, -2.0, 1.2, 1.9, -0.4])
+        print(q[np.abs(q) < 1.5])
+    hints:
+      - "Teilziel: Maske für „Betrag größer als 1.5“ bilden."
+      - "Der Betrag jedes Elements ist `np.abs(q)`."
+      - "`print(q[np.abs(q) > 1.5])`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `begrenze(q, grenze)`, die ein **neues** Array zurückgibt, in dem alle Werte größer als `grenze` durch `grenze` und alle kleiner als `-grenze` durch `-grenze` ersetzt sind. Das übergebene Array `q` darf sich dabei **nicht** ändern – arbeite deshalb auf einer Kopie: `q = q.copy()`.
+    starter: |
+      import numpy as np
+
+      def begrenze(q, grenze):
+          q = q.copy()
+          # dein Code
+          return q
+    solution: |
+      import numpy as np
+
+      def begrenze(q, grenze):
+          q = q.copy()
+          q[q > grenze] = grenze
+          q[q < -grenze] = -grenze
+          return q
+    tests:
+      - name: Beide Grenzen
+        code: |
+          import numpy as np
+          r = begrenze(np.array([0.2, -1.8, 1.0, 2.5]), 1.5)
+          assert close(r, [0.2, -1.5, 1.0, 1.5]), f"Erwartet [0.2, -1.5, 1.0, 1.5], bekommen {r}"
+      - name: Andere Grenze
+        code: |
+          import numpy as np
+          r = begrenze(np.array([-0.4, 0.1, 0.6]), 0.5)
+          assert close(r, [-0.4, 0.1, 0.5]), f"Erwartet [-0.4, 0.1, 0.5], bekommen {r}"
+      - name: Eingabe bleibt unverändert
+        code: |
+          import numpy as np
+          original = np.array([3.0, -3.0])
+          begrenze(original, 1.0)
+          assert close(original, [3.0, -3.0]), f"Das übergebene Array wurde verändert: {original}"
+    mutants:
+      - |
+        import numpy as np
+
+        def begrenze(q, grenze):
+            q = q.copy()
+            q[q > grenze] = grenze
+            return q
+      - |
+        import numpy as np
+
+        def begrenze(q, grenze):
+            q = q.copy()
+            q[q > grenze] = grenze
+            q[q < -grenze] = grenze
+            return q
+      - |
+        import numpy as np
+
+        def begrenze(q, grenze):
+            q[q > grenze] = grenze
+            q[q < -grenze] = -grenze
+            return q
+    hints:
+      - "Teilziel: zwei Masken – eine für zu große, eine für zu kleine Werte."
+      - "Mit `q[maske] = wert` setzt du nur die markierten Elemente."
+      - "`q[q > grenze] = grenze` – die untere Grenze analog mit `-grenze`."
+    explanation: |
+      Warum die Kopie? Arrays sind wie Listen **veränderlich**, und `q` in der Funktion ist derselbe Speicher wie das übergebene Array (Aliasing aus Modul 2). Ohne `copy()` würdest du die Daten des Aufrufers überschreiben.
+  - type: quiz
+    question: |
+      `M` hat die Form `(3, 4)`. Was liefert `M[2]`?
+    options:
+      - text: Die dritte Zeile – ein Array mit 4 Werten.
+        correct: true
+        why: Ein einzelner Index wählt eine Zeile; ab 0 gezählt ist 2 die dritte.
+      - text: Die dritte Spalte – ein Array mit 3 Werten.
+        correct: false
+        why: Eine Spalte wäre `M[:, 2]`.
+      - text: Den Wert in Zeile 2, Spalte 2.
+        correct: false
+        why: Dafür braucht es zwei Indizes, `M[2, 2]`.
+cards:
+  - id: m04-c-slice
+    concept: np-indexing
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.arange(6)
+          print(a[1:4])
+        options: ["[1 2 3]", "[1 2 3 4]", "[0 1 2 3]", "[2 3 4]"]
+        answer: "[1 2 3]"
+        explanation: Start 1 eingeschlossen, Stopp 4 ausgeschlossen.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.arange(8)
+          print(a[::2])
+        options: ["[0 2 4 6]", "[2 4 6]", "[0 2 4 6 8]", "[1 3 5 7]"]
+        answer: "[0 2 4 6]"
+        explanation: Jedes zweite Element, beginnend bei Index 0.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.arange(5)
+          print(a[-3:])
+        options: ["[2 3 4]", "[3 4]", "[0 1 2]", "[4 3 2]"]
+        answer: "[2 3 4]"
+        explanation: Die letzten drei Elemente.
+  - id: m04-c-2d-index
+    concept: np-indexing
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          M = np.array([[1, 2], [3, 4], [5, 6]])
+          print(M[:, 1])
+        options: ["[2 4 6]", "[3 4]", "[1 3 5]", "[[2] [4] [6]]"]
+        answer: "[2 4 6]"
+        explanation: Alle Zeilen, Spalte 1 (die zweite).
+      - type: predict
+        code: |
+          import numpy as np
+          M = np.array([[1, 2], [3, 4], [5, 6]])
+          print(M[2, 0])
+        options: ["5", "2", "3", "6"]
+        answer: "5"
+        explanation: Zeile 2 (dritte), Spalte 0 (erste).
+  - id: m04-c-maske
+    concept: np-maske
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([1, 5, 2, 8])
+          print(a[a >= 2])
+        options: ["[5 2 8]", "[5 8]", "[False  True  True  True]", "3"]
+        answer: "[5 2 8]"
+        explanation: Die Maske wählt alle Werte, die mindestens 2 sind, in der ursprünglichen Reihenfolge.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([-1.0, 2.0, -3.0])
+          a[a < 0] = 0.0
+          print(a)
+        options: ["[0. 2. 0.]", "[2.]", "[-1.  2. -3.]", "[0. 0. 0.]"]
+        answer: "[0. 2. 0.]"
+        explanation: Zuweisen mit Maske ändert nur die markierten Elemente; die Länge bleibt gleich.
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([0.1, 0.9, 0.4, 0.7])
+          print((a > 0.5).sum())
+        options: ["2", "1.6", "[False  True False  True]", "4"]
+        answer: "2"
+        explanation: "`True` zählt beim Summieren als 1 – so zählst du Treffer."

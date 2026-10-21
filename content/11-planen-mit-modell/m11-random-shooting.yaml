@@ -1,0 +1,346 @@
+id: m11-random-shooting
+title: Random Shooting
+minutes: 9
+goals:
+  - N Aktionsfolgen gleichzeitig als Array `(N, H)` simulieren
+  - Mit Random Shooting die beste von N zufälligen Folgen bestimmen
+  - Die Grenzen von Random Shooting bei langen Horizonten erkennen
+concepts: [plan-batch-rollout, plan-random-shooting]
+steps:
+  - type: text
+    body: |
+      ## Raten, simulieren, das Beste nehmen
+
+      Der einfachste Planer: Ziehe $N$ zufällige Aktionsfolgen der Länge $H$ (dem **Horizont**), rechne alle im Modell durch und nimm die mit den kleinsten Kosten. Das heißt **Random Shooting**.
+
+      Damit das schnell geht, simulieren wir alle $N$ Folgen **gleichzeitig**:
+
+      - Aktionen als Array `A` der Form `(N, H)`: Zeile $i$ = Folge $i$
+      - Zustände als Array der Form `(N, 2)`: eine Zeile pro Folge
+      - Python-Schleife nur über die Zeit $t$; `A[:, t]` sind die $N$ Aktionen zum Zeitpunkt $t$
+
+      Die Umgebungen in `lab.envs` sind dafür gebaut: `dynamics` und `cost` rechnen über führende Achsen.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          N, H = A.shape[0], A.shape[1]
+          s = np.tile(s0, (N, 1))
+          total = np.zeros(N)
+          for t in range(H):
+              u = A[:, t]
+              total = total + cost(s, u)
+              s = dynamics(s, u)
+          return total
+
+      env = Pendulum()
+      s0 = env.reset()
+      rng = np.random.default_rng(0)
+      A = rng.uniform(-2, 2, size=(500, 60))
+      J = rollout_costs(env.dynamics, env.cost, s0, A)
+      best = np.argmin(J)
+      print("beste:", round(float(J[best]), 1), "Mittel:", round(float(np.mean(J)), 1))
+
+      states = [s0]
+      for u in A[best]:
+          states.append(env.dynamics(states[-1], u))
+      env.render(np.array(states), title="Beste von 500 Zufallsfolgen")
+    subgoals:
+      - lines: [5, 7]
+        label: N Startzustände und Kostenzähler anlegen
+      - lines: [8, 11]
+        label: Alle Folgen zugleich einen Schritt weiter
+      - lines: [17, 20]
+        label: Sampeln, bewerten, das Beste wählen
+      - lines: [22, 25]
+        label: Beste Folge abspielen
+    after: |
+      `np.tile(s0, (N, 1))` stapelt den Startzustand $N$-mal zu einer $(N, 2)$-Matrix. Die beste Folge ist besser als der Durchschnitt (491 statt 548) – aber das Pendel wackelt nur unten herum. Unter 500 zufälligen Folgen mit je 60 Zufallszahlen ist keine, die im richtigen Takt Schwung holt.
+  - type: predict
+    code: |
+      import numpy as np
+      N, H = 5, 3
+      s0 = np.array([np.pi, 0.0])
+      A = np.zeros((N, H))
+      s = np.tile(s0, (N, 1))
+      print(s.shape, A[:, 0].shape)
+    options: ["(5, 2) (5,)", "(2, 5) (3,)", "(5, 2) (3,)", "(10,) (5,)"]
+    answer: "(5, 2) (5,)"
+    explanation: |
+      `np.tile(s0, (N, 1))` wiederholt `s0` 5-mal untereinander und 1-mal nebeneinander. `A[:, 0]` ist die **Spalte** 0: die erste Aktion jeder der 5 Folgen. `(3,)` wäre `A[0]`, die ganze erste Folge.
+  - type: explain
+    question: |
+      Warum schreibt man `rollout_costs` mit einer Schleife über $t$ und Arrays über die Folgen – statt einer Schleife über alle $N$ Folgen, die je `rollout` aufruft?
+    options:
+      - text: Dann laufen nur $H$ Python-Schleifendurchläufe; die $N$ Folgen rechnet NumPy in einem Aufruf.
+        correct: true
+        why: "Mit $N = 500$, $H = 60$: 60 statt 30 000 Durchläufe. Der Aufwand pro NumPy-Aufruf ist fast unabhängig von $N$ – im Browser und auf dem Handy entscheidend."
+      - text: Weil die Ergebnisse sonst anders wären
+        correct: false
+        why: Beide Varianten rechnen dasselbe – nur unterschiedlich schnell.
+      - text: Weil `env.dynamics` nur Arrays der Form `(N, 2)` akzeptiert
+        correct: false
+        why: "`dynamics` funktioniert auch mit einem einzelnen Zustand `(2,)` – das haben wir in der letzten Lektion genutzt."
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die vektorisierte Rollout-Funktion. `A` hat die Form `(N, H)`.
+    code: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          N, H = A.shape[0], A.shape[1]
+          s = np.tile(s0, (___, 1))
+          total = np.zeros(N)
+          for t in range(H):
+              u = A[___]
+              total = total + cost(s, u)
+              s = dynamics(s, u)
+          return total
+    blanks:
+      - answer: "N"
+        options: ["N", "H", "2"]
+      - answer: ":, t"
+        options: [":, t", "t", "t, :", ":, :"]
+    tests:
+      - name: Stimmt mit Einzel-Rollouts überein
+        code: |
+          env_t = Pendulum()
+          A_t = np.random.default_rng(3).uniform(-2, 2, size=(4, 7))
+          J_t = rollout_costs(env_t.dynamics, env_t.cost, np.array([2.0, 0.5]), A_t)
+          for i in range(4):
+              s_t, soll = np.array([2.0, 0.5]), 0.0
+              for u in A_t[i]:
+                  soll += env_t.cost(s_t, u)
+                  s_t = env_t.dynamics(s_t, u)
+              assert close(J_t[i], soll), f"Folge {i}: erwartet {soll:.4f}, bekommen {J_t[i]}"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `random_shooting(dynamics, cost, s0, N, H, rng, low, high)`:
+
+      1. `N` Folgen der Länge `H` gleichverteilt in `[low, high]` ziehen (`rng.uniform`),
+      2. mit `rollout_costs` bewerten,
+      3. das Tupel `(beste_folge, beste_kosten)` zurückgeben.
+    starter: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          N, H = A.shape[0], A.shape[1]
+          s = np.tile(s0, (N, 1))
+          total = np.zeros(N)
+          for t in range(H):
+              u = A[:, t]
+              total = total + cost(s, u)
+              s = dynamics(s, u)
+          return total
+
+      def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+          # dein Code
+          pass
+
+      env = Pendulum()
+      plan, J = random_shooting(env.dynamics, env.cost, env.reset(), 300, 20, np.random.default_rng(0), -2, 2)
+      print(plan.shape, round(float(J), 1))
+    solution: |
+      import numpy as np
+      from lab.envs import Pendulum
+
+      def rollout_costs(dynamics, cost, s0, A):
+          N, H = A.shape[0], A.shape[1]
+          s = np.tile(s0, (N, 1))
+          total = np.zeros(N)
+          for t in range(H):
+              u = A[:, t]
+              total = total + cost(s, u)
+              s = dynamics(s, u)
+          return total
+
+      def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+          A = rng.uniform(low, high, size=(N, H))
+          J = rollout_costs(dynamics, cost, s0, A)
+          i = np.argmin(J)
+          return A[i], J[i]
+
+      env = Pendulum()
+      plan, J = random_shooting(env.dynamics, env.cost, env.reset(), 300, 20, np.random.default_rng(0), -2, 2)
+      print(plan.shape, round(float(J), 1))
+    tests:
+      - name: Bekanntes Minimum (Spielzeugmodell)
+        code: |
+          def dyn_t(s, u):
+              return s + u[:, None]
+          def cost_t(s, u):
+              return s[:, 0] ** 2 + u ** 2
+          r = random_shooting(dyn_t, cost_t, np.array([1.0]), 2000, 2, np.random.default_rng(0), -1.0, 1.0)
+          assert r is not None, "Die Funktion gibt nichts zurück – fehlt return?"
+          folge, J_t = r
+          assert 1.5 - 1e-9 <= J_t <= 1.52, f"Das Minimum ist J = 1.5 bei u = (-0.5, 0); bestes gefundenes J = {J_t}"
+          assert close(folge, [-0.5, 0.0], tol=0.15), f"Beste Folge sollte nahe (-0.5, 0) liegen, ist {np.round(folge, 3)}"
+      - name: Kosten passen zur Folge
+        code: |
+          env_t = Pendulum()
+          folge, J_t = random_shooting(env_t.dynamics, env_t.cost, env_t.reset(), 200, 15, np.random.default_rng(1), -2.0, 2.0)
+          assert np.shape(folge) == (15,), f"Die Folge sollte Form (15,) haben, hat {np.shape(folge)}"
+          echt = rollout_costs(env_t.dynamics, env_t.cost, env_t.reset(), np.array([folge]))[0]
+          assert close(J_t, echt), f"Zurückgegebene Kosten {J_t} passen nicht zur Folge (echt {echt})"
+      - name: Besser als Nichtstun
+        code: |
+          env_t = Pendulum()
+          folge, J_t = random_shooting(env_t.dynamics, env_t.cost, np.array([0.8, 0.0]), 300, 15, np.random.default_rng(2), -2.0, 2.0)
+          J0 = rollout_costs(env_t.dynamics, env_t.cost, np.array([0.8, 0.0]), np.zeros((1, 15)))[0]
+          assert J_t < J0, f"Die beste Zufallsfolge ({J_t:.1f}) sollte besser sein als u = 0 ({J0:.1f})"
+    mutants:
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            N, H = A.shape[0], A.shape[1]
+            s = np.tile(s0, (N, 1))
+            total = np.zeros(N)
+            for t in range(H):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            i = np.argmax(J)
+            return A[i], J[i]
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            N, H = A.shape[0], A.shape[1]
+            s = np.tile(s0, (N, 1))
+            total = np.zeros(N)
+            for t in range(H):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(0, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            i = np.argmin(J)
+            return A[i], J[i]
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            N, H = A.shape[0], A.shape[1]
+            s = np.tile(s0, (N, 1))
+            total = np.zeros(N)
+            for t in range(H):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            return A[0], np.min(J)
+      - |
+        import numpy as np
+        def rollout_costs(dynamics, cost, s0, A):
+            N, H = A.shape[0], A.shape[1]
+            s = np.tile(s0, (N, 1))
+            total = np.zeros(N)
+            for t in range(H):
+                total = total + cost(s, A[:, t])
+                s = dynamics(s, A[:, t])
+            return total
+        def random_shooting(dynamics, cost, s0, N, H, rng, low, high):
+            A = rng.uniform(low, high, size=(N, H))
+            J = rollout_costs(dynamics, cost, s0, A)
+            i = np.argmin(J)
+            return A[:, i], J[i]
+    hints:
+      - "Teilziel: sampeln → bewerten → Index der kleinsten Kosten → Folge und Kosten zurückgeben."
+      - "Gleichverteilt: `rng.uniform(low, high, size=(N, H))`. Den Index des Minimums liefert `np.argmin`."
+      - "`A = rng.uniform(low, high, size=(N, H))` und `J = rollout_costs(dynamics, cost, s0, A)`"
+      - "`i = np.argmin(J)` und `return A[i], J[i]`"
+  - type: quiz
+    question: |
+      Mit $H = 60$ findet Random Shooting bei $N = 1000$ und $N = 10\,000$ fast dieselben besten Kosten (jeweils etwa 470–490). Was ist der Hauptgrund?
+    options:
+      - text: Der Suchraum hat 60 Dimensionen; zufällige Punkte treffen gute Bereiche darin fast nie, auch bei 10-mal mehr Samples.
+        correct: true
+        why: Das ist der **Fluch der Dimensionalität**. Abhilfe – kürzer planen und oft neu planen (MPC) oder die Suche gezielt verfeinern (CEM, MPPI).
+      - text: Das Modell ist zu ungenau.
+        correct: false
+        why: Hier ist das Modell exakt – das Problem ist die Suche, nicht das Modell.
+      - text: Bei 10 000 Samples läuft der Speicher über.
+        correct: false
+        why: Ein $(10000, 60)$-Array hat 4,8 MB – kein Problem. Die Ergebnisse sind einfach nicht besser.
+cards:
+  - id: m11-c-batch-shape
+    concept: plan-batch-rollout
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.zeros((100, 20))
+          s = np.tile(np.array([0.0, 0.0]), (100, 1))
+          print(A[:, 3].shape, s.shape)
+        options: ["(100,) (100, 2)", "(20,) (100, 2)", "(100,) (2, 100)", "(100, 20) (100, 2)"]
+        answer: "(100,) (100, 2)"
+        explanation: "`A[:, 3]`: Aktion zum Zeitpunkt 3 für alle 100 Folgen. `tile` stapelt den Zustand 100-mal."
+      - type: predict
+        code: |
+          import numpy as np
+          A = np.arange(6).reshape(2, 3)
+          print(A[:, 0], A[0])
+        options: ["[0 3] [0 1 2]", "[0 1 2] [0 3]", "[0 1] [0 1 2]", "[0 3] [0 3]"]
+        answer: "[0 3] [0 1 2]"
+        explanation: "`A[:, 0]` ist die erste Spalte (erste Aktion jeder Folge), `A[0]` die erste Zeile (ganze erste Folge)."
+  - id: m11-c-argmin
+    concept: plan-random-shooting
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          J = np.array([7.0, 2.5, 9.0, 3.0])
+          A = np.array([[1, 1], [2, 2], [3, 3], [4, 4]])
+          print(A[np.argmin(J)])
+        options: ["[2 2]", "[3 3]", "1", "2.5"]
+        answer: "[2 2]"
+        explanation: "`np.argmin(J)` ist der **Index** 1 des Minimums; damit holt man die zugehörige Folge."
+      - type: quiz
+        question: Welche Zeile wählt bei Random Shooting die beste Folge?
+        options:
+          - text: "`A[np.argmin(J)]`"
+            correct: true
+            why: Kleinste Kosten = beste Folge; `argmin` liefert ihren Index.
+          - text: "`A[np.argmax(J)]`"
+            correct: false
+            why: Das ist die **teuerste** Folge – Planer minimieren Kosten.
+          - text: "`np.min(A)`"
+            correct: false
+            why: Das ist die kleinste einzelne Aktion, unabhängig von den Kosten.
+  - id: m11-c-fluch
+    concept: plan-random-shooting
+    variants:
+      - type: quiz
+        question: Wann funktioniert Random Shooting am besten?
+        options:
+          - text: Bei kurzem Horizont und wenigen Aktionsdimensionen
+            correct: true
+            why: Dann ist der Suchraum klein und zufällige Samples decken ihn gut ab.
+          - text: Bei möglichst langem Horizont
+            correct: false
+            why: Jeder Zeitschritt fügt eine Dimension hinzu – der Suchraum wächst exponentiell.
+          - text: Unabhängig vom Horizont, wenn $N$ groß genug ist
+            correct: false
+            why: Das nötige $N$ wächst exponentiell mit der Dimension – praktisch unerreichbar.
+      - type: quiz
+        question: Random Shooting mit $H = 60$ verbessert sich von $N = 1000$ auf $N = 10\,000$ kaum. Was hilft eher?
+        options:
+          - text: Kürzer planen und in jedem Schritt neu planen (MPC) oder gezielter suchen (CEM, MPPI)
+            correct: true
+            why: Beides verkleinert bzw. nutzt den Suchraum besser, statt nur mehr blind zu ziehen.
+          - text: Noch einmal zehnmal mehr Samples
+            correct: false
+            why: In 60 Dimensionen bringt das kaum etwas – der Fluch der Dimensionalität.
+          - text: Die Aktionsgrenzen weglassen
+            correct: false
+            why: Das Modell begrenzt das Moment ohnehin; der Suchraum würde nur größer.

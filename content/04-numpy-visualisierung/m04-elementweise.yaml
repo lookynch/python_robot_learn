@@ -1,0 +1,319 @@
+id: m04-elementweise
+title: Elementweise rechnen
+minutes: 9
+goals:
+  - Rechenoperatoren auf ganze Arrays anwenden
+  - NumPy-Funktionen wie `np.sin`, `np.sqrt`, `np.deg2rad` statt `math` nutzen
+  - Erkennen, dass `*` elementweise multipliziert und kein Skalarprodukt ist
+concepts: [np-elementweise]
+steps:
+  - type: text
+    body: |
+      ## Eine Formel für alle Elemente
+
+      Sind `a` und `b` Arrays gleicher Form, dann rechnen `a + b`, `a - b`, `a * b`, `a / b` und `a ** 2` **Element für Element**:
+
+      $$ (a \ast b)_i = a_i \, b_i $$
+
+      Dasselbe gilt für NumPy-Funktionen (*universal functions*, kurz ufuncs): `np.sin`, `np.cos`, `np.sqrt`, `np.exp`, `np.abs`, `np.deg2rad`. Sie nehmen ein Array und wenden die Funktion auf jedes Element an.
+
+      `math.sin` aus Modul 2 kann das **nicht** – es verarbeitet nur einzelne Zahlen.
+  - type: example
+    code: |
+      import numpy as np
+      grad = np.array([0, 30, 90, 180])
+      rad = np.deg2rad(grad)
+      print(np.round(rad, 3))
+      print(np.round(np.cos(rad), 3))
+    subgoals:
+      - lines: [1, 2]
+        label: Winkel in Grad anlegen
+      - lines: 3
+        label: Alle Winkel in Radiant umrechnen
+      - lines: [4, 5]
+        label: Funktion auf alle Elemente anwenden und gerundet ausgeben
+    after: |
+      Eine Zeile rechnet alle vier Winkel um. `np.round(a, 3)` rundet jedes Element auf 3 Nachkommastellen – nur für die Anzeige.
+
+      Ohne Runden stünde bei $\cos(90°)$ etwa `6.1e-17` statt 0: $\pi/2$ ist als Kommazahl nicht exakt darstellbar. Solche winzigen Reste sind normal.
+  - type: explain
+    question: |
+      Warum schreibt man `np.cos(rad)` und nicht `math.cos(rad)`?
+    options:
+      - text: "`math.cos` erwartet eine einzelne Zahl und bricht bei einem Array mit mehreren Werten mit einem `TypeError` ab."
+        correct: true
+        why: Richtig. Nur die NumPy-Funktionen arbeiten elementweise auf Arrays.
+      - text: "`math.cos` rechnet in Grad, `np.cos` in Radiant."
+        correct: false
+        why: Beide rechnen in Radiant. Der Unterschied ist, dass `math.cos` nur Einzelwerte verarbeitet.
+      - text: Es gibt keinen Unterschied, `np.cos` ist nur kürzer zu schreiben.
+        correct: false
+        why: "`math.cos(rad)` mit einem Array aus vier Werten scheitert mit einem Fehler."
+  - type: predict
+    code: |
+      import numpy as np
+      a = np.array([1, 2, 3])
+      b = np.array([10, 20, 30])
+      print(a * b)
+      print(a + b)
+    options:
+      - |
+        [10 40 90]
+        [11 22 33]
+      - |
+        140
+        [11 22 33]
+      - |
+        [10 40 90]
+        66
+    answer: |
+      [10 40 90]
+      [11 22 33]
+    explanation: |
+      `*` multipliziert paarweise: $1\cdot10,\ 2\cdot20,\ 3\cdot30$. Das Skalarprodukt $\sum a_i b_i = 140$ ist etwas anderes – dafür gibt es in Modul 5 den Operator `@`.
+  - type: predict
+    code: |
+      import numpy as np
+      a = np.array([1, 2, 3])
+      print(a / 2)
+      print(a // 2)
+    options:
+      - |
+        [0.5 1.  1.5]
+        [0 1 1]
+      - |
+        [0 1 1]
+        [0 1 1]
+      - |
+        [0.5 1 1.5]
+        [0.5 1 1.5]
+    answer: |
+      [0.5 1.  1.5]
+      [0 1 1]
+    explanation: |
+      Wie bei einzelnen Zahlen: `/` ergibt immer Kommazahlen (das ganze Array wird `float64`, daher `1.`), `//` rundet ab und bleibt ganzzahlig.
+  - type: quiz
+    question: |
+      Was passiert hier?
+
+      ```python
+      a = np.array([1, 2, 3])
+      b = np.array([1, 2])
+      print(a + b)
+      ```
+    options:
+      - text: Ein `ValueError`, weil die Formen `(3,)` und `(2,)` nicht zusammenpassen.
+        correct: true
+        why: Elementweise geht nur, wenn es zu jedem Element ein Gegenstück gibt. Welche Formen genau zusammenpassen, regelt das Broadcasting (übernächste Lektion).
+      - text: "`[2 4 3]` – das fehlende Element wird als 0 gezählt."
+        correct: false
+        why: NumPy füllt nichts stillschweigend auf. Lieber ein Fehler als ein falsches Ergebnis.
+      - text: "`[1 2 3 1 2]` – die Arrays werden aneinandergehängt."
+        correct: false
+        why: Das wäre das Verhalten von Listen. Für Arrays gibt es dafür `np.concatenate`.
+  - type: fill
+    fading: true
+    prompt: |
+      Ein Glied der Länge `l = 2` m dreht sich um den Ursprung. Berechne für drei Winkel gleichzeitig die Position der Spitze: $x = l\cos q$, $y = l\sin q$.
+    code: |
+      import numpy as np
+      l = 2.0
+      q = np.array([0, np.pi / 2, np.pi])
+      x = l * np.___(q)
+      y = l * np.___(q)
+      print(np.round(x, 2), np.round(y, 2))
+    blanks:
+      - answer: cos
+        options: [cos, sin, tan]
+      - answer: sin
+        options: [sin, cos, tan]
+    expect_output: "[ 2.  0. -2.] [0. 2. 0.]"
+    explanation: |
+      Bei $q = 0$ zeigt das Glied nach rechts $(2, 0)$, bei $\pi/2$ nach oben $(0, 2)$, bei $\pi$ nach links $(-2, 0)$ – alle drei mit einer Rechnung.
+  - type: parsons
+    fading: true
+    prompt: |
+      Berechne den Abstand $r = \sqrt{x^2 + y^2}$ dreier Punkte vom Ursprung und gib ihn gerundet aus.
+    lines:
+      - "import numpy as np"
+      - "x = np.array([3.0, 0.0, 1.0])"
+      - "y = np.array([4.0, 2.0, 1.0])"
+      - "r = np.sqrt(x**2 + y**2)"
+      - "print(np.round(r, 3))"
+    expect_output: "[5.    2.    1.414]"
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ein Gelenk soll sinusförmig schwingen: $q(t) = A \sin(2\pi f t)$ mit Amplitude $A = 0.5$ rad und Frequenz $f = 2$ Hz. Der Startercode berechnet nur $\sin(t)$. Ändere die Zeile für `q`.
+    starter: |
+      import numpy as np
+      t = np.linspace(0, 1, 9)    # Zeit in s
+      q = np.sin(t)               # ändern
+      print(np.round(q, 3))
+    solution: |
+      import numpy as np
+      t = np.linspace(0, 1, 9)
+      q = 0.5 * np.sin(2 * np.pi * 2 * t)
+      print(np.round(q, 3))
+    tests:
+      - name: Form unverändert
+        code: |
+          assert q.shape == (9,), f"q sollte wie t 9 Werte haben, hat shape {q.shape}"
+      - name: Werte der Schwingung
+        code: |
+          import numpy as np
+          tt = np.linspace(0, 1, 9)
+          erwartet = 0.5 * np.sin(4 * np.pi * tt)
+          assert close(q, erwartet), f"Erwartet {np.round(erwartet, 3)}, bekommen {np.round(q, 3)}"
+    mutants:
+      - |
+        import numpy as np
+        t = np.linspace(0, 1, 9)
+        q = 0.5 * np.sin(2 * t)
+        print(np.round(q, 3))
+      - |
+        import numpy as np
+        t = np.linspace(0, 1, 9)
+        q = np.sin(2 * np.pi * 2 * t)
+        print(np.round(q, 3))
+      - |
+        import numpy as np
+        t = np.linspace(0, 1, 9)
+        q = 0.5 * np.sin(2 * np.pi * t)
+        print(np.round(q, 3))
+    hints:
+      - "Teilziel: die Formel $A \\sin(2\\pi f t)$ für alle Zeitpunkte auf einmal auswerten."
+      - Amplitude multipliziert den Sinus, die Frequenz steckt im Argument zusammen mit $2\pi$.
+      - "`q = 0.5 * np.sin(2 * np.pi * ... * t)`"
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `polar_zu_xy(r, phi)`, die Polarkoordinaten (Radius `r` in m, Winkel `phi` in rad) in kartesische umrechnet und `x, y` zurückgibt. Sie soll mit einzelnen Zahlen **und** mit Arrays funktionieren.
+    starter: |
+      import numpy as np
+
+      def polar_zu_xy(r, phi):
+          # x = ..., y = ...
+          pass
+    solution: |
+      import numpy as np
+
+      def polar_zu_xy(r, phi):
+          x = r * np.cos(phi)
+          y = r * np.sin(phi)
+          return x, y
+    tests:
+      - name: Einzelner Punkt
+        code: |
+          x, y = polar_zu_xy(2.0, 0.0)
+          assert close(x, 2.0) and close(y, 0.0), f"polar_zu_xy(2, 0) sollte (2, 0) sein, ist ({x}, {y})"
+      - name: Viele Winkel auf einmal
+        code: |
+          import numpy as np
+          phi = np.array([0.0, np.pi / 2, np.pi])
+          x, y = polar_zu_xy(1.0, phi)
+          assert close(x, [1.0, 0.0, -1.0]) and close(y, [0.0, 1.0, 0.0]), f"Erwartet x=[1, 0, -1], y=[0, 1, 0], bekommen x={x}, y={y}"
+      - name: Radius als Array
+        code: |
+          import numpy as np
+          x, y = polar_zu_xy(np.array([1.0, 3.0]), np.array([np.pi / 2, 0.0]))
+          assert close(x, [0.0, 3.0]) and close(y, [1.0, 0.0]), f"Erwartet x=[0, 3], y=[1, 0], bekommen x={x}, y={y}"
+    mutants:
+      - |
+        import numpy as np
+
+        def polar_zu_xy(r, phi):
+            return r * np.sin(phi), r * np.cos(phi)
+      - |
+        import math
+
+        def polar_zu_xy(r, phi):
+            return r * math.cos(phi), r * math.sin(phi)
+      - |
+        import numpy as np
+
+        def polar_zu_xy(r, phi):
+            return r * np.cos(np.deg2rad(phi)), r * np.sin(np.deg2rad(phi))
+    hints:
+      - "Teilziel: beide Koordinaten berechnen und als Tupel zurückgeben."
+      - "$x = r\\cos\\varphi$, $y = r\\sin\\varphi$ – mit NumPy-Funktionen, damit Arrays funktionieren."
+      - "`x = r * np.cos(phi)` – `y` analog, dann `return x, y`."
+  - type: quiz
+    question: |
+      `a` ist ein Array mit 1000 Werten. Was berechnet die Wurzel jedes Elements?
+    options:
+      - text: "`np.sqrt(a)`"
+        correct: true
+        why: NumPy-Funktionen wirken elementweise.
+      - text: "`math.sqrt(a)`"
+        correct: false
+        why: "`math` verarbeitet nur einzelne Zahlen – `TypeError`."
+      - text: "`a ** 2`"
+        correct: false
+        why: Das quadriert. Die Wurzel wäre `a ** 0.5` oder eben `np.sqrt(a)`.
+cards:
+  - id: m04-c-mal-elementweise
+    concept: np-elementweise
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.array([2, 3]) * np.array([4, 5]))
+        options: ["[ 8 15]", "23", "[8, 15]", "[6 8]"]
+        answer: "[ 8 15]"
+        explanation: "`*` multipliziert paarweise; 23 wäre das Skalarprodukt."
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.array([1, 2, 3]) ** 2)
+        options: ["[1 4 9]", "14", "[1 2 3 1 2 3]", "[2 4 6]"]
+        answer: "[1 4 9]"
+        explanation: "`**` potenziert jedes Element einzeln."
+      - type: predict
+        code: |
+          import numpy as np
+          a = np.array([1.0, 2.0])
+          print(a * a - a)
+        options: ["[0. 2.]", "[0 2]", "4.0", "[1. 2.]"]
+        answer: "[0. 2.]"
+        explanation: "Elementweise: $1\\cdot1-1 = 0$, $2\\cdot2-2 = 2$; Kommazahlen bleiben `float`."
+  - id: m04-c-ufunc
+    concept: np-elementweise
+    variants:
+      - type: quiz
+        question: |
+          Welche Zeile rechnet ein ganzes Array `grad` von Grad in Radiant um?
+        options:
+          - text: "`np.deg2rad(grad)`"
+            correct: true
+            why: Die NumPy-Funktion wirkt auf jedes Element.
+          - text: "`math.radians(grad)`"
+            correct: false
+            why: "`math` kann nur Einzelwerte – bei mehreren Werten gibt es einen `TypeError`."
+          - text: "`grad * 180 / np.pi`"
+            correct: false
+            why: Multiplizieren mit $180/\pi$ rechnet Radiant in Grad um – die falsche Richtung.
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.abs(np.array([-2, 0, 3])))
+        options: ["[2 0 3]", "5", "[-2  0  3]", "3"]
+        answer: "[2 0 3]"
+        explanation: "`np.abs` nimmt von jedem Element den Betrag."
+  - id: m04-c-division
+    concept: np-elementweise
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.array([4, 6]) / 2)
+        options: ["[2. 3.]", "[2 3]", "[2, 3]"]
+        answer: "[2. 3.]"
+        explanation: "`/` liefert immer Kommazahlen, auch wenn das Ergebnis ganzzahlig ist."
+      - type: predict
+        code: |
+          import numpy as np
+          print(np.array([7, 8]) // 3)
+        options: ["[2 2]", "[2.33 2.67]", "[2. 2.]", "[1 2]"]
+        answer: "[2 2]"
+        explanation: "`//` rundet jedes Element ab und bleibt bei ganzen Zahlen ganzzahlig."

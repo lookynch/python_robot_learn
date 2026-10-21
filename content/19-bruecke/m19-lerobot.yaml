@@ -1,0 +1,181 @@
+id: m19-lerobot
+title: LeRobot – vom Vormachen zur Policy
+minutes: 9
+goals:
+  - Den LeRobot-Workflow in der richtigen Reihenfolge kennen
+  - Gute Demonstrationsdaten planen
+  - Wissen, wo trainiert wird und wie die Policy auf den Roboter kommt
+concepts: [lerobot-workflow, behavior-cloning]
+steps:
+  - type: text
+    body: |
+      ## Was ist LeRobot?
+
+      **LeRobot** ist eine Python-Bibliothek von Hugging Face für Robot Learning in der echten Welt: Treiber für günstige Arme, ein einheitliches Datensatzformat auf dem Hugging Face Hub und fertige Policies. Aktuell Version 0.6.1 vom 03.08.2026, Apache-2.0, Python ≥ 3.12 ([PyPI](https://pypi.org/project/lerobot/)).
+
+      Im Repository liegen u. a. Implementierungen von **ACT**, **Diffusion Policy**, **SmolVLA**, **π0/π0.5** und **TD-MPC** ([GitHub](https://github.com/huggingface/lerobot/tree/main/src/lerobot/policies)) – also fast alles aus Modul 18, plus ein latentes World Model aus Modul 17.
+
+      *Stand: Oktober 2026.*
+  - type: text
+    body: |
+      ## Der Workflow
+
+      Laut Doku ([SO-101](https://huggingface.co/docs/lerobot/so101), [Imitation Learning](https://huggingface.co/docs/lerobot/il_robots)):
+
+      ```bash
+      lerobot-find-port          # USB-Ports von Leader und Follower finden
+      lerobot-setup-motors ...   # jedem Servo eine ID geben (einmalig)
+      lerobot-calibrate ...      # Gelenkbereiche einmessen
+      lerobot-teleoperate ...    # mit dem Leader den Follower steuern
+      lerobot-record ...         # Episoden aufnehmen (Kamera + Gelenke)
+      lerobot-train --policy.type=act ...
+      lerobot-rollout --policy.path=... --strategy.type=base ...
+      ```
+
+      Befehlsnamen ändern sich zwischen Versionen: Der SmolVLA-Blog von 2025 nutzte noch `python lerobot/scripts/train.py`. Nimm immer die Doku zu deiner installierten Version. *Stand: Oktober 2026.*
+  - type: explain
+    question: |
+      Die Doku betont: Leader und Follower müssen kalibriert sein, damit sie in derselben Stellung dieselben Positionswerte liefern. Warum ist das für das Lernen so wichtig?
+    options:
+      - text: Die aufgenommenen Aktionen sind die Stellungen des Leaders; nur wenn sie dieselbe Bedeutung haben wie beim Follower, imitiert die Policy das Richtige – und läuft auch auf einem anderen Arm desselben Typs.
+        correct: true
+        why: Genau. Laut Doku erlaubt die Kalibrierung, dass ein auf einem Roboter trainiertes Netz auf einem anderen funktioniert.
+      - text: Ohne Kalibrierung starten die Motoren nicht.
+        correct: false
+        why: Es geht nicht ums Einschalten, sondern um konsistente Zahlenwerte.
+      - text: Kalibrierung erhöht das Drehmoment der Servos.
+        correct: false
+        why: Kalibrierung misst Bereiche ein; die Motorleistung ändert sie nicht.
+  - type: text
+    body: |
+      ## Gute Daten
+
+      Tipps aus der Doku ([Imitation Learning](https://huggingface.co/docs/lerobot/il_robots)):
+
+      - Starte mit Greifen und Ablegen an verschiedenen Orten; **mindestens 50 Episoden**, etwa 10 pro Ort.
+      - Kameras fest montieren, Griffe gleichartig ausführen, Objekt muss im Bild sein.
+      - Faustregel: **Du selbst solltest die Aufgabe nur mit Blick auf die Kamerabilder lösen können.**
+      - Variationen erst einbauen, wenn das Grundverhalten zuverlässig klappt – zu viel Variation zu früh schadet.
+
+      Während der Aufnahme: `→` nächste Episode, `←` Episode neu aufnehmen, `Esc` beenden.
+  - type: explain
+    question: |
+      Warum lautet die Faustregel „Du solltest die Aufgabe nur mit Blick auf die Kamerabilder lösen können“?
+    options:
+      - text: Die Policy sieht nur die aufgezeichneten Beobachtungen; was dort nicht sichtbar ist, kann sie nicht lernen.
+        correct: true
+        why: Behavior Cloning bildet Beobachtung auf Aktion ab. Fehlt die nötige Information in der Beobachtung, gibt es keine eindeutige richtige Aktion.
+      - text: Damit die Videos auf dem Hub schöner aussehen.
+        correct: false
+        why: Es geht um Information für die Policy, nicht um Ästhetik.
+      - text: Weil die Policy auch die Gelenkwinkel nicht kennt.
+        correct: false
+        why: Gelenkstellungen werden mit aufgezeichnet; das Problem sind fehlende visuelle Informationen, z. B. über die Objektlage.
+  - type: text
+    body: |
+      ## Trainieren und ausführen
+
+      `lerobot-train` mit `--policy.type=act` trainiert laut Doku „mehrere Stunden“ auf einer GPU (`--policy.device=cuda`, auf Apple Silicon `mps`). Ohne eigene GPU: das ACT-Notebook für **Colab** oder kostenpflichtige **Hugging Face Jobs** (`--job.target=...`).
+
+      `lerobot-rollout` führt die Policy auf dem Roboter aus. Strategien u. a.: `base` (nur ausführen), `sentry` (dauerhaft aufnehmen und hochladen), `dagger` (Mensch korrigiert, Daten kommen dazu – DAgger aus Modul 18). Für langsame VLAs wie SmolVLA oder π0 gibt es `--inference.type=rtc` ([Doku](https://huggingface.co/docs/lerobot/il_robots); Stand: Oktober 2026).
+  - type: quiz
+    question: |
+      In welcher Reihenfolge gehst du mit einem neuen SO-101-Paar vor?
+    options:
+      - text: Motoren einrichten → kalibrieren → teleoperieren → aufnehmen → trainieren → ausführen
+        correct: true
+        why: Jeder Schritt setzt den vorherigen voraus – ohne Kalibrierung sind die Daten nicht konsistent, ohne Daten gibt es nichts zu trainieren.
+      - text: Trainieren → aufnehmen → kalibrieren → ausführen
+        correct: false
+        why: Ohne aufgenommene Daten kann man nicht trainieren.
+      - text: Aufnehmen → Motoren einrichten → ausführen → kalibrieren
+        correct: false
+        why: Ohne eingerichtete Motoren lässt sich der Arm gar nicht ansprechen.
+cards:
+  - id: m19-c-lerobot-reihenfolge
+    concept: lerobot-workflow
+    variants:
+      - type: quiz
+        question: |
+          Welcher Schritt kommt im LeRobot-Workflow direkt **vor** dem Training?
+        options:
+          - text: Episoden mit Teleoperation aufnehmen
+            correct: true
+            why: Die Policy lernt aus genau diesen Demonstrationen.
+          - text: Die Policy auf dem Roboter ausführen
+            correct: false
+            why: Ausführen kommt nach dem Training.
+          - text: Motor-IDs setzen
+            correct: false
+            why: Das geschieht ganz am Anfang, einmalig.
+      - type: quiz
+        question: |
+          Was wird bei `lerobot-record` als Aktion gespeichert, während du mit dem Leader-Arm steuerst?
+        options:
+          - text: Die Stellungen des Leader-Arms, die an den Follower geschickt werden
+            correct: true
+            why: In der Teleoperation liest LeRobot die Aktion vom Leader und sendet sie an den Follower – genau diese Aktion imitiert später die Policy.
+          - text: Eine Belohnung für jeden Zeitschritt
+            correct: false
+            why: Imitation Learning braucht keine Belohnung.
+          - text: Nur die Kamerabilder
+            correct: false
+            why: Bilder sind Beobachtungen; die Aktion kommt vom Leader.
+  - id: m19-c-datenqualitaet
+    concept: lerobot-workflow
+    variants:
+      - type: quiz
+        question: |
+          Deine ACT-Policy greift unzuverlässig. In den 20 Demos hast du Kamera und Objektposition ständig verändert. Was ist der sinnvollste nächste Schritt?
+        options:
+          - text: Mehr Episoden (z. B. ≥ 50) mit fester Kamera aufnehmen, Variation erst schrittweise steigern
+            correct: true
+            why: So empfiehlt es die LeRobot-Doku – erst das Grundverhalten, dann Variation.
+          - text: Länger trainieren mit denselben Daten
+            correct: false
+            why: Wenige, stark variierende Demos bleiben das Hauptproblem.
+          - text: Die Kamera ganz weglassen
+            correct: false
+            why: Ohne Bild weiß die Policy nicht, wo das Objekt ist.
+      - type: quiz
+        question: |
+          Ein Objekt ist auf den Kamerabildern oft vom Arm verdeckt. Was folgt daraus für Behavior Cloning?
+        options:
+          - text: Der Policy fehlt die nötige Information; eine zusätzliche Kamera (z. B. am Handgelenk) kann helfen.
+            correct: true
+            why: Was nicht beobachtet wird, kann nicht gelernt werden.
+          - text: Kein Problem, die Policy rät die Objektlage richtig.
+            correct: false
+            why: Ohne Information gibt es nichts, woraus sie die Lage lernen könnte.
+          - text: Man sollte die Lernrate erhöhen.
+            correct: false
+            why: Das ist ein Daten-, kein Optimierungsproblem.
+  - id: m19-c-kalibrierung
+    concept: lerobot-workflow
+    variants:
+      - type: quiz
+        question: |
+          Du trainierst auf deinem SO-101 und willst die Policy auf dem SO-101 eines Freundes testen. Was muss auf beiden Armen erfüllt sein?
+        options:
+          - text: Beide sind kalibriert, sodass gleiche Stellungen gleiche Positionswerte ergeben.
+            correct: true
+            why: Dann bedeuten die Aktionszahlen auf beiden Armen dasselbe.
+          - text: Beide haben dieselbe Seriennummer.
+            correct: false
+            why: Seriennummern sind egal; es geht um konsistente Messwerte.
+          - text: Nichts – Policies übertragen sich immer.
+            correct: false
+            why: Ohne Kalibrierung würden dieselben Zahlen andere Stellungen bedeuten.
+      - type: quiz
+        question: |
+          Warum soll man beim Teleoperieren, Aufnehmen und Ausführen dieselbe `id` für einen Arm angeben?
+        options:
+          - text: Unter dieser `id` wird die Kalibrierdatei gespeichert und wiedergefunden.
+            correct: true
+            why: So steht es in der LeRobot-Doku; eine andere `id` hieße andere oder fehlende Kalibrierung.
+          - text: Die `id` bestimmt die Lernrate.
+            correct: false
+            why: Mit dem Training hat die `id` nichts zu tun.
+          - text: Die `id` ist die USB-Portnummer.
+            correct: false
+            why: Den Port gibt man getrennt mit `--robot.port` an.

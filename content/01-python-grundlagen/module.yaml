@@ -1,0 +1,87 @@
+id: m01
+number: 1
+title: Python-Grundlagen
+summary: |
+  Ausgaben, Variablen, Rechnen, Datentypen, Texte, Eingaben, Bedingungen, Schleifen und Listen – das Handwerkszeug für alles Weitere.
+depth: voll
+lessons:
+  - m01-print
+  - m01-variablen
+  - m01-rechnen
+  - m01-typen
+  - m01-strings
+  - m01-input
+  - m01-vergleiche
+  - m01-if
+  - m01-while
+  - m01-for
+  - m01-listen
+  - m01-fehler-lesen
+  - m01-checkpoint
+concepts:
+  - id: print-ausgabe
+    name: Ausgabe mit print
+    description: print() schreibt Werte ins Terminal; mehrere Argumente werden mit Leerzeichen getrennt.
+  - id: string-literal
+    name: Text (String) vs. Code
+    description: Text steht in Anführungszeichen und wird nicht ausgewertet.
+  - id: variable-zuweisung
+    name: Variable und Zuweisung
+    description: name = wert speichert einen Wert unter einem Namen; rechts wird zuerst ausgewertet.
+  - id: reihenfolge
+    name: Programme laufen Zeile für Zeile
+    description: Anweisungen werden von oben nach unten ausgeführt; spätere Zuweisungen überschreiben frühere.
+  - id: arithmetik
+    name: Rechenoperatoren
+    description: + - * / // % ** mit Punkt-vor-Strich und Klammern.
+  - id: ganzzahl-division
+    name: Ganzzahldivision und Rest
+    description: // liefert den ganzzahligen Anteil (abgerundet), % den Rest.
+  - id: datentypen
+    name: Datentypen int, float, str, bool
+    description: Jeder Wert hat einen Typ (ganze Zahl, Kommazahl, Text, Wahrheitswert); type() zeigt ihn, und der Typ bestimmt, was Operatoren wie + tun.
+  - id: typumwandlung
+    name: Typumwandlung
+    description: int(), float() und str() erzeugen aus einem Wert einen neuen Wert eines anderen Typs; int() schneidet Nachkommastellen ab statt zu runden.
+  - id: string-operationen
+    name: Texte verketten und messen
+    description: + verkettet Strings, * wiederholt sie, len() zählt die Zeichen (auch Leerzeichen).
+  - id: string-index
+    name: Zeichen per Index
+    description: text[i] liefert das Zeichen an Position i; gezählt wird ab 0, das letzte Zeichen hat den Index len(text) - 1.
+  - id: f-string
+    name: f-Strings
+    description: f"…{ausdruck}…" setzt Werte in Text ein; {x:.2f} zeigt x gerundet mit zwei Nachkommastellen.
+  - id: input-eingabe
+    name: Eingaben mit input
+    description: input() hält das Programm an, wartet auf eine Eingabe und liefert sie immer als str; zum Rechnen mit int() oder float() umwandeln.
+  - id: vergleichsoperatoren
+    name: Vergleiche
+    description: == != < <= > >= vergleichen zwei Werte und liefern True oder False; = ist Zuweisung, == ist Vergleich.
+  - id: logische-operatoren
+    name: and, or, not
+    description: and ist nur True, wenn beide Seiten True sind; or, wenn mindestens eine True ist; not kehrt einen Wahrheitswert um.
+  - id: if-verzweigung
+    name: Verzweigung mit if/elif/else
+    description: Nur der erste Block, dessen Bedingung True ist, wird ausgeführt (sonst else); zum Block gehören die eingerückten Zeilen nach dem Doppelpunkt.
+  - id: while-schleife
+    name: while-Schleife
+    description: Wiederholt den Block, solange die Bedingung True ist; ändert der Block nichts an der Bedingung, entsteht eine Endlosschleife.
+  - id: for-range
+    name: for mit range
+    description: for i in range(start, stop, step) durchläuft start, start+step, … und hört vor stop auf.
+  - id: akkumulator
+    name: Akkumulator-Muster
+    description: Startwert vor der Schleife festlegen, in jedem Durchlauf aktualisieren, nach der Schleife verwenden.
+  - id: liste-grundlagen
+    name: Listen
+    description: "[a, b, c] speichert mehrere Werte in fester Reihenfolge; Index ab 0, append() hängt hinten an, len() zählt die Elemente."
+  - id: liste-durchlaufen
+    name: Über Listen iterieren
+    description: for x in liste nimmt nacheinander jedes Element; Summe und Maximum lassen sich damit selbst berechnen.
+  - id: traceback-lesen
+    name: Fehlermeldungen lesen
+    description: Ein Traceback nennt Zeile, Fehlertyp und Meldung; die letzte Zeile sagt, was schiefging, die Zeile darüber, wo.
+  - id: fehlertypen
+    name: Typische Fehlertypen
+    description: NameError (unbekannter Name), TypeError (Operation passt nicht zum Typ), IndentationError (Einrückung), SyntaxError (Grammatik verletzt).

@@ -1,0 +1,283 @@
+id: m12-logistische-regression
+title: Logistische Regression
+minutes: 10
+goals:
+  - Mit der Sigmoid-Funktion Wahrscheinlichkeiten für zwei Klassen berechnen
+  - Die binäre Kreuzentropie numerisch stabil implementieren
+  - Einen Klassifikator mit dem Gradienten $X^\top(p - y)/N$ trainieren
+concepts: [ml-sigmoid, ml-kreuzentropie, ml-logreg-gradient]
+steps:
+  - type: text
+    body: |
+      ## Ja oder nein?
+
+      Ein Greifer soll aus zwei Sensorwerten entscheiden: Hält der Griff (Klasse 1) oder rutscht das Teil (Klasse 0)? Statt einer Zahl brauchen wir eine **Wahrscheinlichkeit**.
+
+      Das lineare Modell liefert einen Score $z = X\mathbf w + b$, die **Sigmoid-Funktion** quetscht ihn nach $(0, 1)$:
+
+      $$p = \sigma(z) = \frac{1}{1 + e^{-z}}$$
+
+      Entscheidung: Klasse 1, wenn $p > 0{,}5$ – also genau dann, wenn $z > 0$. Die **Entscheidungsgrenze** $X\mathbf w + b = 0$ ist eine Gerade (in 2D).
+  - type: predict
+    code: |
+      import numpy as np
+
+      def sigmoid(z):
+          return 1 / (1 + np.exp(-z))
+
+      print(np.round(sigmoid(np.array([-2.0, 0.0, 2.0])), 3))
+    options:
+      - "[0.119 0.5   0.881]"
+      - "[0.    0.5   1.   ]"
+      - "[-0.881  0.     0.881]"
+      - "[0.135 1.    7.389]"
+    answer: "[0.119 0.5   0.881]"
+    explanation: |
+      $\sigma(0) = 0{,}5$, und $\sigma(-z) = 1 - \sigma(z)$. Werte erreichen 0 oder 1 nie ganz. `[0.135 1. 7.389]` wäre $e^{z}$ ohne Bruch.
+  - type: text
+    body: |
+      ## Verlust: binäre Kreuzentropie
+
+      $$L = -\frac1N \sum_i \big[\,y_i \log p_i + (1 - y_i)\log(1 - p_i)\,\big]$$
+
+      Für $y_i = 1$ bleibt $-\log p_i$, für $y_i = 0$ bleibt $-\log(1 - p_i)$. Eine **sichere Fehlentscheidung** ($p = 0{,}01$ bei $y = 1$) kostet $-\log 0{,}01 \approx 4{,}6$.
+
+      Das Schöne: Sigmoid und Kreuzentropie zusammen ergeben einen sehr einfachen Gradienten nach dem Score:
+
+      $$\frac{\partial L}{\partial z_i} = \frac{p_i - y_i}{N} \quad\Rightarrow\quad \nabla_{\mathbf w} L = \frac1N X^\top(\mathbf p - \mathbf y)$$
+
+      Gleiche Form wie bei der linearen Regression – nur mit $p$ statt $\hat y$.
+  - type: explain
+    question: |
+      Warum ist $\partial L / \partial z = p - y$ als Lernsignal plausibel?
+    options:
+      - text: Bei $y = 1$ und $p < 1$ ist es negativ, der Abstieg erhöht also $z$; bei $p = y$ verschwindet es.
+        correct: true
+        why: Das Signal zeigt immer in Richtung der richtigen Klasse und ist umso größer, je falscher die Vorhersage ist.
+      - text: Es ist immer positiv, daher sinkt $z$ bei jedem Schritt.
+        correct: false
+        why: "$p - y$ ist für $y = 1$ negativ und für $y = 0$ positiv."
+      - text: Es ist dasselbe wie die Ableitung der Sigmoid-Funktion $p(1-p)$.
+        correct: false
+        why: "$p(1-p)$ ist $\\sigma'(z)$; sie kürzt sich gerade mit der Ableitung des Logarithmus weg."
+      - text: Es wächst unbegrenzt, je sicherer das Modell richtig liegt.
+        correct: false
+        why: Bei richtiger, sicherer Vorhersage ist $p \approx y$, das Signal also nahe 0.
+  - type: example
+    intro: |
+      Zwei Punktwolken, 200 Gradientenschritte. Danach Lernkurve und Entscheidungsgrenze.
+    code: |
+      import numpy as np
+      import lab
+
+      def sigmoid(z):
+          return 1 / (1 + np.exp(-z))
+
+      rng = np.random.default_rng(0)
+      X0 = rng.normal([-1.0, -1.0], 0.8, size=(50, 2))   # Klasse 0
+      X1 = rng.normal([1.0, 1.0], 0.8, size=(50, 2))     # Klasse 1
+      X = np.vstack([X0, X1])                            # (100, 2)
+      y = np.concatenate([np.zeros(50), np.ones(50)])    # (100,)
+      N = len(y)
+
+      w, b, losses = np.zeros(2), 0.0, []
+      for step in range(200):
+          p = sigmoid(X @ w + b)
+          losses.append(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+          w = w - 0.5 * X.T @ (p - y) / N
+          b = b - 0.5 * np.mean(p - y)
+
+      print(f"Verlust {losses[-1]:.3f}, Genauigkeit {np.mean((p > 0.5) == y):.2f}")
+      lab.plot(losses, title="Lernkurve", xlabel="Schritt", ylabel="Kreuzentropie")
+      xs = np.linspace(-3, 3, 2)
+      fig = lab.Figure(title="Entscheidungsgrenze", xlabel="Sensor 1", ylabel="Sensor 2")
+      fig.scatter(X0[:, 0], X0[:, 1], label="rutscht (0)")
+      fig.scatter(X1[:, 0], X1[:, 1], label="hält (1)")
+      fig.line(-(w[0] * xs + b) / w[1], x=xs, label="p = 0,5")
+      fig.show()
+    subgoals:
+      - lines: [7, 12]
+        label: Daten erzeugen
+      - lines: [16, 17]
+        label: Wahrscheinlichkeit und Verlust berechnen
+      - lines: [18, 19]
+        label: Mit p − y aktualisieren
+      - lines: [21, 28]
+        label: Ergebnis prüfen und zeichnen
+    after: |
+      Die Grenze ist die Gerade $w_0 x_1 + w_1 x_2 + b = 0$, nach $x_2$ aufgelöst. Die Wolken überlappen etwas, daher bleiben einige Punkte falsch – 100 % ist hier gar nicht erreichbar.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze den Gradienten und die Entscheidungsregel, sodass der Klassifikator mindestens 90 % der Punkte richtig einordnet.
+    code: |
+      import numpy as np
+      rng = np.random.default_rng(0)
+      X = np.vstack([rng.normal(-1, 0.8, (50, 2)), rng.normal(1, 0.8, (50, 2))])
+      y = np.concatenate([np.zeros(50), np.ones(50)])
+      w, b = np.zeros(2), 0.0
+      for step in range(200):
+          p = 1 / (1 + np.exp(-(X @ w + b)))
+          w = w - 0.5 * X.T @ (___) / len(y)
+          b = b - 0.5 * np.mean(p - y)
+      pred = p > ___
+      acc = np.mean(pred == y)
+    blanks:
+      - answer: p - y
+        options: [p - y, y - p, p * (1 - p)]
+      - answer: "0.5"
+        options: ["0.5", "0", "1"]
+    tests:
+      - name: Genauigkeit
+        code: |
+          assert acc >= 0.9, f"Genauigkeit sollte mindestens 0.9 sein, ist {acc:.2f}"
+    explanation: |
+      `y - p` ist das Vorzeichen des **Anstiegs** – die Gewichte laufen in die falsche Richtung. `p > 0` bzw. `p > 1` ist für alle bzw. keinen Punkt wahr, weil $0 < p < 1$.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `bce(p, y)`, die mittlere binäre Kreuzentropie. Damit `log(0)` nicht `-inf` ergibt, beschneide `p` vorher mit `np.clip(p, 1e-12, 1 - 1e-12)`.
+    starter: |
+      import numpy as np
+
+      def bce(p, y):
+          p = np.clip(p, 1e-12, 1 - 1e-12)
+          # dein Code
+    solution: |
+      import numpy as np
+
+      def bce(p, y):
+          p = np.clip(p, 1e-12, 1 - 1e-12)
+          return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+    tests:
+      - name: Unsichere Vorhersage
+        code: |
+          import numpy as np
+          got = bce(np.array([0.5, 0.5]), np.array([1.0, 0.0]))
+          assert close(got, np.log(2)), f"Bei p = 0.5 erwartet log 2 ≈ 0.6931, bekommen {got}"
+      - name: Gemischte Beispiele
+        code: |
+          import numpy as np
+          got = bce(np.array([0.9, 0.2, 0.7]), np.array([1.0, 0.0, 0.0]))
+          ref = -(np.log(0.9) + np.log(0.8) + np.log(0.3)) / 3
+          assert close(got, ref), f"Erwartet {ref:.4f}, bekommen {got}"
+      - name: Randwerte p = 0 und p = 1
+        code: |
+          import numpy as np
+          got = bce(np.array([1.0, 0.0]), np.array([1.0, 0.0]))
+          assert np.isfinite(got) and got < 1e-6, f"Perfekte Vorhersage sollte (fast) 0 ergeben, bekommen {got}"
+          bad = bce(np.array([0.0]), np.array([1.0]))
+          assert np.isfinite(bad) and bad > 20, f"Sicher falsch sollte groß, aber endlich sein, bekommen {bad}"
+    mutants:
+      - |
+        import numpy as np
+        def bce(p, y):
+            p = np.clip(p, 1e-12, 1 - 1e-12)
+            return np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+      - |
+        import numpy as np
+        def bce(p, y):
+            p = np.clip(p, 1e-12, 1 - 1e-12)
+            return -np.sum(y * np.log(p) + (1 - y) * np.log(1 - p))
+      - |
+        import numpy as np
+        def bce(p, y):
+            p = np.clip(p, 1e-12, 1 - 1e-12)
+            return -np.mean(y * np.log(p))
+      - |
+        import numpy as np
+        def bce(p, y):
+            return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+    hints:
+      - "Teilziel: Verlust pro Beispiel berechnen, dann mitteln."
+      - "Pro Beispiel: $-[y\\log p + (1-y)\\log(1-p)]$. Mitteln mit `np.mean`."
+      - "`np.log(p)` und `np.log(1 - p)` wirken elementweise."
+      - "`return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))`"
+    explanation: |
+      Ohne `clip` ergibt `0 * log(0)` in NumPy `nan` – ein einziger solcher Wert macht den ganzen Mittelwert `nan`.
+  - type: quiz
+    question: |
+      Zwei Beispiele mit $y = 1$: Modell A sagt $p = 0{,}4$, Modell B $p = 0{,}01$. Wie verhalten sich die Kreuzentropie-Beiträge?
+    options:
+      - text: B kostet etwa fünfmal so viel wie A ($4{,}6$ gegen $0{,}92$).
+        correct: true
+        why: "$-\\log 0{,}01 \\approx 4{,}6$, $-\\log 0{,}4 \\approx 0{,}92$. Sichere Fehler werden stark bestraft."
+      - text: Beide kosten gleich viel, weil beide falsch klassifiziert sind.
+        correct: false
+        why: Die Kreuzentropie bewertet die Wahrscheinlichkeit, nicht nur die Entscheidung.
+      - text: B kostet etwa 40-mal so viel, weil $0{,}4 / 0{,}01 = 40$.
+        correct: false
+        why: Der Logarithmus staucht das Verhältnis.
+cards:
+  - id: m12-c-sigmoid
+    concept: ml-sigmoid
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          z = np.array([0.0, 100.0])
+          print(np.round(1 / (1 + np.exp(-z)), 3))
+        options: ["[0.5 1. ]", "[0. 1.]", "[0.5 100. ]"]
+        answer: "[0.5 1. ]"
+        explanation: "$\\sigma(0) = 0{,}5$; für großes $z$ ist $\\sigma(z)$ auf drei Stellen 1."
+      - type: quiz
+        question: |
+          Für welche Scores $z$ entscheidet die logistische Regression „Klasse 1“ (Schwelle $p > 0{,}5$)?
+        options:
+          - text: "$z > 0$"
+            correct: true
+            why: "$\\sigma(z) > 0{,}5 \\Leftrightarrow z > 0$."
+          - text: "$z > 0{,}5$"
+            correct: false
+            why: Die Schwelle 0,5 gilt für $p$, nicht für $z$.
+          - text: "$z > 1$"
+            correct: false
+            why: "$\\sigma(1) \\approx 0{,}73$ – schon ab $z > 0$ ist $p > 0{,}5$."
+  - id: m12-c-p-minus-y
+    concept: ml-logreg-gradient
+    variants:
+      - type: quiz
+        question: |
+          Welche Zeile ist der richtige Gradient nach `w` für Sigmoid + Kreuzentropie?
+        options:
+          - text: "`X.T @ (p - y) / N`"
+            correct: true
+            why: Der Gradient nach dem Score ist $(p - y)/N$; Kettenregel durch $z = Xw$ ergibt $X^\top$.
+          - text: "`X.T @ (y - p) / N`"
+            correct: false
+            why: Falsches Vorzeichen – damit geht der Abstieg bergauf.
+          - text: "`X @ (p - y) / N`"
+            correct: false
+            why: "Shape-Fehler: `(N, d) @ (N,)` passt nicht."
+      - type: quiz
+        question: |
+          Ein Beispiel hat $y = 0$, das Modell sagt $p = 0{,}9$. In welche Richtung ändert der Gradientenschritt den Score $z$ dieses Beispiels?
+        options:
+          - text: "$z$ wird kleiner."
+            correct: true
+            why: "$p - y = 0{,}9 > 0$, der Abstieg geht entgegen dem Gradienten."
+          - text: "$z$ wird größer."
+            correct: false
+            why: Das würde die falsche Vorhersage noch sicherer machen.
+          - text: "$z$ bleibt gleich, weil $y = 0$ ist."
+            correct: false
+            why: Bei $y = 0$ verschwindet nur der erste Term der Kreuzentropie, nicht der Gradient.
+  - id: m12-c-bce-wert
+    concept: ml-kreuzentropie
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          print(round(float(-np.log(0.5)), 3))
+        options: ["0.693", "0.5", "-0.693", "1.0"]
+        answer: "0.693"
+        explanation: Bei $p = 0{,}5$ kostet jedes Beispiel $\log 2 \approx 0{,}693$ – der Verlust eines Modells, das nur rät.
+      - type: predict
+        code: |
+          import numpy as np
+          p = np.array([0.8])
+          y = np.array([0.0])
+          print(round(float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))), 3))
+        options: ["1.609", "0.223", "0.8", "-1.609"]
+        answer: "1.609"
+        explanation: Für $y = 0$ zählt $-\log(1 - 0{,}8) = -\log 0{,}2 \approx 1{,}609$.

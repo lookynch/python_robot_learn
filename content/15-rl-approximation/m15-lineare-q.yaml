@@ -1,0 +1,301 @@
+id: m15-lineare-q
+title: Lineare Q-Funktion statt Tabelle
+minutes: 12
+goals:
+  - Q-Werte als Skalarprodukt aus Gewichten und Merkmalen berechnen
+  - Das Semi-Gradient-Update herleiten und implementieren
+  - Q-Learning mit 64 Gewichten statt 256 Tabelleneinträgen trainieren
+concepts: [lineare-q-features, semi-gradient]
+steps:
+  - type: text
+    body: |
+      ## Wenn die Tabelle zu groß wird
+
+      Bei CartPole hattest du 108 Zellen – und schon die waren grob. Für einen Arm mit 6 Gelenken explodiert die Tabelle. Außerdem lernt eine Tabelle über jede Zelle **einzeln**: Was in einem Feld gelernt wurde, hilft dem Nachbarfeld nicht.
+
+      Stattdessen beschreibst du einen Zustand durch einen **Merkmalsvektor** (features) $\varphi(s)$ und schätzt
+
+      $$\hat q(s, a; W) = W_a \cdot \varphi(s) = \sum_i W_{a,i}\, \varphi_i(s)$$
+
+      mit einer Gewichtszeile $W_a$ pro Aktion. Beispiel für eine 8×8-Gitterwelt: $\varphi(s)$ hat 16 Einträge – eine 1 für die Zeile, eine 1 für die Spalte, sonst 0. Das sind $4 \cdot 16 = 64$ Gewichte statt $4 \cdot 64 = 256$ Tabelleneinträgen.
+  - type: example
+    code: |
+      import numpy as np
+      from lab.envs import GridWorld
+
+      env = GridWorld(["S......."] + ["........"] * 6 + [".......G"])
+
+      def features(s):
+          r, c = divmod(s, env.n_cols)
+          phi = np.zeros(env.n_rows + env.n_cols)
+          phi[r] = 1.0                  # Zeile
+          phi[env.n_rows + c] = 1.0     # Spalte
+          return phi
+
+      W = np.zeros((4, 16))
+      W[1, 8:] = np.arange(8)           # "rechts" wird besser, je weiter rechts
+      print("phi(10):", features(10))
+      print("Q(10, ·):", W @ features(10))
+      Phi = np.array([features(s) for s in range(env.n_states)])   # 64 × 16
+      print("Alle Q-Werte:", (Phi @ W.T).shape)
+    subgoals:
+      - lines: 4
+        label: Gitterwelt anlegen
+      - lines: [6, 11]
+        label: Merkmale berechnen
+      - lines: [13, 14]
+        label: Gewichte festlegen
+      - lines: [15, 18]
+        label: Q-Werte als Skalarprodukt
+    after: |
+      Zustand 10 liegt in Zeile 1, Spalte 2 – also Einsen an Position 1 und $8 + 2 = 10$. `W @ features(10)` liefert alle vier Q-Werte auf einmal. Mit der Matrix `Phi` (eine Zeile pro Zustand) bekommst du alle $64 \times 4$ Q-Werte mit einer Matrixmultiplikation.
+  - type: predict
+    code: |
+      import numpy as np
+      W = np.array([[1.0, 0.0, 2.0],
+                    [0.5, 1.0, -1.0]])
+      phi = np.array([1.0, 0.0, 1.0])
+      print(W @ phi)
+    options: ["[ 3.  -0.5]", "[3.  0.5]", "[1.  0.5]", "[ 1.5  1.  1. ]"]
+    answer: "[ 3.  -0.5]"
+    explanation: |
+      Je Aktion das Skalarprodukt: $1 + 0 + 2 = 3$ und $0.5 + 0 - 1 = -0.5$. NumPy setzt bei negativen Zahlen ein Leerzeichen vor die positiven, damit die Spalten bündig sind.
+  - type: text
+    body: |
+      ## Das Semi-Gradient-Update
+
+      Ziel: Den quadratischen Fehler $\tfrac12\,(y - \hat q(s, a; W))^2$ mit dem TD-Ziel $y = r + \gamma \max_{a'} \hat q(s', a'; W)$ verkleinern. Der Gradient der Vorhersage nach $W_a$ ist einfach $\varphi(s)$ – das Modell ist linear. Ein Gradientenschritt ergibt
+
+      $$W_a \leftarrow W_a + \alpha\, \delta\, \varphi(s), \qquad \delta = y - \hat q(s, a; W)$$
+
+      Auch $y$ hängt von $W$ ab – diese Abhängigkeit wird aber **ignoriert**: Das Ziel gilt als feste Zahl. Deshalb heißt es **Semi-Gradient** (Sutton & Barto, Kapitel 9 und 10). Mit one-hot-Merkmalen pro Zustand ist das exakt das Tabellen-Update aus Modul 14.
+  - type: explain
+    question: |
+      Warum heißt das Update **semi**-Gradient?
+    options:
+      - text: Weil nur durch die Vorhersage $\hat q(s, a; W)$ abgeleitet wird, nicht durch das TD-Ziel, obwohl es auch von $W$ abhängt.
+        correct: true
+        why: Das Ziel wird wie eine Konstante behandelt – das ist kein echter Gradient einer festen Verlustfunktion. On-policy mit linearen Merkmalen konvergiert es trotzdem; off-policy (wie hier mit Q-Learning) kann es divergieren, mehr dazu bei DQN.
+      - text: Weil nur die Hälfte der Gewichte aktualisiert wird.
+        correct: false
+        why: Aktualisiert wird die Zeile $W_a$ der gewählten Aktion – mit „semi“ hat das nichts zu tun.
+      - text: Weil der Faktor $\tfrac12$ im Fehler steht.
+        correct: false
+        why: Der Faktor kürzt sich nur beim Ableiten weg.
+      - text: Weil $\alpha$ halbiert wird.
+        correct: false
+        why: "$\\alpha$ ist frei wählbar und bleibt unverändert."
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze das Semi-Gradient-Update für die Aktion `a`.
+    code: |
+      import numpy as np
+      W = np.array([[0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0]])
+      phi = np.array([1.0, 0.0, 1.0])
+      a, r, alpha = 1, 3.0, 0.5
+      q = W[a] @ phi
+      target = r                     # Endzustand
+      delta = ___
+      W[a] += ___
+      print(W[a])
+    blanks:
+      - answer: "target - q"
+        options: ["target - q", "q - target", "target"]
+      - answer: "alpha * delta * phi"
+        options: ["alpha * delta * phi", "alpha * delta", "alpha * phi"]
+    expect_output: "[2. 0. 1.]"
+    explanation: |
+      $q = 1$, $\delta = 3 - 1 = 2$, also $W_a \mathrel{+}= 0.5 \cdot 2 \cdot [1, 0, 1]$. Ohne `* phi` würden auch Gewichte inaktiver Merkmale verschoben; ohne `delta` ginge es immer gleich weit, egal wie groß der Fehler ist.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma)`: Q-Learning-Ziel mit $\max_{a'} W_{a'} \cdot \varphi(s')$ (bei `done` nur `r`), TD-Fehler berechnen, Zeile `W[a]` in-place aktualisieren und `delta` zurückgeben.
+    starter: |
+      import numpy as np
+
+      def semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma):
+          q = W[a] @ phi
+          # Ziel, TD-Fehler, Update von W[a]
+          pass
+    solution: |
+      import numpy as np
+
+      def semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma):
+          q = W[a] @ phi
+          target = r if done else r + gamma * np.max(W @ phi2)
+          delta = target - q
+          W[a] += alpha * delta * phi
+          return delta
+    tests:
+      - name: Schritt mit Bootstrapping
+        code: |
+          import numpy as np
+          W = np.array([[0.0, 1.0], [2.0, 0.0]])
+          d = semi_gradient_update(W, np.array([1.0, 0.0]), 0, -1.0, np.array([0.0, 1.0]), False, 0.5, 0.9)
+          assert d is not None, "Die Funktion gibt nichts zurück – return delta fehlt."
+          assert close(d, -0.1), f"Ziel = −1 + 0.9·max(1, 0) = −0.1, q = 0 → δ = −0.1 erwartet, bekommen {d}"
+          assert close(W, [[-0.05, 1.0], [2.0, 0.0]]), f"Nur W[0, 0] sollte sich um 0.5·(−0.1)·1 ändern, W ist {W.tolist()}"
+      - name: Endzustand
+        code: |
+          import numpy as np
+          W = np.array([[1.0, 1.0], [5.0, 5.0]])
+          d = semi_gradient_update(W, np.array([0.5, 1.0]), 0, 2.0, np.array([1.0, 1.0]), True, 0.1, 1.0)
+          assert close(d, 0.5), f"Bei done ist das Ziel r = 2, q = 1.5 → δ = 0.5 erwartet, bekommen {d}"
+          assert close(W[0], [1.025, 1.05]), f"W[0] sollte [1.025, 1.05] sein, ist {W[0].tolist()}"
+      - name: Größter Wert im Folgezustand
+        code: |
+          import numpy as np
+          W = np.array([[0.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 1.0, 1.0]])
+          d = semi_gradient_update(W, np.array([1.0, 0.0, 0.0]), 0, 0.0, np.array([0.0, 1.0, 1.0]), False, 1.0, 1.0)
+          assert close(d, 3.0), f"max über alle Aktionen von W @ phi2 = max(0, 3, 2) = 3 erwartet als δ, bekommen {d}"
+    mutants:
+      - |
+        import numpy as np
+
+        def semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma):
+            q = W[a] @ phi
+            target = r if done else r + gamma * np.max(W @ phi2)
+            delta = target - q
+            W[a] += alpha * delta
+            return delta
+      - |
+        import numpy as np
+
+        def semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma):
+            q = W[a] @ phi
+            target = r if done else r + gamma * W[a] @ phi2
+            delta = target - q
+            W[a] += alpha * delta * phi
+            return delta
+      - |
+        import numpy as np
+
+        def semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma):
+            q = W[a] @ phi
+            target = r + gamma * np.max(W @ phi2)
+            delta = target - q
+            W[a] += alpha * delta * phi
+            return delta
+      - |
+        import numpy as np
+
+        def semi_gradient_update(W, phi, a, r, phi2, done, alpha, gamma):
+            q = W[a] @ phi
+            target = r if done else r + gamma * np.max(W @ phi2)
+            delta = target - q
+            W += alpha * delta * phi
+            return delta
+    hints:
+      - "Teilziel: TD-Ziel bilden, Fehler berechnen, Gewichtszeile in Richtung φ verschieben."
+      - "`W @ phi2` liefert die Q-Werte aller Aktionen im Folgezustand; davon brauchst du das Maximum."
+      - "`target = r if done else r + gamma * np.max(W @ phi2)` und `delta = target - q`"
+      - "`W[a] += alpha * delta * phi` und `return delta`"
+  - type: example
+    title: Training im offenen 8×8-Gitter
+    code: |
+      import numpy as np
+      import lab
+      from lab.envs import GridWorld
+
+      env = GridWorld(["S......."] + ["........"] * 6 + [".......G"], max_steps=200)
+
+      def features(s):
+          r, c = divmod(s, env.n_cols)
+          phi = np.zeros(16)
+          phi[r], phi[8 + c] = 1.0, 1.0
+          return phi
+
+      rng = np.random.default_rng(0)
+      W = np.zeros((4, 16))
+      returns = []
+      for k in range(80):
+          s, done, G = env.reset(), False, 0.0
+          while not done:
+              phi = features(s)
+              q = W @ phi
+              a = int(rng.integers(4)) if rng.random() < 0.1 else int(np.argmax(q))
+              s2, r, done = env.step(a)
+              target = r if done else r + np.max(W @ features(s2))
+              W[a] += 0.2 * (target - q[a]) * phi
+              s, G = s2, G + r
+          returns.append(G)
+
+      lab.plot(returns, title="Return pro Episode", xlabel="Episode", ylabel="Return")
+      Qall = np.array([W @ features(s) for s in range(env.n_states)])
+      s, path = env.reset(), [env.start]
+      while not env.is_terminal(s) and len(path) < 30:
+          s, r, done = env.step(int(np.argmax(Qall[s])))
+          path.append(s)
+      env.render(values=Qall.max(axis=1), policy=Qall.argmax(axis=1), path=path, title="Lineare Q-Funktion: max Q und Policy")
+    subgoals:
+      - lines: [7, 11]
+        label: Merkmale berechnen
+      - lines: [18, 21]
+        label: ε-greedy mit Q = W·φ
+      - lines: [22, 24]
+        label: Semi-Gradient-Update
+      - lines: [28, 34]
+        label: Werte und Pfad zeigen
+    after: |
+      Nach wenigen Dutzend Episoden läuft die greedy Policy in 14 Schritten zum Ziel – mit nur 64 Gewichten. Die Werte bilden ein glattes Gefälle, weil jedes Update eine ganze Zeile und Spalte mitbewegt. Das funktioniert, weil hier der wahre Wert (minus Abstand zum Ziel) fast genau „Zeilenanteil + Spaltenanteil“ ist. Mit Wänden passt diese Form nicht mehr – dann braucht es reichere Merkmale oder ein neuronales Netz.
+  - type: quiz
+    question: |
+      Du wählst als Merkmal einen one-hot-Vektor mit **einer Eins pro Zustand** (Länge = Anzahl Zustände). Was ist lineares Q-Learning dann?
+    options:
+      - text: Genau tabellarisches Q-Learning – jede Gewichtszeile ist eine Tabellenspalte.
+        correct: true
+        why: $W_a \cdot \varphi(s)$ liest dann genau einen Eintrag aus, und das Update ändert genau diesen.
+      - text: Es verallgemeinert besser als die Zeilen-/Spalten-Merkmale.
+        correct: false
+        why: Im Gegenteil – ohne geteilte Merkmale gibt es gar keine Verallgemeinerung.
+      - text: Es funktioniert nicht, weil lineare Modelle mindestens zwei Einsen brauchen.
+        correct: false
+        why: Eine einzige Eins ist völlig in Ordnung.
+cards:
+  - id: m15-c-q-skalarprodukt
+    concept: lineare-q-features
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          W = np.array([[2.0, -1.0], [0.0, 3.0]])
+          print(W @ np.array([1.0, 1.0]))
+        options: ["[1. 3.]", "[2. 3.]", "[ 2. -1.]", "[4.]"]
+        answer: "[1. 3.]"
+        explanation: "Zeile 0: 2 − 1 = 1, Zeile 1: 0 + 3 = 3."
+      - type: predict
+        code: |
+          import numpy as np
+          W = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          print(W[1] @ np.array([0.0, 1.0, 0.0]))
+        options: ["5.0", "2.0", "15.0", "[0. 5. 0.]"]
+        answer: "5.0"
+        explanation: Ein one-hot-Merkmal liest genau ein Gewicht aus.
+  - id: m15-c-semi-gradient
+    concept: semi-gradient
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          w = np.array([0.0, 0.0])
+          phi = np.array([1.0, 2.0])
+          delta, alpha = 1.0, 0.5
+          w += alpha * delta * phi
+          print(w)
+        options: ["[0.5 1. ]", "[0.5 0.5]", "[1. 2.]", "[1.5 2.5]"]
+        answer: "[0.5 1. ]"
+        explanation: Jedes Gewicht bewegt sich proportional zu seinem Merkmal.
+      - type: quiz
+        question: Welcher Ausdruck ist beim linearen Modell $\hat q = w \cdot \varphi$ der Gradient nach $w$?
+        options:
+          - text: $\varphi$
+            correct: true
+            why: Die Ableitung eines Skalarprodukts nach einem Faktor ist der andere Faktor.
+          - text: $w$
+            correct: false
+            why: Das wäre die Ableitung nach $\varphi$.
+          - text: $\delta$
+            correct: false
+            why: $\delta$ ist der Fehler, mit dem der Gradient multipliziert wird.

@@ -1,0 +1,286 @@
+id: m01-strings
+title: Texte (Strings) bearbeiten
+minutes: 9
+goals:
+  - Texte mit `+` verketten und mit `len()` messen
+  - Einzelne Zeichen über ihren Index (ab 0) lesen
+  - Zahlen mit f-Strings und `:.2f` sauber in Text einsetzen
+concepts: [string-operationen, string-index, f-string]
+steps:
+  - type: text
+    body: |
+      ## Mit Text arbeiten
+
+      Ein String ist eine Folge von Zeichen. Drei Werkzeuge brauchst du ständig:
+
+      - `+` **verkettet**: `"Arm" + "1"` → `"Arm1"` (ohne Leerzeichen!)
+      - `*` **wiederholt**: `"-" * 5` → `"-----"`
+      - `len(text)` **zählt** die Zeichen – Leerzeichen zählen mit.
+
+      `+` funktioniert nur zwischen zwei Strings. Eine Zahl musst du vorher mit `str()` umwandeln.
+  - type: example
+    code: |
+      name = "Greifer"
+      nummer = 2
+      print(name + " " + str(nummer))
+      print("-" * 10)
+      print(len(name))
+    subgoals:
+      - lines: [1, 2]
+        label: Werte festlegen
+      - lines: 3
+        label: Text zusammensetzen
+      - lines: [4, 5]
+        label: Wiederholen und zählen
+    after: |
+      Das Leerzeichen zwischen `Greifer` und `2` kommt nur, weil `" "` ausdrücklich dazwischen verkettet wird.
+  - type: predict
+    code: |
+      print("Arm" + "1")
+      print("Arm", "1")
+    options:
+      - |
+        Arm1
+        Arm 1
+      - |
+        Arm 1
+        Arm 1
+      - |
+        Arm1
+        Arm1
+      - |
+        Arm 1
+        Arm1
+    answer: |
+      Arm1
+      Arm 1
+    explanation: |
+      `+` klebt die Texte direkt aneinander. Die Kommas in `print` dagegen fügen ein Leerzeichen ein.
+  - type: predict
+    code: |
+      print(len("Hallo Welt"))
+    options: ["9", "10", "2", "11"]
+    answer: "10"
+    explanation: |
+      5 + 1 + 4 = 10 Zeichen – das Leerzeichen ist auch ein Zeichen. Die Anführungszeichen gehören nicht zum Text.
+  - type: text
+    body: |
+      ## Zeichen per Index
+
+      Mit eckigen Klammern holst du ein einzelnes Zeichen: `text[i]`. Der **Index** zählt **ab 0**:
+
+      | Zeichen | `M` | `o` | `t` | `o` | `r` |
+      |---|---|---|---|---|---|
+      | Index | 0 | 1 | 2 | 3 | 4 |
+
+      `"Motor"` hat 5 Zeichen, der letzte Index ist also `4` – allgemein `len(text) - 1`.
+  - type: predict
+    code: |
+      wort = "Motor"
+      print(wort[1])
+      print(wort[len(wort) - 1])
+    options:
+      - |
+        o
+        r
+      - |
+        M
+        r
+      - |
+        o
+        o
+      - |
+        M
+        o
+    answer: |
+      o
+      r
+    explanation: |
+      Index 1 ist das **zweite** Zeichen (`o`), weil bei 0 begonnen wird. `len(wort) - 1` ist 4, also das letzte Zeichen `r`.
+  - type: quiz
+    question: |
+      Was passiert bei diesem Code?
+    code: |
+      wort = "Motor"
+      print(wort[5])
+    options:
+      - text: "Ein `IndexError`: Index 5 gibt es nicht."
+        correct: true
+        why: "Die Indizes laufen von 0 bis 4. Ein Index außerhalb bricht mit `IndexError: string index out of range` ab."
+      - text: "Es wird `r` ausgegeben."
+        correct: false
+        why: "`r` ist das 5. Zeichen, hat aber den Index 4 – gezählt wird ab 0."
+      - text: Es wird nichts ausgegeben, das Programm läuft weiter.
+        correct: false
+        why: Python ignoriert ungültige Indizes nicht stillschweigend, sondern meldet einen Fehler.
+  - type: text
+    body: |
+      ## f-Strings: Werte in Text einsetzen
+
+      Statt `"x = " + str(x)` schreibt man kürzer einen **f-String**: ein `f` direkt vor dem Anführungszeichen, Werte in geschweiften Klammern.
+
+      ```python
+      winkel = 1.5708
+      print(f"Winkel: {winkel:.2f} rad")   # Winkel: 1.57 rad
+      ```
+
+      - `{winkel}` setzt den Wert ein – eine Umwandlung mit `str()` ist nicht nötig.
+      - `{winkel:.2f}` zeigt ihn **gerundet mit 2 Nachkommastellen** (`.1f` → eine, `.3f` → drei). Der Wert in der Variablen bleibt unverändert.
+  - type: predict
+    code: |
+      v = 1.23456
+      print(f"v = {v:.2f} m/s")
+      print("v = {v:.2f} m/s")
+    options:
+      - |
+        v = 1.23 m/s
+        v = 1.23 m/s
+      - |
+        v = 1.23 m/s
+        v = {v:.2f} m/s
+      - |
+        v = 1.23456 m/s
+        v = {v:.2f} m/s
+      - |
+        v = {v:.2f} m/s
+        v = {v:.2f} m/s
+    answer: |
+      v = 1.23 m/s
+      v = {v:.2f} m/s
+    explanation: |
+      Nur mit dem `f` davor werden die geschweiften Klammern ausgewertet. Ohne `f` ist es gewöhnlicher Text und wird wörtlich ausgegeben – ein sehr häufiger Fehler.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die Lücke, sodass `Strecke: 12.3 m` ausgegeben wird.
+    code: |
+      s = 12.34
+      print(f"Strecke: {s___} m")
+    blanks:
+      - answer: ":.1f"
+        options: [":.1f", ":.2f", ".1f", ":1f"]
+    expect_output: "Strecke: 12.3 m"
+    explanation: |
+      Das Format steht nach einem **Doppelpunkt**: `{s:.1f}`. Die Zahl hinter dem Punkt ist die Anzahl der Nachkommastellen. Ohne Punkt (`:1f`) bedeutet die 1 etwas anderes (Mindestbreite) und es erscheinen sechs Nachkommastellen.
+  - type: exercise
+    mode: make
+    prompt: |
+      Gib mit **einem** f-String den Gelenknamen und den Winkel mit zwei Nachkommastellen aus.
+
+      Erwartete Ausgabe:
+      ```
+      Schulter: 0.79 rad
+      ```
+    starter: |
+      gelenk = "Schulter"
+      winkel = 0.7854
+      # print(f"...")
+    solution: |
+      gelenk = "Schulter"
+      winkel = 0.7854
+      print(f"{gelenk}: {winkel:.2f} rad")
+    tests:
+      - name: Ausgabe
+        code: |
+          assert lines() == ["Schulter: 0.79 rad"], f"Erwartet ['Schulter: 0.79 rad'], bekommen {lines()}"
+    mutants:
+      - |
+        gelenk = "Schulter"
+        winkel = 0.7854
+        print(f"{gelenk}: {winkel} rad")
+      - |
+        gelenk = "Schulter"
+        winkel = 0.7854
+        print("{gelenk}: {winkel:.2f} rad")
+      - |
+        gelenk = "Schulter"
+        winkel = 0.7854
+        print(f"{gelenk}: {winkel:.1f} rad")
+      - |
+        gelenk = "Schulter"
+        winkel = 0.7854
+        print(f"gelenk: {winkel:.2f} rad")
+    hints:
+      - "Teilziel: einen Text bauen, in den zwei Werte eingesetzt werden."
+      - "f-String: `f` vor das Anführungszeichen, jeden Wert in `{…}`. Das Format für zwei Nachkommastellen ist `:.2f`."
+      - '`print(f"{gelenk}: ... rad")`'
+      - '`print(f"{gelenk}: {winkel:.2f} rad")`'
+  - type: quiz
+    question: |
+      `x = 5` – welche Zeile gibt `x = 5` aus?
+    options:
+      - text: '`print(f"x = {x}")`'
+        correct: true
+        why: Der f-String setzt den Wert von `x` an die Stelle von `{x}`.
+      - text: '`print("x = {x}")`'
+        correct: false
+        why: Ohne `f` wird `{x}` wörtlich ausgegeben.
+      - text: '`print("x = " + x)`'
+        correct: false
+        why: "`x` ist ein `int`; Text plus Zahl ergibt einen `TypeError`. Es bräuchte `str(x)`."
+      - text: '`print("x =" + str(x))`'
+        correct: false
+        why: Fast – aber vor der 5 fehlt das Leerzeichen, die Ausgabe ist `x =5`.
+cards:
+  - id: m01-c-verkettung
+    concept: string-operationen
+    variants:
+      - type: predict
+        code: |
+          print("Rad" + "2" + "x")
+        options: ["Rad2x", "Rad 2 x", "Rad2 x"]
+        answer: "Rad2x"
+        explanation: "`+` fügt kein Leerzeichen ein."
+      - type: predict
+        code: |
+          print("ab" * 3)
+        options: ["ababab", "ab3", "ab ab ab"]
+        answer: "ababab"
+        explanation: Text mal Zahl wiederholt den Text ohne Trennzeichen.
+      - type: predict
+        code: |
+          print(len("Ja Nein"))
+        options: ["7", "6", "2"]
+        answer: "7"
+        explanation: Auch das Leerzeichen zählt als Zeichen.
+  - id: m01-c-index-ab-null
+    concept: string-index
+    variants:
+      - type: predict
+        code: |
+          s = "Basis"
+          print(s[2])
+        options: ["s", "a", "i"]
+        answer: "s"
+        explanation: "Index 0 = `B`, 1 = `a`, 2 = `s`."
+      - type: predict
+        code: |
+          s = "Robot"
+          print(s[0] + s[4])
+        options: ["Rt", "Ro", "ot"]
+        answer: "Rt"
+        explanation: Index 0 ist das erste Zeichen, Index 4 (= `len - 1`) das letzte.
+  - id: m01-c-fstring-format
+    concept: f-string
+    variants:
+      - type: predict
+        code: |
+          a = 2.0 / 3
+          print(f"{a:.2f}")
+        options: ["0.67", "0.66", "0.666667", "{a:.2f}"]
+        answer: "0.67"
+        explanation: "`:.2f` rundet auf zwei Nachkommastellen (0.666… → 0.67)."
+      - type: predict
+        code: |
+          t = 4
+          print(f"t = {t:.1f} s")
+        options: ["t = 4.0 s", "t = 4 s", "t = {t:.1f} s"]
+        answer: "t = 4.0 s"
+        explanation: "`:.1f` zeigt auch eine ganze Zahl mit einer Nachkommastelle."
+      - type: predict
+        code: |
+          n = 3
+          print("n = {n}")
+        options: ["n = {n}", "n = 3", "Fehler"]
+        answer: "n = {n}"
+        explanation: Ohne `f` vor dem String werden die Klammern nicht ausgewertet.

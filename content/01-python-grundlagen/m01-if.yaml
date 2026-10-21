@@ -1,0 +1,374 @@
+id: m01-if
+title: Entscheidungen mit if
+minutes: 10
+goals:
+  - Code nur unter einer Bedingung ausführen (`if`)
+  - Mit `elif` und `else` zwischen mehreren Fällen wählen
+  - Blöcke korrekt einrücken
+concepts: [if-verzweigung]
+steps:
+  - type: text
+    body: |
+      ## Nur wenn …
+
+      ```python
+      if bedingung:
+          anweisung
+          anweisung
+      ```
+
+      - Die Zeile mit `if` endet mit einem **Doppelpunkt**.
+      - Alle Zeilen darunter, die **eingerückt** sind (4 Leerzeichen), bilden den **Block**. Er läuft nur, wenn die Bedingung `True` ist.
+      - Die erste nicht eingerückte Zeile gehört nicht mehr dazu – ab dort geht es immer weiter.
+
+      In Python ist die Einrückung kein Schmuck, sondern Teil der Grammatik. Fehlt sie, meldet Python einen `IndentationError`.
+  - type: example
+    code: |
+      temperatur = 85
+      if temperatur > 80:
+          print("Warnung: zu heiß")
+          print("Motor wird gedrosselt")
+      print("Messung fertig")
+    subgoals:
+      - lines: 1
+        label: Messwert festlegen
+      - lines: 2
+        label: Bedingung prüfen
+      - lines: [3, 4]
+        label: Block für den Ja-Fall
+      - lines: 5
+        label: Danach immer weiter
+    after: |
+      Bei 85 ist die Bedingung `True`, also laufen beide eingerückten Zeilen. Zeile 5 läuft in jedem Fall.
+  - type: predict
+    intro: |
+      Dasselbe Programm, aber die Temperatur ist jetzt 70.
+    code: |
+      temperatur = 70
+      if temperatur > 80:
+          print("Warnung: zu heiß")
+          print("Motor wird gedrosselt")
+      print("Messung fertig")
+    options:
+      - |
+        Messung fertig
+      - |
+        Motor wird gedrosselt
+        Messung fertig
+      - |
+        Warnung: zu heiß
+        Motor wird gedrosselt
+        Messung fertig
+      - "(keine Ausgabe)"
+    answer: |
+      Messung fertig
+    explanation: |
+      `70 > 80` ist `False`, also wird der **ganze** eingerückte Block übersprungen – beide Zeilen. Die nicht eingerückte letzte Zeile läuft trotzdem.
+  - type: explain
+    question: |
+      Woran erkennt Python, welche Zeilen zum `if`-Block gehören?
+    options:
+      - text: An der Einrückung – alle direkt folgenden, gleich weit eingerückten Zeilen gehören dazu.
+        correct: true
+        why: Andere Sprachen nutzen Klammern `{ }`, Python nutzt die Einrückung.
+      - text: Nur die eine Zeile direkt nach dem `if` gehört dazu.
+        correct: false
+        why: Der Block kann beliebig viele Zeilen haben, solange sie eingerückt sind.
+      - text: Alles bis zum Ende des Programms gehört dazu.
+        correct: false
+        why: Die erste nicht eingerückte Zeile beendet den Block.
+  - type: text
+    body: |
+      ## Sonst … – `else` und `elif`
+
+      ```python
+      if abstand < 0.1:
+          aktion = "stopp"
+      elif abstand < 0.5:
+          aktion = "langsam"
+      else:
+          aktion = "fahren"
+      ```
+
+      - Python prüft die Bedingungen **von oben nach unten**.
+      - Der **erste** Block, dessen Bedingung `True` ist, läuft – alle weiteren werden übersprungen.
+      - `else` (ohne Bedingung) läuft nur, wenn keine Bedingung zutraf.
+      - `elif` heißt „else if“. Es kann beliebig viele davon geben, `else` höchstens eins am Ende.
+  - type: trace
+    intro: |
+      Verfolge, welche Zeilen ausgeführt werden, wenn `abstand = 0.3` ist.
+    code: |
+      abstand = 0.3
+      if abstand < 0.1:
+          aktion = "stopp"
+      elif abstand < 0.5:
+          aktion = "langsam"
+      else:
+          aktion = "fahren"
+      print(aktion)
+    questions:
+      - line: 5
+        var: aktion
+        answer: "'langsam'"
+        prompt: Zeile 5 wurde ausgeführt. Welchen Wert hat `aktion` jetzt?
+    after: |
+      Zeile 2 (`0.3 < 0.1`) war `False`, Zeile 4 (`0.3 < 0.5`) `True` → Zeile 5 läuft. Der `else`-Block wird gar nicht mehr betrachtet.
+  - type: predict
+    code: |
+      punkte = 95
+      if punkte > 50:
+          print("bestanden")
+      elif punkte > 90:
+          print("sehr gut")
+      else:
+          print("nicht bestanden")
+    options:
+      - |
+        bestanden
+      - |
+        sehr gut
+      - |
+        bestanden
+        sehr gut
+      - |
+        nicht bestanden
+    answer: |
+      bestanden
+    explanation: |
+      `95 > 50` ist schon `True` – damit ist die Entscheidung gefallen, `elif` wird nicht mehr geprüft. Die strengere Bedingung muss deshalb **zuerst** stehen.
+  - type: parsons
+    fading: true
+    prompt: |
+      Bringe die Zeilen in Reihenfolge und Einrückung, sodass bei `geschw = 2.5` die Meldung `zu schnell` erscheint (und bei langsamer Fahrt `ok`).
+    lines:
+      - "geschw = 2.5"
+      - "if geschw > 2.0:"
+      - '    print("zu schnell")'
+      - "else:"
+      - '    print("ok")'
+    distractors:
+      - "if geschw > 2.0"
+      - "else geschw <= 2.0:"
+    expect_output: "zu schnell"
+  - type: fill
+    fading: true
+    prompt: |
+      Eine Greifkraft über 20 N ist zu fest, unter 5 N zu locker, sonst ok. Ergänze so, dass bei `kraft = 25` genau `zu fest` ausgegeben wird.
+    code: |
+      kraft = 25
+      if kraft ___ 20:
+          print("zu fest")
+      ___ kraft < 5:
+          print("zu locker")
+      ___:
+          print("ok")
+    blanks:
+      - answer: ">"
+        options: [">", "<", "=="]
+      - answer: elif
+        options: [elif, if, else]
+      - answer: else
+        options: [else, elif, if]
+    expect_output: "zu fest"
+    explanation: |
+      Mit `if` statt `elif` in der Mitte entstünde ein **zweites, unabhängiges** `if` mit eigenem `else` – bei 25 N käme dann zusätzlich `ok`. `else` hat nie eine Bedingung.
+  - type: exercise
+    mode: modify
+    prompt: |
+      Ergänze einen dritten Fall: Über 60 Grad soll `heiß` ausgegeben werden. Die Fälle sind dann: unter 20 → `kalt`, 20 bis 60 → `warm`, über 60 → `heiß`.
+    starter: |
+      temperatur = 75
+      if temperatur < 20:
+          print("kalt")
+      else:
+          print("warm")
+    solution: |
+      temperatur = 75
+      if temperatur < 20:
+          print("kalt")
+      elif temperatur <= 60:
+          print("warm")
+      else:
+          print("heiß")
+    tests:
+      - name: 75 Grad ist heiß
+        code: |
+          assert lines() == ["heiß"], f"Bei 75 Grad erwartet ['heiß'], bekommen {lines()}"
+    mutants:
+      - |
+        temperatur = 75
+        if temperatur < 20:
+            print("kalt")
+        else:
+            print("warm")
+        if temperatur > 60:
+            print("heiß")
+      - |
+        temperatur = 75
+        if temperatur < 20:
+            print("kalt")
+        elif temperatur > 20:
+            print("warm")
+        else:
+            print("heiß")
+    hints:
+      - "Teilziel: zwischen `if` und `else` einen weiteren Fall einschieben."
+      - "Ein zusätzlicher Fall ist ein `elif`. Überlege, welcher Fall dann für `else` übrig bleibt."
+      - |
+        ```python
+        elif temperatur <= 60:
+            print("warm")
+        else:
+            ...
+        ```
+  - type: exercise
+    mode: make
+    prompt: |
+      Gib für den Akkustand `akku` (in %) eine Meldung aus:
+
+      - unter 10 → `leer`
+      - unter 30 → `niedrig`
+      - sonst → `ok`
+
+      Bei `akku = 5` muss genau eine Zeile `leer` erscheinen.
+    starter: |
+      akku = 5
+      # if ...
+    solution: |
+      akku = 5
+      if akku < 10:
+          print("leer")
+      elif akku < 30:
+          print("niedrig")
+      else:
+          print("ok")
+    tests:
+      - name: 5 % ist leer
+        code: |
+          assert lines() == ["leer"], f"Bei akku = 5 erwartet genau ['leer'], bekommen {lines()}"
+    mutants:
+      - |
+        akku = 5
+        if akku < 30:
+            print("niedrig")
+        elif akku < 10:
+            print("leer")
+        else:
+            print("ok")
+      - |
+        akku = 5
+        if akku < 10:
+            print("leer")
+        if akku < 30:
+            print("niedrig")
+        else:
+            print("ok")
+      - |
+        akku = 5
+        if akku > 10:
+            print("leer")
+        elif akku > 30:
+            print("niedrig")
+        else:
+            print("ok")
+    hints:
+      - "Teilziel: drei Fälle → `if`, `elif`, `else`."
+      - Die Bedingungen werden von oben geprüft, der erste Treffer gewinnt. Welcher Fall muss also zuerst kommen?
+      - |
+        ```python
+        if akku < 10:
+            print("leer")
+        elif ...
+        ```
+    explanation: |
+      Steht `akku < 30` zuerst, landet auch ein leerer Akku bei `niedrig`. Bei aufeinander aufbauenden Grenzen also mit der engsten beginnen.
+  - type: quiz
+    question: Was gibt dieser Code aus?
+    code: |
+      x = 7
+      if x > 5:
+          print("A")
+      if x > 3:
+          print("B")
+      else:
+          print("C")
+    options:
+      - text: "`A` und `B`"
+        correct: true
+        why: Das sind zwei **getrennte** `if`-Anweisungen. Beide Bedingungen sind `True`, also laufen beide.
+      - text: nur `A`
+        correct: false
+        why: Das wäre so, wenn das zweite `if` ein `elif` wäre.
+      - text: "`A` und `C`"
+        correct: false
+        why: "`else` gehört zum zweiten `if`; da `7 > 3` gilt, läuft es nicht."
+      - text: "`A`, `B` und `C`"
+        correct: false
+        why: Von `if`/`else` läuft immer genau einer der beiden Blöcke.
+cards:
+  - id: m01-c-if-block
+    concept: if-verzweigung
+    variants:
+      - type: predict
+        code: |
+          n = 2
+          if n > 5:
+              print("groß")
+          print("fertig")
+        options:
+          - |
+            fertig
+          - |
+            groß
+            fertig
+          - "(keine Ausgabe)"
+        answer: |
+          fertig
+        explanation: Der eingerückte Block wird übersprungen, die nicht eingerückte Zeile läuft immer.
+      - type: predict
+        code: |
+          n = 2
+          if n > 5:
+              print("groß")
+              print("fertig")
+          print("Ende")
+        options:
+          - |
+            Ende
+          - |
+            fertig
+            Ende
+          - |
+            groß
+            fertig
+            Ende
+        answer: |
+          Ende
+        explanation: "`groß` und `fertig` sind beide eingerückt und gehören zum Block – bei `n = 2` läuft keine davon. Nur `Ende` steht außerhalb."
+  - id: m01-c-elif-erster-treffer
+    concept: if-verzweigung
+    variants:
+      - type: predict
+        code: |
+          v = 12
+          if v > 5:
+              print("schnell")
+          elif v > 10:
+              print("sehr schnell")
+          else:
+              print("langsam")
+        options: ["schnell", "sehr schnell", "langsam"]
+        answer: "schnell"
+        explanation: Die erste zutreffende Bedingung gewinnt – `elif` wird nicht mehr geprüft.
+      - type: predict
+        code: |
+          v = 3
+          if v > 10:
+              print("sehr schnell")
+          elif v > 5:
+              print("schnell")
+          else:
+              print("langsam")
+        options: ["langsam", "schnell", "sehr schnell"]
+        answer: "langsam"
+        explanation: Keine Bedingung trifft zu, also läuft `else`.

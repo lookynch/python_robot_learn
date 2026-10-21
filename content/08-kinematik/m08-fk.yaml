@@ -1,0 +1,353 @@
+id: m08-fk
+title: Vorwärtskinematik mit 2 Gelenken
+minutes: 9
+goals:
+  - Die FK-Formel des 2-Gelenk-Arms in eine Funktion `fk(q, l1, l2)` übersetzen
+  - Ellbogen- und Spitzenposition berechnen und mit `lab.chain` zeichnen
+  - FK an bekannten Stellungen testen
+concepts: [vorwaertskinematik]
+steps:
+  - type: text
+    body: |
+      ## Vorwärtskinematik (forward kinematics, FK)
+
+      Gegeben die Gelenkwinkel, gesucht die Spitze. Jedes Glied ist ein Vektor der Länge $l_i$ in seiner **absoluten** Richtung; die Spitze ist ihre Summe:
+
+      $$
+      \begin{aligned}
+      x &= l_1\cos q_1 + l_2\cos(q_1+q_2)\\
+      y &= l_1\sin q_1 + l_2\sin(q_1+q_2)
+      \end{aligned}
+      $$
+
+      Der erste Summand ist der **Ellbogen**. In Code (Kurs-Konvention):
+
+      `fk(q, l1=1.0, l2=1.0)` → `np.array([x, y])`
+  - type: example
+    code: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      q = [0.6, 0.9]
+      elbow = (np.cos(q[0]), np.sin(q[0]))
+      tip = fk(q)
+      print(np.round(tip, 3))
+      lab.chain([[(0, 0), elbow, tuple(tip)]], title="Selbst berechnet")
+    subgoals:
+      - lines: [4, 7]
+        label: FK-Formel als Funktion
+      - lines: [9, 11]
+        label: Gelenkpositionen berechnen
+      - lines: [12, 13]
+        label: Ergebnis ausgeben und zeichnen
+    after: |
+      `lab.chain` bekommt eine Liste von **Frames**, jeder Frame ist eine Liste von Punkten (Basis, Ellbogen, Spitze). Ein Frame = ein Standbild; viele Frames = Animation.
+  - type: explain
+    question: |
+      Warum steht im zweiten Summanden $\cos(q_1+q_2)$ und nicht $\cos q_2$?
+    options:
+      - text: Weil $q_2$ relativ zum ersten Glied gemessen wird – die absolute Richtung von Glied 2 ist $q_1+q_2$.
+        correct: true
+        why: Die Kosinus-/Sinusterme brauchen den Winkel gegenüber der x-Achse.
+      - text: Weil sich die Fehler von $q_1$ und $q_2$ so ausgleichen.
+        correct: false
+        why: Es geht nicht um Fehler, sondern um Geometrie – die Summe ist die absolute Richtung.
+      - text: Das ist eine Näherung für kleine Winkel.
+        correct: false
+        why: Die Formel ist exakt, für alle Winkel.
+  - type: predict
+    code: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      x, y = fk([0.0, np.pi], l1=2.0, l2=1.0)
+      print(f"{x:.2f} {y:.2f}")
+    options: ["1.00 0.00", "3.00 0.00", "-1.00 0.00", "2.00 1.00"]
+    answer: "1.00 0.00"
+    explanation: |
+      $q_2 = \pi$ faltet Glied 2 komplett zurück: $x = 2\cos 0 + 1\cos\pi = 2 - 1 = 1$. `3.00` wäre gestreckt, `2.00 1.00` ein Knick um $\pi/2$.
+  - type: fill
+    fading: true
+    prompt: |
+      Ergänze die FK so, dass alle Tests bestehen.
+    code: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(___)
+          y = l1 * ___(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+    blanks:
+      - answer: "q[0] + q[1]"
+        options: ["q[0] + q[1]", "q[1]", "q[0] * q[1]", "q[1] - q[0]"]
+      - answer: "np.sin"
+        options: ["np.sin", "np.cos", "np.tan"]
+    tests:
+      - name: Bekannte Stellungen
+        code: |
+          import numpy as np
+          assert close(fk([0.0, 0.0]), [2.0, 0.0]), f"fk([0, 0]) sollte [2, 0] sein, ist {fk([0.0, 0.0])}"
+          assert close(fk([0.0, np.pi / 2]), [1.0, 1.0]), f"fk([0, π/2]) sollte [1, 1] sein, ist {fk([0.0, np.pi / 2])}"
+          assert close(fk([0.5, 0.7], 1.0, 0.5), [np.cos(0.5) + 0.5 * np.cos(1.2), np.sin(0.5) + 0.5 * np.sin(1.2)])
+    explanation: |
+      Glied 2 braucht die Summe der Winkel; für $y$ gehört überall der Sinus hin.
+  - type: exercise
+    mode: make
+    prompt: |
+      Schreibe `fk(q, l1=1.0, l2=1.0)`, die die Spitzenposition als `np.array([x, y])` zurückgibt.
+
+      Die Tests prüfen bekannte Stellungen (gestreckt, abgeknickt, gefaltet) und zufällige Winkel.
+    starter: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          # x und y berechnen, als np.array zurückgeben
+          pass
+    solution: |
+      import numpy as np
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+    tests:
+      - name: Gestreckt nach oben
+        code: |
+          import numpy as np
+          p = fk([np.pi / 2, 0.0])
+          assert close(p, [0.0, 2.0]), f"fk([π/2, 0]) sollte [0, 2] sein, ist {p}"
+      - name: Gliedlängen werden benutzt
+        code: |
+          import numpy as np
+          p = fk([0.0, np.pi / 2], 1.0, 0.5)
+          assert close(p, [1.0, 0.5]), f"fk([0, π/2], l1=1, l2=0.5) sollte [1, 0.5] sein, ist {p}"
+          p = fk([0.0, np.pi], 2.0, 0.5)
+          assert close(p, [1.5, 0.0]), f"fk([0, π], l1=2, l2=0.5) sollte [1.5, 0] sein, ist {p}"
+      - name: Zufällige Winkel
+        code: |
+          import numpy as np
+          rng = np.random.default_rng(5)
+          for _ in range(5):
+              q = rng.uniform(-np.pi, np.pi, 2)
+              l1, l2 = rng.uniform(0.3, 2.0, 2)
+              ref = [l1 * np.cos(q[0]) + l2 * np.cos(q.sum()), l1 * np.sin(q[0]) + l2 * np.sin(q.sum())]
+              assert close(fk(q, l1, l2), ref), f"fk({np.round(q, 2)}, {l1:.2f}, {l2:.2f}) sollte {np.round(ref, 3)} sein, ist {fk(q, l1, l2)}"
+      - name: Rückgabe ist ein NumPy-Array
+        code: |
+          import numpy as np
+          p = fk([0.1, 0.2])
+          assert isinstance(p, np.ndarray) and p.shape == (2,), f"fk soll np.array([x, y]) zurückgeben (Form (2,)), bekommen {type(p).__name__}"
+    mutants:
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l1 * np.cos(q[0]) + l2 * np.cos(q[1])
+            y = l1 * np.sin(q[0]) + l2 * np.sin(q[1])
+            return np.array([x, y])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l2 * np.cos(q[0]) + l1 * np.cos(q[0] + q[1])
+            y = l2 * np.sin(q[0]) + l1 * np.sin(q[0] + q[1])
+            return np.array([x, y])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+            y = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+            return np.array([x, y])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            q = np.deg2rad(q)
+            x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+            y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+            return np.array([x, y])
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+            y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+            print(x, y)
+    hints:
+      - "Teilziel: FK-Formel als Funktion – erst x, dann y, dann zurückgeben."
+      - Glied 1 zeigt in Richtung $q_1$, Glied 2 in Richtung $q_1 + q_2$. Spitze = Summe beider Gliedvektoren.
+      - "`x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])`"
+      - "Analog `y` mit `np.sin`, dann `return np.array([x, y])`."
+  - type: exercise
+    mode: make
+    prompt: |
+      Jetzt soll der Arm **winken**. Schreibe `arm_frame(q, l1=1.0, l2=1.0)`, die die drei Punkte `[(0, 0), ellbogen, spitze]` als Liste von Tupeln liefert. `fk` ist schon da.
+
+      Der Rest des Codes baut daraus mit `lab.chain` eine Animation.
+    starter: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      def arm_frame(q, l1=1.0, l2=1.0):
+          # Basis, Ellbogen, Spitze
+          pass
+
+      ts = np.linspace(0, 2 * np.pi, 90)
+      frames = [arm_frame([1.2 + 0.2 * np.sin(t), 0.8 * np.sin(2 * t)]) for t in ts]
+      lab.chain(frames, title="Winken")
+    solution: |
+      import numpy as np
+      import lab
+
+      def fk(q, l1=1.0, l2=1.0):
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          return np.array([x, y])
+
+      def arm_frame(q, l1=1.0, l2=1.0):
+          elbow = (l1 * np.cos(q[0]), l1 * np.sin(q[0]))
+          tip = fk(q, l1, l2)
+          return [(0.0, 0.0), elbow, (tip[0], tip[1])]
+
+      ts = np.linspace(0, 2 * np.pi, 90)
+      frames = [arm_frame([1.2 + 0.2 * np.sin(t), 0.8 * np.sin(2 * t)]) for t in ts]
+      lab.chain(frames, title="Winken")
+    tests:
+      - name: Drei Punkte, Basis im Ursprung
+        code: |
+          f = arm_frame([0.3, 0.4])
+          assert len(f) == 3, f"Erwartet 3 Punkte (Basis, Ellbogen, Spitze), bekommen {len(f)}"
+          assert close(f[0], [0.0, 0.0]), f"Erster Punkt sollte die Basis (0, 0) sein, ist {f[0]}"
+      - name: Ellbogen und Spitze stimmen
+        code: |
+          import numpy as np
+          import lab
+          for q, links in [([0.3, 0.4], (1.0, 1.0)), ([2.0, -1.0], (1.5, 0.5)), ([-0.7, 2.5], (0.8, 1.2))]:
+              f = arm_frame(q, *links)
+              ref = lab.arm_points(q, links)
+              assert close(f[1], ref[1]), f"Ellbogen bei q={q}, Längen {links}: erwartet {np.round(ref[1], 3)}, bekommen {np.round(f[1], 3)}"
+              assert close(f[2], ref[2]), f"Spitze bei q={q}, Längen {links}: erwartet {np.round(ref[2], 3)}, bekommen {np.round(f[2], 3)}"
+    mutants:
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+            y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+            return np.array([x, y])
+        def arm_frame(q, l1=1.0, l2=1.0):
+            elbow = (l1 * np.cos(q[0] + q[1]), l1 * np.sin(q[0] + q[1]))
+            tip = fk(q, l1, l2)
+            return [(0.0, 0.0), elbow, (tip[0], tip[1])]
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+            y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+            return np.array([x, y])
+        def arm_frame(q, l1=1.0, l2=1.0):
+            elbow = (l1 * np.cos(q[0]), l1 * np.sin(q[0]))
+            tip = fk(q)
+            return [(0.0, 0.0), elbow, (tip[0], tip[1])]
+      - |
+        import numpy as np
+        def fk(q, l1=1.0, l2=1.0):
+            x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+            y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+            return np.array([x, y])
+        def arm_frame(q, l1=1.0, l2=1.0):
+            elbow = (np.cos(q[0]), np.sin(q[0]))
+            tip = fk(q, l1, l2)
+            return [elbow, (tip[0], tip[1])]
+    hints:
+      - "Teilziel: Gelenkpositionen berechnen – Ellbogen und Spitze."
+      - Der Ellbogen ist der erste Summand der FK-Formel, also nur Glied 1.
+      - "`elbow = (l1 * np.cos(q[0]), l1 * np.sin(q[0]))`"
+      - "`tip = fk(q, l1, l2)` und `return [(0.0, 0.0), elbow, (tip[0], tip[1])]` – die Längen an `fk` weitergeben!"
+  - type: quiz
+    question: |
+      Was liefert `fk([np.pi, 0.0])` mit $l_1 = l_2 = 1$ (gerundet)?
+    options:
+      - text: "`[-2, 0]`"
+        correct: true
+        why: Beide Glieder zeigen in Richtung $\pi$, also nach links.
+      - text: "`[2, 0]`"
+        correct: false
+        why: Das wäre $q_1 = 0$.
+      - text: "`[0, 2]`"
+        correct: false
+        why: Das wäre $q_1 = \pi/2$ – $\pi$ ist eine halbe Umdrehung.
+      - text: "`[-1, 1]`"
+        correct: false
+        why: Mit $q_2 = 0$ ist der Arm gestreckt, beide Glieder zeigen in dieselbe Richtung.
+cards:
+  - id: m08-c-fk-werte
+    concept: vorwaertskinematik
+    variants:
+      - type: predict
+        code: |
+          import numpy as np
+          q = [np.pi / 2, -np.pi / 2]
+          x = np.cos(q[0]) + np.cos(q[0] + q[1])
+          y = np.sin(q[0]) + np.sin(q[0] + q[1])
+          print(f"{x:.1f} {y:.1f}")
+        options: ["1.0 1.0", "0.0 0.0", "0.0 2.0", "1.0 -1.0"]
+        answer: "1.0 1.0"
+        explanation: Glied 1 nach oben bis $(0, 1)$, Glied 2 absolut in Richtung $0$, also nach rechts.
+      - type: predict
+        code: |
+          import numpy as np
+          l1, l2 = 1.0, 2.0
+          q = [0.0, np.pi / 2]
+          x = l1 * np.cos(q[0]) + l2 * np.cos(q[0] + q[1])
+          y = l1 * np.sin(q[0]) + l2 * np.sin(q[0] + q[1])
+          print(f"{x:.1f} {y:.1f}")
+        options: ["1.0 2.0", "2.0 1.0", "3.0 0.0", "1.0 1.0"]
+        answer: "1.0 2.0"
+        explanation: Glied 1 (Länge 1) auf der x-Achse, Glied 2 (Länge 2) nach oben.
+      - type: predict
+        code: |
+          import numpy as np
+          q = [np.pi, np.pi / 2]
+          x = np.cos(q[0]) + np.cos(q[0] + q[1])
+          y = np.sin(q[0]) + np.sin(q[0] + q[1])
+          print(f"{x:.1f} {y:.1f}")
+        options: ["-1.0 -1.0", "-1.0 1.0", "-2.0 0.0", "1.0 -1.0"]
+        answer: "-1.0 -1.0"
+        explanation: Glied 1 nach links bis $(-1, 0)$, Glied 2 absolut $3\pi/2$, also nach unten.
+  - id: m08-c-fk-formel
+    concept: vorwaertskinematik
+    variants:
+      - type: quiz
+        question: Welcher Ausdruck ist die y-Koordinate der Spitze?
+        options:
+          - text: $l_1\sin q_1 + l_2\sin(q_1+q_2)$
+            correct: true
+            why: Summe beider Gliedvektoren, Glied 2 mit absolutem Winkel.
+          - text: $l_1\sin q_1 + l_2\sin q_2$
+            correct: false
+            why: $q_2$ ist relativ – es fehlt $q_1$.
+          - text: $(l_1 + l_2)\sin(q_1+q_2)$
+            correct: false
+            why: Das gilt nur, wenn beide Glieder in dieselbe Richtung zeigen ($q_1 = q_1 + q_2$, also $q_2 = 0$).
+      - type: quiz
+        question: Welcher Ausdruck ist die x-Koordinate des **Ellbogens**?
+        options:
+          - text: $l_1\cos q_1$
+            correct: true
+            why: Der Ellbogen ist das Ende von Glied 1.
+          - text: $l_1\cos q_1 + l_2\cos(q_1+q_2)$
+            correct: false
+            why: Das ist die Spitze.
+          - text: $l_2\cos(q_1+q_2)$
+            correct: false
+            why: Das ist nur der Vektor von Glied 2.
