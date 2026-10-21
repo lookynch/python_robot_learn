@@ -40,6 +40,16 @@ test('Stopp beendet eine Endlosschleife und Python startet neu', async ({ page }
   await expect(page.getByRole('log', { name: 'Terminal' })).toContainText('42');
 });
 
+test('Editor zeigt einen sichtbaren Cursor', async ({ page }) => {
+  await page.goto('/play');
+  await page.locator('.cm-content').click();
+  const cursor = page.locator('.cm-cursor').first();
+  await expect(cursor).toBeAttached();
+  await expect(cursor).toHaveCSS('border-left-color', 'rgb(79, 179, 255)');
+  const box = await cursor.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(10);
+});
+
 test('Arm-Animation wird als Canvas gezeichnet', async ({ page }) => {
   await page.goto('/play');
   await page.getByRole('button', { name: 'Roboterarm' }).click();
@@ -59,7 +69,10 @@ test('Erste Lektion lässt sich abschließen und schaltet Modul 1 frei', async (
   await page.getByRole('button', { name: /Ausführen/ }).click();
   await expect(page.getByRole('log', { name: 'Terminal' })).toContainText('Hallo, Roboter!');
   await next.click();
-  await page.getByRole('radio', { name: '2 + 3' }).click();
+  const option = page.getByRole('radio', { name: '2 + 3' });
+  await option.click();
+  await expect(option).toHaveAttribute('aria-checked', 'true');
+  await expect(option.locator('.option-mark.checked')).toBeVisible();
   await page.getByRole('radio', { name: 'Ganz sicher' }).click();
   await page.getByRole('button', { name: 'Vorhersage prüfen' }).click();
   await expect(page.getByText('Richtig vorhergesagt.')).toBeVisible();
