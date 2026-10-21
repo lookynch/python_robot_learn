@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { PathIcon, PlayIcon, ProfileIcon, ReviewIcon } from './components/icons';
+import { PathIcon, PlayIcon, ProfileIcon, ReviewIcon, RobotIcon } from './components/icons';
 import { ToastHost } from './components/Toast';
 import { allCardIds } from './content/course';
 import { LessonPage } from './lesson/LessonPlayer';
@@ -10,6 +10,7 @@ import { PathPage } from './pages/PathPage';
 import { PlaygroundPage } from './pages/PlaygroundPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ReviewPage } from './pages/ReviewPage';
+import { RobotPage } from './pages/RobotPage';
 import { linkHandler, useRoute, type Route } from './router';
 
 function Nav({ route, due }: { route: Route; due: number }) {
@@ -36,6 +37,7 @@ function Nav({ route, due }: { route: Route; due: number }) {
       {item('/', 'Lernpfad', route.name === 'path' || route.name === 'module', <PathIcon />)}
       {item('/review', 'Wiederholen', route.name === 'review', <ReviewIcon />, due)}
       {item('/play', 'Spielwiese', route.name === 'play', <PlayIcon />)}
+      {item('/robot', 'Roboter', route.name === 'robot', <RobotIcon />)}
       {item('/profile', 'Profil', route.name === 'profile', <ProfileIcon />)}
     </nav>
   );
@@ -91,6 +93,9 @@ export function App() {
       break;
     case 'play':
       page = <PlaygroundPage />;
+      break;
+    case 'robot':
+      page = <RobotPage />;
       break;
     case 'profile':
       page = <ProfilePage />;

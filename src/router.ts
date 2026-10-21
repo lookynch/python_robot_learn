@@ -6,6 +6,7 @@ export type Route =
   | { name: 'lesson'; lessonId: string }
   | { name: 'review' }
   | { name: 'play' }
+  | { name: 'robot' }
   | { name: 'profile' }
   | { name: 'not-found' };
 
@@ -17,6 +18,7 @@ export function parseRoute(pathname: string): Route {
   if (head === 'l' && id) return { name: 'lesson', lessonId: id };
   if (head === 'review') return { name: 'review' };
   if (head === 'play') return { name: 'play' };
+  if (head === 'robot') return { name: 'robot' };
   if (head === 'profile') return { name: 'profile' };
   return { name: 'not-found' };
 }

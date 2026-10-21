@@ -78,7 +78,25 @@ export interface PlotSpec {
   hlines: { y: number; label: string | null }[];
 }
 
-export type Visual = SceneSpec | PlotSpec;
+export interface Robot3DObject {
+  pos: [number, number, number];
+  size: number;
+  color: Color;
+}
+
+export interface Robot3DSpec {
+  kind: 'robot3d';
+  title: string | null;
+  fps: number;
+  /** Je Frame 6 Werte: 5 Gelenkwinkel + Greifer (rad). */
+  frames: number[][];
+  physics: boolean;
+  target: [number, number, number] | null;
+  objects: Robot3DObject[];
+  captions: string[] | null;
+}
+
+export type Visual = SceneSpec | PlotSpec | Robot3DSpec;
 
 export interface RunResult {
   status: RunStatus;

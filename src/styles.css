@@ -1314,3 +1314,78 @@ input.plain.mono {
   padding: 32px 16px;
   color: var(--muted);
 }
+
+/* Roboter */
+
+.robot-lab {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .robot-lab {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+}
+
+.robot-canvas {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.robot-canvas canvas {
+  display: block;
+  width: 100%;
+  touch-action: none;
+}
+
+.robot-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.joint-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.joint-slider {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.joint-slider input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 32px;
+  accent-color: var(--accent);
+}
+
+.joint-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.joint-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
